@@ -35,7 +35,7 @@ ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O
 # Compose CFLAGS: ARM arch + 2.17 sysroot + ALSA headers (passed via $CFLAGS by
 # build.sh). Append the flags the repo's sf3000 branch would have added (minus
 # MIPS), and the PLATFORM_SF3000 define that our patch guards on.
-CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -DUSE_C_SCALER -DPLATFORM_SF3000 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
+CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DPLATFORM_SF3000 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
 CXXFLAGS="$CFLAGS"
 LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -Wl,--gc-sections -s ${LDFLAGS}"
 
