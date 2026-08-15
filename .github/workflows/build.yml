@@ -69,7 +69,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-report
-          path: deploy/BUILD_REPORT.txt
+          path: |
+            deploy/BUILD_REPORT.txt
+            cubegm-build-logs/
           if-no-files-found: warn
 
       - name: Publish build report to build-output branch (agent diagnosis)
@@ -78,20 +80,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd deploy
+          R="$(mktemp -d)"
+          git init -q -b build-output "$R"
           if [ -f BUILD_REPORT.txt ]; then
-            R="$(mktemp -d)"
-            git init -q -b build-output "$R"
             cp BUILD_REPORT.txt "$R/BUILD_REPORT.txt"
-            cd "$R"
-            git config user.email "agent@workbuddy.local"
-            git config user.name "WorkBuddy Agent"
-            git add -A
-            git commit -q -m "build report $(date -u +%Y-%m-%dT%H:%M:%SZ) run ${{ github.run_number }}"
-            git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" build-output
-            echo "Published BUILD_REPORT.txt to build-output branch."
-          else
-            echo "No BUILD_REPORT.txt produced."
           fi
+          # 附带 crosstool / bootstrap 完整日志（在仓库根的 cubegm-build-logs/）
+          for l in ../cubegm-build-logs/crosstool_build.log ../cubegm-build-logs/bootstrap.log; do
+            if [ -f "$l" ]; then cp "$l" "$R/$(basename "$l")"; fi
+          done
+          cd "$R"
+          git config user.email "agent@workbuddy.local"
+          git config user.name "WorkBuddy Agent"
+          git add -A
+          git commit -q -m "build report $(date -u +%Y-%m-%dT%H:%M:%SZ) run ${{ github.run_number }}" || echo "nothing to commit"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" build-output
+          echo "Published build-output branch (BUILD_REPORT.txt + logs)."
 
       - name: Create release with device payload
         if: success()
