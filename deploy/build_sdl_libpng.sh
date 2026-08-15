@@ -38,6 +38,7 @@ command -v ${TARGET}-gcc >/dev/null 2>&1 || { echo "ERROR: ${TARGET}-gcc not on 
 
 log(){ printf '\033[1;33m[sdl/libpng]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
+warn(){ printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
 
 # -----------------------------------------------------------------------------
 # 确保 sysroot 可写（STAGE 2 安装前置）
