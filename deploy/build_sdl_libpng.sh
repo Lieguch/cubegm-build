@@ -57,6 +57,27 @@ cd "$WORK"
 NPROC="$(nproc 2>/dev/null || echo 4)"
 
 # -----------------------------------------------------------------------------
+# 0) zlib  (libpng 的硬依赖；crosstool-NG 的 glibc-2.17 sysroot 不含 zlib，
+#    必须交叉编译进 sysroot，否则 libpng 的 configure 报 "zlib not installed")
+# -----------------------------------------------------------------------------
+if [ -f "$SYSROOT/usr/lib/libz.so" ] || [ -f "$SYSROOT/usr/lib/libz.a" ]; then
+    log "zlib already in sysroot -- skip"
+else
+    log "Building zlib 1.3 (cross) ..."
+    rm -rf zlib-1.3 && curl -fL -o z.tar.gz "https://zlib.net/fossils/zlib-1.3.tar.gz" \
+        || curl -fL -o z.tar.gz "https://github.com/madler/zlib/releases/download/v1.3/zlib-1.3.tar.gz"
+    tar -xf z.tar.gz && cd zlib-1.3
+    # zlib 非标准 autoconf：交叉编译必须设 CHOST（而非 --host），并靠已 export 的
+    # CC/CFLAGS(--sysroot) 把产物编成 armhf 并装进 $SYSROOT/usr
+    CHOST=$TARGET ./configure --prefix=$SYSROOT/usr
+    make -j"$NPROC"
+    make install
+    cd "$WORK"
+    [ -f "$SYSROOT/usr/lib/libz.so" ] || [ -f "$SYSROOT/usr/lib/libz.a" ] \
+        || die "zlib install failed"
+fi
+
+# -----------------------------------------------------------------------------
 # 1) libpng 1.2.x  (-> libpng12, matches picoarch's -lpng12)
 # -----------------------------------------------------------------------------
 if [ -f "$SYSROOT/usr/lib/libpng12.so" ] || [ -f "$SYSROOT/usr/lib/libpng12.a" ]; then
