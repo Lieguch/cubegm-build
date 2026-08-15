@@ -29,6 +29,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /opt/hostedtoolcache /usr/share/dotnet /usr/local/lib/android /usr/lib/firefox 2>/dev/null || true
+          sudo apt-get clean
+          df -h /
+
       - name: Cache crosstool sysroot + SDL/libpng
         id: cache-tc
         uses: actions/cache@v4
