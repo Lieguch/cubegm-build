@@ -159,6 +159,7 @@ ARM_BUILD="$HERE/build_sf3000_armhf.sh"
 if [ -x "$ARM_BUILD" ]; then
     SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
     CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+    PICOARCH_DIR="$PWD/picoarch" \
         bash "$ARM_BUILD"
 else
     log "WARN: build_sf3000_armhf.sh missing -- fallback needs manual Makefile fix."

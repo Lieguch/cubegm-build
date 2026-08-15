@@ -24,7 +24,7 @@
 #    SYSROOT  CC  CXX  CROSS_COMPILE  CFLAGS  CXXFLAGS  LDFLAGS
 # =============================================================================
 set -e
-cd "$(dirname "$0")/picoarch"
+cd "${PICOARCH_DIR:-$(dirname "$0")/picoarch}"
 HERE="$PWD"
 
 SYSROOT="${SYSROOT:?SYSROOT (glibc-2.17) must be set}"

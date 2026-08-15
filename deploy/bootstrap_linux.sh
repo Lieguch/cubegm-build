@@ -40,6 +40,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
+# ---- 自身日志：tee 到文件供 Agent 取回诊断 ----
+LOGDIR="$(cd "$HERE/.." && pwd)/cubegm-build-logs"
+mkdir -p "$LOGDIR"
+BOOTSTRAP_LOG="$LOGDIR/bootstrap.log"
+: > "$BOOTSTRAP_LOG"
+exec > >(tee -a "$BOOTSTRAP_LOG") 2>&1
+echo "[bootstrap] logging to $BOOTSTRAP_LOG"
+
 log(){ printf '\033[1;32m[bootstrap]\033[0m %s\n' "$*"; }
 warn(){ printf '\033[1;33m[bootstrap]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -66,6 +74,15 @@ emit_report(){
       echo "picoarch GLIBC req: $(strings "$HERE/cubegm/picoarch" 2>/dev/null | grep -o 'GLIBC_2\.[0-9]*' | sort -V | uniq | tail -1 || echo n/a)"
     else
       echo "NOT PRODUCED YET (build did not reach STAGE 3)"
+    fi
+    echo "--- crosstool build log ---"
+    CTLOG="$LOGDIR/crosstool_build.log"
+    if [ -f "$CTLOG" ]; then
+      echo "path: $CTLOG ($(wc -l < "$CTLOG") lines)"
+      echo "=== tail (last 80 lines) ==="
+      tail -n 80 "$CTLOG"
+    else
+      echo "NOT FOUND ($CTLOG)"
     fi
     echo "--- bootstrap exit code: $rc ---"
   } > "$HERE/BUILD_REPORT.txt" 2>&1
