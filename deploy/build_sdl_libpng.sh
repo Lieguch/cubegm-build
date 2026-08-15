@@ -145,14 +145,25 @@ if [ -f "$SYSROOT/usr/lib/libasound.so" ]; then
     log "libasound already in sysroot -- skip"
 else
     log "Building alsa-lib 1.2.10 ..."
-    rm -rf alsa-lib-1.2.10 && curl -fL -o al.tar.bz2 \
-        "https://github.com/alsa-project/alsa-lib/releases/download/v1.2.10/alsa-lib-1.2.10.tar.bz2"
-    tar -xf al.tar.bz2 && cd alsa-lib-1.2.10
-    ./configure --host=$TARGET --prefix=$SYSROOT/usr --disable-python --with-pcm-plugins=all
-    make -j"$NPROC"
-    make install
-    cd "$WORK"
-    [ -f "$SYSROOT/usr/lib/libasound.so" ] || log "WARN: libasound install failed -- SDL will build without ALSA."
+    rm -rf alsa-lib-1.2.10 al.tar.bz2
+    # 修复 run 31885774010 根因：alsa-project 在 GitHub 没有 v1.2.10 release，
+    # 旧 URL releases/download/v1.2.10/... 必 404。改用官方源(已 HEAD 200)，
+    # 失败回退 GitHub 源码归档；ALSA 是可选组件(见下 SDL 注释)，两源都挂则跳过而非 abort。
+    if curl -fL -o al.tar.bz2 "https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.10.tar.bz2" \
+        || curl -fL -o al.tar.bz2 "https://github.com/alsa-project/alsa-lib/archive/refs/tags/v1.2.10.tar.gz"; then
+        tar -xf al.tar.bz2
+        if [ -d alsa-lib-1.2.10 ]; then
+            ( cd alsa-lib-1.2.10 \
+                && ./configure --host=$TARGET --prefix=$SYSROOT/usr --disable-python --with-pcm-plugins=all \
+                && make -j"$NPROC" \
+                && make install )
+            [ -f "$SYSROOT/usr/lib/libasound.so" ] || log "WARN: libasound install failed -- SDL will build without ALSA."
+        else
+            log "WARN: alsa-lib tarball extracted but dir alsa-lib-1.2.10 missing -- skip ALSA."
+        fi
+    else
+        log "WARN: alsa-lib download failed (both mirrors) -- SDL will build without ALSA (per LINUX_BUILD notes)."
+    fi
 fi
 
 # -----------------------------------------------------------------------------
