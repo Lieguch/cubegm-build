@@ -48,7 +48,6 @@ jobs:
         working-directory: deploy
         env:
           PREFIX: /home/runner/cubegm-tc
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # defend against CRLF line endings (files authored on Windows)
           sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
