@@ -219,15 +219,22 @@ fetch_ncurses() {
     echo "    尝试 $url"
     if curl -fsSL --http1.1 --retry 10 --retry-all-errors --retry-delay 5 \
         --connect-timeout 30 --max-time 600 -o "$out" "$url" 2>/dev/null; then
-      # 不钉 sha（上游重打包导致哈希漂移）；仅校验是合法且顶层目录为 ncurses-6.4/ 的真实 tarball
-      if gzip -t "$out" 2>/dev/null && tar -tzf "$out" 2>/dev/null | head -1 | grep -q '^ncurses-6.4/'; then
-        cp -f "$out" "${HOME}/.build/tarballs/" 2>/dev/null || true
-        echo "  OK ncurses-6.4.tar.gz (可用性校验通过, 来自 ${url##*/})"
-        return 0
-      else
-        echo "    WARN: ncurses 文件不可用（非合法 ncurses-6.4 tar.gz）-> 删除并尝试下一镜像"
-        rm -f "$out"
+      # 不钉 sha（上游重打包导致哈希漂移）；仅校验是合法且含 ncurses-6.4/ 目录的真实 tarball。
+      # 关键修复（run 31901969980 失败根因）：本脚本顶部 set -o pipefail；原写法用
+      # `tar -tzf | head -1 | grep -q` 早退管道，grep -q 命中后立即关管使 tar 收 SIGPIPE(141)，
+      # 被 pipefail 判为失败 -> 三镜像全部误判「非合法」而 FATAL 退出。改为命令替换整体捕获
+      # tar 列表再字符串比对，彻底避开 SIGPIPE/pipefail 干扰；实测 ftp.gnu.org /
+      # invisible-mirror 返回的 3.6MB tarball 顶层目录确为 ncurses-6.4/（grep MATCH 验证）。
+      if gzip -t "$out" 2>/dev/null; then
+        listing=$(tar -tzf "$out" 2>/dev/null || true)
+        if [[ "$listing" == *"ncurses-6.4/"* ]]; then
+          cp -f "$out" "${HOME}/.build/tarballs/" 2>/dev/null || true
+          echo "  OK ncurses-6.4.tar.gz (可用性校验通过, 来自 ${url##*/})"
+          return 0
+        fi
       fi
+      echo "    WARN: ncurses 文件不可用（非合法 ncurses-6.4 tar.gz）-> 删除并尝试下一镜像"
+      rm -f "$out"
     else
       echo "    WARN: ncurses 下载失败 ($url)"
     fi
