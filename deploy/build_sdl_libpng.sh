@@ -49,21 +49,33 @@ warn(){ printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
 #   sysroot 改回当前用户所有 / 补回 owner 写位，使 make install 能落盘。
 # -----------------------------------------------------------------------------
 ensure_sysroot_writable(){
-    local d
-    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true; done
-    # 实测 run 31882525698 根因：crosstool 把 sysroot 装成受限权限（0444/0555），
-    # 问题在【权限位】而非属主（sysroot 本就归 runner 所有）。旧写法
-    # sudo chown ... || sudo chmod ... 在 chown 成功时被 || 短路，chmod 永不执行，
-    # 于是 /usr/lib 仍不可写 -> STAGE 2 make install Permission denied。
-    # 修复：先 best-effort chown（应对缓存恢复 stale-uid/root 归属），再【无条件】chmod
-    #  -R u+rwX（真正修复权限位；优先非 sudo，因为 runner 本就拥有这些文件）。
-    chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
-    chmod -R u+rwX "$SYSROOT" 2>/dev/null || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null || true
-    if [ -w "$SYSROOT/usr/lib" ]; then
-        log "sysroot /usr writable by $(id -un) -- OK"
-    else
-        warn "STILL cannot write to $SYSROOT/usr/lib after fix attempt -- check runner perms/sudo."
+    local d SUDO
+    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do
+        [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true
+    done
+    # 已经可写则跳过（缓存命中且权限正常时）
+    if [ -w "$SYSROOT/usr/lib" ] && [ -w "$SYSROOT/usr/include" ]; then
+        log "sysroot /usr already writable by $(id -un) -- no fix needed"
+        return 0
     fi
+    # 诊断：暴露真实属主/权限，便于 CI 日志归因（不再静默吞错）
+    log "sysroot /usr NOT writable by $(id -un) (uid=$(id -u) gid=$(id -g))"
+    log "pre-fix perms: $(ls -ldn "$SYSROOT/usr/lib" "$SYSROOT/usr/include" 2>&1 | tr '\n' ' ')"
+    # 探测 sudo 是否非交互可用（hosted runner 免密；否则走非 sudo 路径）
+    if sudo -n true 2>/dev/null; then SUDO=sudo; else SUDO=; fi
+    log "sudo non-interactive: ${SUDO:-UNAVAILABLE}"
+    # 机理级修复：a+rwX 给【所有人】写+执行位。无论 sysroot 属主是 root 还是 runner，
+    # runner 作为 other/owner 都能写 sysroot/usr/* —— 直接消除 Permission denied 故障类。
+    # 先非 sudo 试（runner 若为 owner 即成功），失败再 sudo（属主为 root 时必需）。
+    chmod -R a+rwX "$SYSROOT/usr" 2>/dev/null || $SUDO chmod -R a+rwX "$SYSROOT/usr" 2>/dev/null || true
+    # best-effort 把属主改回 runner（应对缓存恢复 stale-root 归属），不改变上面的写位结论
+    chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || $SUDO chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
+    log "post-fix perms: $(ls -ldn "$SYSROOT/usr/lib" "$SYSROOT/usr/include" 2>&1 | tr '\n' ' ')"
+    # 硬校验：仍不可写则【干净失败】，绝不 warn+continue 赌运气（违反禁猜/禁赌禁令）
+    if [ ! -w "$SYSROOT/usr/lib" ] || [ ! -w "$SYSROOT/usr/include" ]; then
+        die "sysroot /usr STILL not writable after chmod a+rwX + chown -- cannot run STAGE 2 make install. Aborting (no guessing)."
+    fi
+    log "sysroot /usr now writable by $(id -un) -- OK"
 }
 
 # Cross toolchain env for all three builds
