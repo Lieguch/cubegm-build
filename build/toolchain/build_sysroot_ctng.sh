@@ -73,13 +73,22 @@ grep -q '^CT_GLIBC_V_2_17=y' .config || echo 'CT_GLIBC_V_2_17=y' >> .config
 #   arch[-vendor]-kernel-sys 公式重算，覆盖回样本默认 armv7-rpi2-linux-gnueabihf，
 #   于是 sysroot 装在 ${PREFIX}/armv7-rpi2-linux-gnueabihf/sysroot，而 bootstrap/下游
 #   去 ${PREFIX}/arm-linux-gnueabihf/sysroot 找，文件不存在 → exit 2。
-# 正确做法（已对照 scripts/functions:1192-1229 + config/toolchain.in:124 真源核实）：
-#   设 CT_OMIT_TARGET_VENDOR=y —— vendor 段省略，经 CT_DoConfigSub 规范化后由
-#   functions:1229「${CT_TARGET%%-*}-${CT_TARGET#*-*-}」裁剪回 3 段，最终
-#   tuple = arm-linux-gnueabihf（与设备参考工具链 ARM GNU 13.2 完全一致）。
+# 正确做法（已对照 scripts/functions:1129,1198-1229 + config/arch.in + config/toolchain.in:124 真源核实）：
+#   tuple 拼接：CT_TARGET_ARCH = CT_ARCH + CT_ARCH_SUFFIX (functions:1129)
+#             = arm + v7 = armv7 ；再加 vendor 段 = armv7-rpi2-linux-gnueabihf。
+#   要让最终 tuple = arm-linux-gnueabihf，必须同时处理两处：
+#   1) CT_OMIT_TARGET_VENDOR=y —— 省略 vendor 段（config/toolchain.in:124 depends on !OMIT_TARGET_VENDOR）。
+#   2) 清空 CT_ARCH_SUFFIX（""）—— 它是 string 类型输入字段（非计算字段），不会被
+#      olddefconfig 重算覆盖；清空后 CT_TARGET_ARCH = arm，arch 段即纯 arm。
+#   （run 31865727927 只做了 1) 没做 2)，结果 target = armv7-linux-gnueabihf，仍不匹配。）
+#   经 CT_DoConfigSub 规范化 + functions:1229 重排 → 最终 tuple = arm-linux-gnueabihf
+#   （与设备参考工具链 ARM GNU 13.2 完全一致）。
 sed -i -E 's/^CT_TARGET_VENDOR=.*/# & (disabled by CT_OMIT_TARGET_VENDOR)/' .config
 sed -i -E '/^CT_OMIT_TARGET_VENDOR=/d' .config
 echo 'CT_OMIT_TARGET_VENDOR=y' >> .config
+# 清空 arch 后缀（armv7 -> arm）
+sed -i -E 's/^CT_ARCH_SUFFIX=.*/CT_ARCH_SUFFIX=""/' .config
+grep -q '^CT_ARCH_SUFFIX=' .config || echo 'CT_ARCH_SUFFIX=""' >> .config
 
 # ---- 输出前缀 + 日志 ----
 grep -q '^CT_PREFIX_DIR=' .config \
@@ -91,6 +100,8 @@ echo "== 3b) 解析后的关键 .config 选择（供诊断）=="
 grep -E '^CT_(GLIBC|CC_GCC|BINUTILS|LINUX)_V_[0-9]' .config || true
 grep -E '^CT_(GLIBC|GCC|BINUTILS|LINUX|KERNEL)_VERSION=' .config || true
 grep -E '^CT_OMIT_TARGET_VENDOR=' .config || true
+grep -E '^CT_ARCH_SUFFIX=' .config || true
+grep -E '^CT_TARGET_VENDOR=' .config || true
 grep -E '^CT_TARGET=' .config || true
 
 echo "== 3c) 校验配置（olddefconfig，提前暴露非法组合）=="
