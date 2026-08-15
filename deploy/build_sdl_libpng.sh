@@ -39,6 +39,32 @@ command -v ${TARGET}-gcc >/dev/null 2>&1 || { echo "ERROR: ${TARGET}-gcc not on 
 log(){ printf '\033[1;33m[sdl/libpng]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# -----------------------------------------------------------------------------
+# 确保 sysroot 可写（STAGE 2 安装前置）
+#   实测 run 31871915601：crosstool 产出的 sysroot /usr 树对运行 bootstrap 的
+#   非-root 用户（GitHub runner）不可写（/usr/lib、/usr/share/man 写时
+#   Permission denied，导致 zlib make install 失败）。无论根因是目录归属 root
+#   还是权限位被设成 555，统一用 passwordless sudo（STAGE 0 已验证可用）把
+#   sysroot 改回当前用户所有 / 补回 owner 写位，使 make install 能落盘。
+# -----------------------------------------------------------------------------
+ensure_sysroot_writable(){
+    local d
+    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" \
+             "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do
+        [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true
+    done
+    if [ ! -w "$SYSROOT/usr/lib" ] || [ ! -w "$SYSROOT/usr/include" ]; then
+        log "sysroot /usr not writable by $(id -un) -- fixing ownership/permissions (sudo)"
+        sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null \
+            || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null \
+            || true
+    fi
+    # 再次确认；若仍不可写且 sudo 不可用，给出明确告警（不让后面静默失败难查）
+    if [ ! -w "$SYSROOT/usr/lib" ]; then
+        warn "STILL cannot write to $SYSROOT/usr/lib after fix attempt -- check runner perms/sudo."
+    fi
+}
+
 # Cross toolchain env for all three builds
 export CC="${TARGET}-gcc" CXX="${TARGET}-g++"
 export AR="${TARGET}-ar" RANLIB="${TARGET}-ranlib" STRIP="${TARGET}-strip"
@@ -53,6 +79,9 @@ export PKG_CONFIG_SYSROOT_DIR="$SYSROOT"
 WORK="$(pwd)/.sdl_build"
 mkdir -p "$WORK"
 cd "$WORK"
+
+# 安装前置：保证 sysroot /usr 可写（run 31871915601 的 Permission denied 根因）
+ensure_sysroot_writable
 
 NPROC="$(nproc 2>/dev/null || echo 4)"
 
