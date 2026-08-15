@@ -67,10 +67,19 @@ grep -q '^CT_GLIBC_V_2_17=y' .config || echo 'CT_GLIBC_V_2_17=y' >> .config
 # ---- gcc / binutils / mpfr / isl / gmp / mpc：样本默认（gcc 13.2.0 / binutils 2.40 / mpfr 4.2.1
 #      / isl 0.26 / gmp 6.2.1 / mpc 1.2.1），不手动覆盖，避免与 choice 冲突被丢弃。----
 
-# ---- 目标三元组：必须与 build.sh / build_sf3000_armhf.sh 一致（arm-linux-gnueabihf）----
-# 默认 defconfig 产生 armv7-rpi2-linux-gnueabihf，会导致 build 脚本找不到 ${TARGET}-gcc。
-sed -i -E 's/^CT_TARGET=.*/CT_TARGET="arm-linux-gnueabihf"/' .config
-grep -q '^CT_TARGET=' .config || echo 'CT_TARGET="arm-linux-gnueabihf"' >> .config
+# ---- 目标三元组：必须与下游 build.sh / build_sf3000_armhf.sh 一致（arm-linux-gnueabihf）----
+# 失效做法（已废弃，run 31863236025 失败根因）：直接 sed CT_TARGET="arm-linux-gnueabihf"
+#   不生效 —— crosstool-NG 在 olddefconfig/build 时按 scripts/functions:1192 的
+#   arch[-vendor]-kernel-sys 公式重算，覆盖回样本默认 armv7-rpi2-linux-gnueabihf，
+#   于是 sysroot 装在 ${PREFIX}/armv7-rpi2-linux-gnueabihf/sysroot，而 bootstrap/下游
+#   去 ${PREFIX}/arm-linux-gnueabihf/sysroot 找，文件不存在 → exit 2。
+# 正确做法（已对照 scripts/functions:1192-1229 + config/toolchain.in:124 真源核实）：
+#   设 CT_OMIT_TARGET_VENDOR=y —— vendor 段省略，经 CT_DoConfigSub 规范化后由
+#   functions:1229「${CT_TARGET%%-*}-${CT_TARGET#*-*-}」裁剪回 3 段，最终
+#   tuple = arm-linux-gnueabihf（与设备参考工具链 ARM GNU 13.2 完全一致）。
+sed -i -E 's/^CT_TARGET_VENDOR=.*/# & (disabled by CT_OMIT_TARGET_VENDOR)/' .config
+sed -i -E '/^CT_OMIT_TARGET_VENDOR=/d' .config
+echo 'CT_OMIT_TARGET_VENDOR=y' >> .config
 
 # ---- 输出前缀 + 日志 ----
 grep -q '^CT_PREFIX_DIR=' .config \
@@ -81,6 +90,7 @@ echo 'CT_LOG_PROCESS_BARE=true' >> .config
 echo "== 3b) 解析后的关键 .config 选择（供诊断）=="
 grep -E '^CT_(GLIBC|CC_GCC|BINUTILS|LINUX)_V_[0-9]' .config || true
 grep -E '^CT_(GLIBC|GCC|BINUTILS|LINUX|KERNEL)_VERSION=' .config || true
+grep -E '^CT_OMIT_TARGET_VENDOR=' .config || true
 grep -E '^CT_TARGET=' .config || true
 
 echo "== 3c) 校验配置（olddefconfig，提前暴露非法组合）=="
