@@ -101,9 +101,9 @@ if command -v apt-get >/dev/null 2>&1; then
         sudo apt-get install -y \
             build-essential gcc g++ make git curl wget xz-utils \
             flex bison texinfo gawk libgmp-dev libmpfr-dev libmpc-dev \
-            pkg-config autoconf automake libtool libncurses-dev \
-            gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip \
-            zip unzip file
+            pkg-config autoconf automake libtool libtool-bin libncurses-dev \
+            gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip python3-dev \
+            help2man zip unzip file
         sudo touch /tmp/.cubegm_apt_done
         log "STAGE 0: apt deps installed."
     fi
