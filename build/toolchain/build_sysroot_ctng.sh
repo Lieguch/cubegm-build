@@ -25,8 +25,8 @@ if [ ! -d crosstool-NG ]; then
 fi
 ( cd crosstool-NG && ./bootstrap && ./configure --enable-local && make -j"$JOBS" )
 
-echo "== 2) 生成 armv7a-hardfloat 基础配置 =="
-./crosstool-NG/ct-ng armv7a-hardfloat-linux-gnueabihf_defconfig
+echo "== 2) 生成 armv7-rpi2-linux-gnueabihf 基础配置（ARMv7 hard-float；已核实存在于 ct-ng 1.26.0，原 armv7a-hardfloat-linux-gnueabihf 不存在）=="
+./crosstool-NG/ct-ng armv7-rpi2-linux-gnueabihf_defconfig
 
 echo "== 3) 固定为 glibc-2.17 + gcc-6.5 + Linux 4.4 headers（必须 <=2.17）=="
 # crosstool-NG 用 .config 控制；下面用 sed 关闭其它版本、启用目标版本。
