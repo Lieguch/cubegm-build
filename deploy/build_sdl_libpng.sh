@@ -50,18 +50,18 @@ warn(){ printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
 # -----------------------------------------------------------------------------
 ensure_sysroot_writable(){
     local d
-    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" \
-             "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do
-        [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true
-    done
-    if [ ! -w "$SYSROOT/usr/lib" ] || [ ! -w "$SYSROOT/usr/include" ]; then
-        log "sysroot /usr not writable by $(id -un) -- fixing ownership/permissions (sudo)"
-        sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null \
-            || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null \
-            || true
-    fi
-    # 再次确认；若仍不可写且 sudo 不可用，给出明确告警（不让后面静默失败难查）
-    if [ ! -w "$SYSROOT/usr/lib" ]; then
+    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true; done
+    # 实测 run 31882525698 根因：crosstool 把 sysroot 装成受限权限（0444/0555），
+    # 问题在【权限位】而非属主（sysroot 本就归 runner 所有）。旧写法
+    # sudo chown ... || sudo chmod ... 在 chown 成功时被 || 短路，chmod 永不执行，
+    # 于是 /usr/lib 仍不可写 -> STAGE 2 make install Permission denied。
+    # 修复：先 best-effort chown（应对缓存恢复 stale-uid/root 归属），再【无条件】chmod
+    #  -R u+rwX（真正修复权限位；优先非 sudo，因为 runner 本就拥有这些文件）。
+    chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
+    chmod -R u+rwX "$SYSROOT" 2>/dev/null || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null || true
+    if [ -w "$SYSROOT/usr/lib" ]; then
+        log "sysroot /usr writable by $(id -un) -- OK"
+    else
         warn "STILL cannot write to $SYSROOT/usr/lib after fix attempt -- check runner perms/sudo."
     fi
 }
