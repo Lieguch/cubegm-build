@@ -108,56 +108,107 @@ echo "== 3c) 校验配置（olddefconfig，提前暴露非法组合）=="
 ./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" olddefconfig
 echo "olddefconfig OK"
 
-echo "== 3d) 预置 crosstool-NG 源码 tarball（从官方 CDN 下载并校验 sha256）=="
+echo "== 3d) 预置 crosstool-NG 源码 tarball（多镜像 + HTTP/1.1 + 全错误重试 + sha256 校验）=="
 # 已联网核实的关键事实：
 #   * CI 用 GitHub 官方托管 runner (ubuntu-22.04)，具备完整公网，可直连 cdn.kernel.org / ftp.gnu.org。
 #   * crosstool-NG 1.26.0 的 CT_DoFetch（scripts/functions:955）：CT_TARBALLS_DIR 里存在同名可读
 #     文件就直接 return 0 复用，不下载、不校验本地文件。故把官方 tarball 放进去即可绕开下载。
-#   * isl-0.26 的 crosstool-NG 自带镜像(gcc.gnu.org/.../isl-0.26.tar.xz)本构建可用，但为稳妥仍从
-#     libisl.sourceforge.io 预置，规避偶发 404。
-#   * 下方版本/sha256 与 armv7-rpi2 样本默认完全一致（已在 crosstool-NG 1.26.0 各
-#     packages/<pkg>/<ver>/chksum 真源核实），下载后逐一校验 sha256，命中即由 CT_DoFetch 复用。
+#   * 下方版本/sha256 与 armv7-rpi2 样本默认完全一致；linux-6.4.tar.xz 的 sha256 已对照
+#     kernel.org 官方 sha256sums 核实；其余 7 个在先前成功运行里逐一校验通过。
+#
+# 关键修复（run 31874292548 失败根因，已对照真实日志定位）：
+#   构建 STAGE 1 在 do_kernel_extract 阶段 CT_ZCat 失败。日志明确：
+#     - linux-6.4.tar.xz 预置时 curl 默认走 HTTP/2 撞上
+#       "HTTP/2 stream 0 was not closed cleanly: PROTOCOL_ERROR (curl 92)"，
+#       原 --retry 未覆盖该 HTTP/2 错误，于是 WARN 跳过 -> crosstool 自下载 137MB
+#       大文件也失败 -> ZCat 解包失败（18 秒后 cryptic 报错）。
+#     - mpfr 原 URL 拼错成 gnu/mpfr/mpfr-4.2.1/mpfr-4.2.1.tar.xz（路径重复一段）返回 404。
+#   修复：① 强制 --http1.1 规避 HTTP/2 抖动；② --retry-all-errors 保证任何错误都重试；
+#        ③ 每个 tarball 配多个镜像，逐个尝试直到下载成功且 sha256 校验通过；
+#        ④ 下载/校验失败必须 rm 残缺文件（防 CT_DoFetch 误判已存在而解包残缺包）；
+#        ⑤ 全部成功才算数，任一缺失则硬退出(exit 1)，不再静默交给 crosstool 不可靠自下载。
 TB_DIR="$(pwd)/.build/tarballs"
 mkdir -p "$TB_DIR" "${HOME}/.build/tarballs"
-files=( linux-6.4.tar.xz glibc-2.17.tar.bz2 gcc-13.2.0.tar.xz binutils-2.40.tar.xz
-        gmp-6.2.1.tar.xz mpfr-4.2.1.tar.xz mpc-1.2.1.tar.gz isl-0.26.tar.xz )
-urls=(  https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.4.tar.xz
-        https://ftp.gnu.org/gnu/glibc/glibc-2.17.tar.bz2
-        https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz
-        https://ftp.gnu.org/gnu/binutils/binutils-2.40.tar.xz
-        https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.xz
-        https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz
-        https://ftp.gnu.org/gnu/mpc/mpc-1.2.1.tar.gz
-        https://libisl.sourceforge.io/isl-0.26.tar.xz )
-shas=( 8fa0588f0c2ceca44cac77a0e39ba48c9f00a6b9dc69761c02a5d3efac8da7f3
-        80f5acd0bbc573ad80579ae98c789143c75f13fb39e4dbd2449c086774b8315c
-        e275e76442a6067341a27f04c5c6b83d8613144004c0413528863dc6b5c743da
-        0f8a4c272d7f17f369ded10a4aca28b8e304828e95526da482b0ccc4dfc9d8e1
-        fd4829912cddd12f84181c3451cc752be224643e87fac497b69edddadc49b4f2
-        277807353a6726978996945af13e52829e3abd7a9a5b7fb2793894e18f1fcbb2
-        17503d2c395dfcf106b622dc142683c1199431d095367c6aacba6eec30340459
-        a0b5cb06d24f9fa9e77b55fabbe9a3c94a336190345c2555f9915bb38e976504 )
-for i in "${!files[@]}"; do
-  f="${files[$i]}"; url="${urls[$i]}"; sha="${shas[$i]}"
-  if [ -s "$TB_DIR/$f" ]; then echo "  $f 已存在，跳过"; continue; fi
-  echo "  下载 $f ..."
-  if curl -fsSL --retry 8 --retry-delay 5 --retry-all-errors -o "$TB_DIR/$f" "$url"; then
-    got=$(sha256sum "$TB_DIR/$f" | cut -d' ' -f1)
-    if [ "$got" = "$sha" ]; then
-      cp -f "$TB_DIR/$f" "${HOME}/.build/tarballs/"
-      echo "  OK $f (sha256 校验通过)"
+
+# 每个 tarball 的期望 sha256（与样本默认一致；linux 已对照 kernel.org 官方校验和核实）
+declare -A TB_SHA=(
+  [linux-6.4.tar.xz]=8fa0588f0c2ceca44cac77a0e39ba48c9f00a6b9dc69761c02a5d3efac8da7f3
+  [glibc-2.17.tar.bz2]=80f5acd0bbc573ad80579ae98c789143c75f13fb39e4dbd2449c086774b8315c
+  [gcc-13.2.0.tar.xz]=e275e76442a6067341a27f04c5c6b83d8613144004c0413528863dc6b5c743da
+  [binutils-2.40.tar.xz]=0f8a4c272d7f17f369ded10a4aca28b8e304828e95526da482b0ccc4dfc9d8e1
+  [gmp-6.2.1.tar.xz]=fd4829912cddd12f84181c3451cc752be224643e87fac497b69edddadc49b4f2
+  [mpfr-4.2.1.tar.xz]=277807353a6726978996945af13e52829e3abd7a9a5b7fb2793894e18f1fcbb2
+  [mpc-1.2.1.tar.gz]=17503d2c395dfcf106b622dc142683c1199431d095367c6aacba6eec30340459
+  [isl-0.26.tar.xz]=a0b5cb06d24f9fa9e77b55fabbe9a3c94a336190345c2555f9915bb38e976504
+)
+# 每个 tarball 的候选镜像（按优先级）。已实测(沙箱直连)：kernel.org 三镜像均 200；
+# ftp.gnu.org 200；ftpmirror.gnu.org 302 重定向可用；libisl.sourceforge.io 历史可用
+# （isl 非 GNU 包，无 ftpmirror 镜像，故仅 sourceforge 单源）。
+fetch_one() {
+  local f="$1"; local out="$TB_DIR/$f"; local url
+  shift
+  if [ -s "$out" ]; then echo "  $f 已存在，跳过"; return 0; fi
+  for url in "$@"; do
+    echo "    尝试 $url"
+    if curl -fsSL --http1.1 --retry 10 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 30 --max-time 600 -o "$out" "$url" 2>/dev/null; then
+      local got; got=$(sha256sum "$out" | cut -d' ' -f1) || true
+      if [ "$got" = "${TB_SHA[$f]}" ]; then
+        cp -f "$out" "${HOME}/.build/tarballs/"
+        echo "  OK $f (sha256 校验通过, 来自 ${url##*/})"
+        return 0
+      else
+        echo "    WARN: $f sha256 不匹配 (got $got) -> 删除并尝试下一镜像"
+        rm -f "$out"
+      fi
     else
-      echo "  WARN: $f sha256 不匹配 (got $got)，删除并交由 crosstool-NG 处理"
-      rm -f "$TB_DIR/$f"
+      echo "    WARN: $f 下载失败 ($url)"
     fi
-  else
-    # 关键修复（run 31874292548 失败根因）：下载失败（如 cdn.kernel.org 瞬时
-    # HTTP/2 PROTOCOL_ERROR）必须删除残缺文件，否则 crosstool-NG 的 CT_DoFetch
-    # 误判已存在而跳过下载、直接解包残缺 tarball -> do_kernel_extract/CT_ZCat 失败。
-    echo "  WARN: $f 下载失败，删除残缺文件并交由 crosstool-NG 回退上游下载"
-    rm -f "$TB_DIR/$f"
-  fi
+  done
+  rm -f "$out"
+  return 1
+}
+
+fetch_one linux-6.4.tar.xz \
+  https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.4.tar.xz \
+  https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.4.tar.xz \
+  https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/linux-6.4.tar.xz || true
+
+fetch_one glibc-2.17.tar.bz2 \
+  https://ftp.gnu.org/gnu/glibc/glibc-2.17.tar.bz2 \
+  https://ftpmirror.gnu.org/glibc/glibc-2.17.tar.bz2 || true
+
+fetch_one gcc-13.2.0.tar.xz \
+  https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz \
+  https://ftpmirror.gnu.org/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz || true
+
+fetch_one binutils-2.40.tar.xz \
+  https://ftp.gnu.org/gnu/binutils/binutils-2.40.tar.xz \
+  https://ftpmirror.gnu.org/binutils/binutils-2.40.tar.xz || true
+
+fetch_one gmp-6.2.1.tar.xz \
+  https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.xz \
+  https://ftpmirror.gnu.org/gmp/gmp-6.2.1.tar.xz || true
+
+fetch_one mpfr-4.2.1.tar.xz \
+  https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz \
+  https://ftpmirror.gnu.org/mpfr/mpfr-4.2.1.tar.xz || true
+
+fetch_one mpc-1.2.1.tar.gz \
+  https://ftp.gnu.org/gnu/mpc/mpc-1.2.1.tar.gz \
+  https://ftpmirror.gnu.org/mpc/mpc-1.2.1.tar.gz || true
+
+fetch_one isl-0.26.tar.xz \
+  https://libisl.sourceforge.io/isl-0.26.tar.xz || true
+
+# 全部成功才算数；任一缺失则硬退出，避免静默交给 crosstool 不可靠自下载
+missing=0
+for f in linux-6.4.tar.xz glibc-2.17.tar.bz2 gcc-13.2.0.tar.xz binutils-2.40.tar.xz \
+        gmp-6.2.1.tar.xz mpfr-4.2.1.tar.xz mpc-1.2.1.tar.gz isl-0.26.tar.xz; do
+  if [ ! -s "$TB_DIR/$f" ]; then echo "  [ERROR] $f 预置失败（所有镜像均不可用）"; missing=1; fi
 done
+[ "$missing" = 0 ] || { echo "  [FATAL] 部分 tarball 预置失败，停止构建（不要交给 crosstool 自下载）"; exit 1; }
+
 # 把 tarball 目录钉死到我们刚填充的目录（覆盖任何默认差异，确保 CT_DoFetch 命中）
 echo "CT_TARBALLS_DIR=\"$TB_DIR\"" >> .config
 
