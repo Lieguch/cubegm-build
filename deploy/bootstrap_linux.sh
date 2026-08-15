@@ -52,6 +52,21 @@ log(){ printf '\033[1;32m[bootstrap]\033[0m %s\n' "$*"; }
 warn(){ printf '\033[1;33m[bootstrap]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# ---- pre-build static gate: forbid undefined helper calls -------------------
+# Catches the bug class that `bash -n` CANNOT: a call to a helper function that
+# is referenced but never defined in the same file (e.g. calling warn() that was
+# never defined). This is deterministic -- no guessing. Runs BEFORE any expensive
+# stage (crosstool takes ~30-90 min) so CI fails fast instead of mid-STAGE-2.
+SCRIPT_VERIFY="$HERE/../tools/verify_build_scripts.py"
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_VERIFY" ]; then
+  log "Pre-build gate: static check for undefined helper calls ..."
+  python3 "$SCRIPT_VERIFY" "$HERE" "$HERE/../build" \
+    || die "PRE-BUILD GATE FAILED: fix the undefined helper call(s) above before pushing. Do NOT bypass."
+  log "Pre-build gate: passed."
+else
+  warn "Pre-build gate skipped (python3 or tools/verify_build_scripts.py missing)."
+fi
+
 # ---- build report (always emitted on exit, success or failure) -------------
 emit_report(){
   local rc=${1:-$?}
