@@ -126,7 +126,7 @@ urls=(  https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.4.tar.xz
         https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz
         https://ftp.gnu.org/gnu/binutils/binutils-2.40.tar.xz
         https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.xz
-        https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1/mpfr-4.2.1.tar.xz
+        https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz
         https://ftp.gnu.org/gnu/mpc/mpc-1.2.1.tar.gz
         https://libisl.sourceforge.io/isl-0.26.tar.xz )
 shas=( 8fa0588f0c2ceca44cac77a0e39ba48c9f00a6b9dc69761c02a5d3efac8da7f3
@@ -141,7 +141,7 @@ for i in "${!files[@]}"; do
   f="${files[$i]}"; url="${urls[$i]}"; sha="${shas[$i]}"
   if [ -s "$TB_DIR/$f" ]; then echo "  $f 已存在，跳过"; continue; fi
   echo "  下载 $f ..."
-  if curl -fsSL --retry 8 --retry-delay 5 -o "$TB_DIR/$f" "$url"; then
+  if curl -fsSL --retry 8 --retry-delay 5 --retry-all-errors -o "$TB_DIR/$f" "$url"; then
     got=$(sha256sum "$TB_DIR/$f" | cut -d' ' -f1)
     if [ "$got" = "$sha" ]; then
       cp -f "$TB_DIR/$f" "${HOME}/.build/tarballs/"
@@ -151,7 +151,11 @@ for i in "${!files[@]}"; do
       rm -f "$TB_DIR/$f"
     fi
   else
-    echo "  WARN: $f 下载失败，交由 crosstool-NG 回退上游下载"
+    # 关键修复（run 31874292548 失败根因）：下载失败（如 cdn.kernel.org 瞬时
+    # HTTP/2 PROTOCOL_ERROR）必须删除残缺文件，否则 crosstool-NG 的 CT_DoFetch
+    # 误判已存在而跳过下载、直接解包残缺 tarball -> do_kernel_extract/CT_ZCat 失败。
+    echo "  WARN: $f 下载失败，删除残缺文件并交由 crosstool-NG 回退上游下载"
+    rm -f "$TB_DIR/$f"
   fi
 done
 # 把 tarball 目录钉死到我们刚填充的目录（覆盖任何默认差异，确保 CT_DoFetch 命中）
