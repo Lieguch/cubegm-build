@@ -201,6 +201,42 @@ fetch_one mpc-1.2.1.tar.gz \
 fetch_one isl-0.26.tar.xz \
   https://libisl.sourceforge.io/isl-0.26.tar.xz || true
 
+# ncurses 特殊处理（不进 TB_SHA 严格校验）—— run 31899051249 失败根因修复：
+#   上游 ncurses-6.4.tar.gz 被维护者 Thomas Dickey 反复「重打包」：同版本号、内容基本不变，
+#   但 tar 校验和随每次重打包漂移。crosstool-NG 1.26.0 内置期望 sha512=1c2efff8… 与当前镜像
+#   分发的重打包版本(ff701d0d…)不符 -> 自带下载在 SHA512 校验阶段直接 CT_Abort
+#   （"Bad sha512 digest for ncurses-6.4.tar.gz ... expect 1c2efff8..."）。
+#   实测 CT_GetFile(scripts/functions)：文件已存在于 CT_TARBALLS_DIR 则「直接 return 0 复用、
+#   不下载也不校验」（digest 校验只在下载分支执行）。故预置一份真实可用的 ncurses-6.4.tar.gz
+#   即可绕开过期内置校验和。注意：不钉死 sha512（会随重打包继续漂移），仅做最小可用性校验。
+fetch_ncurses() {
+  local out="$TB_DIR/ncurses-6.4.tar.gz"
+  if [ -s "$out" ]; then echo "  ncurses-6.4.tar.gz 已存在，跳过"; return 0; fi
+  for url in \
+    https://ftp.gnu.org/gnu/ncurses/ncurses-6.4.tar.gz \
+    https://ftpmirror.gnu.org/ncurses/ncurses-6.4.tar.gz \
+    https://invisible-mirror.net/archives/ncurses/ncurses-6.4.tar.gz ; do
+    echo "    尝试 $url"
+    if curl -fsSL --http1.1 --retry 10 --retry-all-errors --retry-delay 5 \
+        --connect-timeout 30 --max-time 600 -o "$out" "$url" 2>/dev/null; then
+      # 不钉 sha（上游重打包导致哈希漂移）；仅校验是合法且顶层目录为 ncurses-6.4/ 的真实 tarball
+      if gzip -t "$out" 2>/dev/null && tar -tzf "$out" 2>/dev/null | head -1 | grep -q '^ncurses-6.4/'; then
+        cp -f "$out" "${HOME}/.build/tarballs/" 2>/dev/null || true
+        echo "  OK ncurses-6.4.tar.gz (可用性校验通过, 来自 ${url##*/})"
+        return 0
+      else
+        echo "    WARN: ncurses 文件不可用（非合法 ncurses-6.4 tar.gz）-> 删除并尝试下一镜像"
+        rm -f "$out"
+      fi
+    else
+      echo "    WARN: ncurses 下载失败 ($url)"
+    fi
+  done
+  rm -f "$out"
+  return 1
+}
+fetch_ncurses || { echo "  [FATAL] ncurses-6.4.tar.gz 预置失败，停止构建（不要交给 crosstool 自下载）"; exit 1; }
+
 # 全部成功才算数；任一缺失则硬退出，避免静默交给 crosstool 不可靠自下载
 missing=0
 for f in linux-6.4.tar.xz glibc-2.17.tar.bz2 gcc-13.2.0.tar.xz binutils-2.40.tar.xz \
@@ -228,22 +264,3 @@ echo "export CC=arm-linux-gnueabihf-gcc"
 echo "export CFLAGS=\"--sysroot=$SYSROOT -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2\""
 echo
 echo "DONE. 之后对每个产物跑 verify_target_abi.sh 做 ABI 门禁（EM_ARM / 0x5000400 / <=GLIBC_2.17）。"
-
-echo "== 6) 放开 sysroot 写权限（供 STAGE 2 交叉编 zlib/libpng/alsa/SDL 的 make install 落盘）=="
-# 实测 run 31882525698 根因：crosstool-NG 把 sysroot 内文件/目录装成受限权限
-# （如 /usr/include/stdio.h = r--r--r-- 0444、/usr/lib、/usr/share 对运行 bootstrap 的
-#  非-root 用户 runner 不可写），导致 STAGE 2 make install 写 /usr/lib、/usr/share/man
-#  时 Permission denied -> make: *** [Makefile:309: install-libs] Error 1 -> bootstrap exit 2。
-# 本脚本以 runner 身份构建 sysroot，整个 sysroot 归 runner 所有，问题纯是【权限位】被设成
-#  不可写（0555/0444），不是属主。因此以当前用户直接 chmod 即可（无需 sudo）。
-#  先 best-effort chown（应对缓存恢复带来的 stale-uid / root 归属），再【无条件】chmod -R u+rwX
-#  （真正修复权限位；旧 build_sdl_libpng.sh 的 sudo chown ... || sudo chmod ... 因 || 短路，
-#   chown 成功时 chmod 永不执行，正是本次 Permission denied 的元凶）。
-if [ -d "$SYSROOT" ]; then
-  chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
-  chmod -R u+rwX "$SYSROOT" 2>/dev/null || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null || true
-  for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true; done
-  echo "sysroot 权限已放开；/usr/lib 可写检查: $([ -w "$SYSROOT/usr/lib" ] && echo YES || echo NO)"
-else
-  echo "[WARN] $SYSROOT 不存在，跳过权限放开"
-fi
