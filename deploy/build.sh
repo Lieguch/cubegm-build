@@ -104,7 +104,7 @@ fi
 ALSA_CFLAGS="-I$ALSA_INC"
 
 # Common compile flags for every target binary
-export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include/SDL"
+export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
 
@@ -140,6 +140,17 @@ if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
     else
         log "5-edit patch already applied or not applicable -- skipping."
     fi
+fi
+# ---------------------------------------------------------------------------
+# RK3036G = ARM (armhf, glibc-2.17). picoarch upstream targets x86/MIPS, so its
+# crash signal handler reads uc_mcontext.pc -- but on ARM glibc-2.17 mcontext_t
+# is struct sigcontext whose program-counter field is 'arm_pc', not 'pc'.
+# Patch it for our ARM target (only affects ARM builds; x86 keeps .pc).
+# Confirmed against glibc-2.17 ARM <bits/sigcontext.h> (field: arm_pc).
+# ---------------------------------------------------------------------------
+if grep -q 'uc_mcontext\.pc' picoarch/main.c 2>/dev/null; then
+    sed -i 's/->uc_mcontext\.pc/->uc_mcontext.arm_pc/g' picoarch/main.c
+    log "Patched picoarch/main.c: uc_mcontext.pc -> uc_mcontext.arm_pc (ARM/glibc-2.17)"
 fi
 [ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
 
