@@ -42,28 +42,34 @@ warn(){ printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
 
 # -----------------------------------------------------------------------------
 # 确保 sysroot 可写（STAGE 2 安装前置）
-#   实测 run 31871915601：crosstool 产出的 sysroot /usr 树对运行 bootstrap 的
-#   非-root 用户（GitHub runner）不可写（/usr/lib、/usr/share/man 写时
-#   Permission denied，导致 zlib make install 失败）。无论根因是目录归属 root
-#   还是权限位被设成 555，统一用 passwordless sudo（STAGE 0 已验证可用）把
-#   sysroot 改回当前用户所有 / 补回 owner 写位，使 make install 能落盘。
+#   实测 run 31871915601 / 31922728812：crosstool 产出的 sysroot /usr 树对运行
+#   bootstrap 的非-root 用户（GitHub runner）不可写（/usr/lib、/usr/share/man
+#   写时 Permission denied，导致 zlib make install 失败）。
+#   机理级修复：用 `chmod -R a+rwX` 给【所有人】写+执行位，而不是 `u+rwX`
+#   （后者只给 owner 写位；若 chown 失败则 runner 仍无写权）。无论 sysroot 属主
+#   是 root 还是 runner，runner 作为 other 都能写 sysroot/usr/* —— 直接消除
+#   Permission denied 故障类。修复后仍不可写则【干净 die】，绝不 warn+continue 赌运气。
 # -----------------------------------------------------------------------------
 ensure_sysroot_writable(){
-    local d
-    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" \
-             "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do
+    local d SUDO
+    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do
         [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true
     done
+    if [ -w "$SYSROOT/usr/lib" ] && [ -w "$SYSROOT/usr/include" ]; then
+        log "sysroot /usr already writable by $(id -un) -- no fix needed"
+        return 0
+    fi
+    log "sysroot /usr NOT writable by $(id -un) (uid=$(id -u) gid=$(id -g))"
+    log "pre-fix perms: $(ls -ldn "$SYSROOT/usr/lib" "$SYSROOT/usr/include" 2>&1 | tr '\n' ' ')"
+    if sudo -n true 2>/dev/null; then SUDO=sudo; else SUDO=; fi
+    log "sudo non-interactive: ${SUDO:-UNAVAILABLE}"
+    chmod -R a+rwX "$SYSROOT/usr" 2>/dev/null || $SUDO chmod -R a+rwX "$SYSROOT/usr" 2>/dev/null || true
+    chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || $SUDO chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
+    log "post-fix perms: $(ls -ldn "$SYSROOT/usr/lib" "$SYSROOT/usr/include" 2>&1 | tr '\n' ' ')"
     if [ ! -w "$SYSROOT/usr/lib" ] || [ ! -w "$SYSROOT/usr/include" ]; then
-        log "sysroot /usr not writable by $(id -un) -- fixing ownership/permissions (sudo)"
-        sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null \
-            || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null \
-            || true
+        die "sysroot /usr STILL not writable after chmod a+rwX + chown -- cannot run STAGE 2 make install. Aborting (no guessing)."
     fi
-    # 再次确认；若仍不可写且 sudo 不可用，给出明确告警（不让后面静默失败难查）
-    if [ ! -w "$SYSROOT/usr/lib" ]; then
-        warn "STILL cannot write to $SYSROOT/usr/lib after fix attempt -- check runner perms/sudo."
-    fi
+    log "sysroot /usr now writable by $(id -un) -- OK"
 }
 
 # Cross toolchain env for all three builds
