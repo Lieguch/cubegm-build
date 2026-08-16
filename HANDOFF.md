@@ -35,6 +35,7 @@ main HEAD=210c798a（STAGE3 SDL 包含修复）；run35(74f6332480) 在跑验证
 
 ## 5. 已知坑 / 已解决的铁问题（必读）
 1. SDL.h 找不到（STAGE3）：SDL1.2 头在 sysroot/usr/include/SDL/ 子目录，--sysroot= 只自动搜 usr/include/ 顶层。picoarch Makefile 原靠 $(shell $(SYSROOT)/usr/bin/sdl-config --cflags) 拿路径，该机制在 CFLAGS 被命令行整体覆盖传入时不可靠。修复（210c798a）：build_sf3000_armhf.sh 的 CFLAGS 显式加 -I$SYSROOT/usr/include/SDL。
+2. 5-edits 补丁注释提前终结（STAGE3，plat_sdl.c:1393）：补丁注释里 `BTN_*/ABS_*` 的 `*/` 会提前关闭 `/*` 注释，使 `ABS_` 泄漏成代码 → `unknown type name 'ABS_'`。修复：注释内写成 `BTN_ / ABS_`（中间加空格）。两处都改：plat_sf3000.c（先修）+ plat_sdl.c（2026-08-16 漏修，14d87bf 补）。验证法：对打补丁后的 .c 做 C 注释剥离，检查 `ABS_` 是否仍作为可见 token 泄漏。
 2. STAGE2 Permission denied：sysroot 默认权限致 make install 失败。修复：STAGE1 末尾 chmod -R a+rwX + STAGE2 内 chmod -R a+rwX 硬 die。禁止删除这两段 chmod（删=回归，646a6643 教训）。
 3. crosstool target tuple：必须同时 CT_OMIT_TARGET_VENDOR=y + 清空 CT_ARCH_SUFFIX，否则产 armv7-linux-gnueabihf 失败。版本用样本默认。
 4. 缓存：build.yml 缓存 key = hashFiles('build/toolchain/build_sysroot_ctng.sh','deploy/build_sdl_libpng.sh')。改这俩→STAGE1 重建；改别的（如 build_sf3000_armhf.sh）→复用缓存，跑得快。
