@@ -48,19 +48,20 @@ die(){ err "$*"; exit 1; }
 
 # --- resilient network ops (timeout + retry) ---
 # A flaky runner network otherwise hangs git clone/submodule forever, turning
-# the CI run into a zombie. Wrap every network op in timeout(300s) + 5 retries.
+# the CI run into a zombie. Wrap every network op in timeout(600s) + 8 retries
+# (partial clone --filter=blob:none defeats the huge-repo/timeout failure on fceumm).
 git_clone(){
     local repo="$1" dest="$2" branch="${3:-}"
-    for n in 1 2 3 4 5; do
-        log "git clone attempt $n/5: $repo -> $dest"
+    for n in 1 2 3 4 5 6 7 8; do
+        log "git clone attempt $n/8: $repo -> $dest"
         rm -rf "$dest"
-        if timeout 300 git clone --depth 1 ${branch:+-b "$branch"} "$repo" "$dest"; then
+        if timeout 600 git clone --depth 1 --filter=blob:none ${branch:+-b "$branch"} "$repo" "$dest"; then
             return 0
         fi
         log "  clone attempt $n failed; retrying in 5s..."
         sleep 5
     done
-    die "git clone failed after 5 attempts: $repo"
+    die "git clone failed after 8 attempts: $repo"
 }
 git_submodule(){
     local dir="$1"
@@ -209,14 +210,16 @@ log "picoarch built."
 # picoarch-native launch protocol. picoarch's quit() reads /tmp/frogui_launch.txt
 # (core .so path + ROM path) and exec's into the chosen core+rom. The patch
 # makes FrogUI write that file + request RETRO_ENVIRONMENT_SHUTDOWN instead of
-# calling stock firmware. No stub symbols needed (unlike the wip/frogui-gs-interface
-# branch, which keeps the gs interface and links stubs).
-if [ -f "$HERE/../patch/frogui_native_launch.patch" ]; then
-    if git -C FrogUI apply --check "$HERE/../patch/frogui_native_launch.patch" 2>/dev/null; then
+# calling stock firmware. NOTE: this branch now reuses the proven
+# deploy/patch/frogui_gs_bridge.patch (identical launch-bridge logic to
+# wip/frogui-gs-interface), because the original frogui_native_launch.patch was
+# never committed to this branch (deploy/patch/ did not exist here).
+if [ -f "$HERE/../patch/frogui_gs_bridge.patch" ]; then
+    if git -C FrogUI apply --check "$HERE/../patch/frogui_gs_bridge.patch" 2>/dev/null; then
         log "Applying CubeGM native-launch patch to FrogUI..."
-        git -C FrogUI apply "$HERE/../patch/frogui_native_launch.patch"
+        git -C FrogUI apply "$HERE/../patch/frogui_gs_bridge.patch"
     else
-        log "WARN: native-launch patch already applied or not applicable -- skipping."
+        log "WARN: gs-bridge patch already applied or not applicable -- skipping."
     fi
 fi
 
