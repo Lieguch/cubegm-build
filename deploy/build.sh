@@ -176,6 +176,22 @@ log "picoarch built."
 # -----------------------------------------------------------------------------
 # STAGE 6 -- build FrogUI launcher core
 # -----------------------------------------------------------------------------
+# 方案2 (CubeGM): replace the closed-source stock-firmware game-launch interface
+# (ptr_gs_run_game_* / direct_loader, declared only under SF2000) with the
+# picoarch-native launch protocol. picoarch's quit() reads /tmp/frogui_launch.txt
+# (core .so path + ROM path) and exec's into the chosen core+rom. The patch
+# makes FrogUI write that file + request RETRO_ENVIRONMENT_SHUTDOWN instead of
+# calling stock firmware. No stub symbols needed (unlike the wip/frogui-gs-interface
+# branch, which keeps the gs interface and links stubs).
+if [ -f "$HERE/../patch/frogui_native_launch.patch" ]; then
+    if git -C FrogUI apply --check "$HERE/../patch/frogui_native_launch.patch" 2>/dev/null; then
+        log "Applying CubeGM native-launch patch to FrogUI..."
+        git -C FrogUI apply "$HERE/../patch/frogui_native_launch.patch"
+    else
+        log "WARN: native-launch patch already applied or not applicable -- skipping."
+    fi
+fi
+
 log "Building FrogUI (frogui_libretro.so)..."
 pushd FrogUI >/dev/null
 make CC="$CC" CXX="$CXX" || true   # some FrogUI builds use a wrapper; fall back below
@@ -237,3 +253,4 @@ log "Staged into $DST"
 log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
 log "overwriting the existing cubegm/ (stock rkgame/icube/driver.so/root.dat stay)."
 log "On next boot the device launches picoarch + FrogUI directly."
+
