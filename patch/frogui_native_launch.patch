@@ -1,0 +1,149 @@
+--- a/frogos.c
++++ b/frogos.c
+@@ -10,20 +10,38 @@
+ #include <sys/stat.h>
+ #include <time.h>
+ 
+-#ifdef SF2000
+-
+-#include "../../stockfw.h"
+-
+-// Direct call to loader - bypasses run_gba
+-typedef void (*loader_func_t)(const char*, int);
+-#define LOADER_ADDR 0x80001500
+-static loader_func_t direct_loader = (loader_func_t)LOADER_ADDR;
+-
+-// For SF2000, use the custom dirent implementation
+-#include "../../dirent.h"
+-#else
+ #include <dirent.h>
++
++/* ---- CubeGM open-source native launch protocol ---------------------------
++ * The closed-source stock firmware exposed ptr_gs_run_game_* / /*REMOVED*/
++ * (only declared under SF2000). This port ships picoarch, whose main loop
++ * (quit() in picoarch main.c) reads /tmp/frogui_launch.txt at exit (a core
++ * .so path + a ROM path) and exec's into that core+rom. We write that file
++ * and request RETRO_ENVIRONMENT_SHUTDOWN instead of calling stock firmware.
++ * CUBEGM_CORES_DIR is the on-device directory holding the libretro cores; it
++ * is a deployment constant (tune to match the SD layout at bring-up). */
++#ifndef LAUNCH_FILE
++#define LAUNCH_FILE "/tmp/frogui_launch.txt"
+ #endif
++#ifndef CUBEGM_CORES_DIR
++#define CUBEGM_CORES_DIR "/mnt/sda1/cubegm/cores"
++#endif
++static char g_launch_core[512];
++static char g_launch_rom[1024];
++
++static void request_native_launch(const char *core_name, const char *rom_full_path) {
++    snprintf(g_launch_core, sizeof(g_launch_core), "%s/%s_libretro.so",
++             CUBEGM_CORES_DIR, core_name ? core_name : "");
++    snprintf(g_launch_rom, sizeof(g_launch_rom), "%s",
++             rom_full_path ? rom_full_path : "");
++    FILE *lf = fopen(LAUNCH_FILE, "w");
++    if (lf) {
++        fprintf(lf, "%s
++%s
++", g_launch_core, g_launch_rom);
++        fclose(lf);
++    }
++}
+ 
+ #include "libretro.h"
+ #include "font.h"
+@@ -376,18 +394,9 @@
+     // Get the first (most recent) game
+     const RecentGame *game = &recent_list[0];
+     const char *core_name = game->core_name;
+-    const char *filename = game->game_name;
+-
+-    // Queue the game for launch
+-    sprintf((char *)ptr_gs_run_game_file, "%s;%s;%s.gba", core_name, core_name, filename); // TODO: Replace second core_name with full directory (besides /mnt/sda1) and seperate core_name from directory
+-    // Don't set ptr_gs_run_folder - inherit from menu core for savestates to work
+-    sprintf((char *)ptr_gs_run_game_name, "%s", filename);
+-
+-    // Remove extension from ptr_gs_run_game_name
+-    char *dot_position = strrchr(ptr_gs_run_game_name, '.');
+-    if (dot_position != NULL) {
+-        *dot_position = '\0';
+-    }
++
++    // Queue the game for launch (picoarch-native: write request + shutdown)
++    request_native_launch(core_name, game->full_path);
+ 
+     game_queued = true;
+ }
+@@ -1269,13 +1278,7 @@
+                     const char *filename_path = strrchr(entries[i].path, '/');
+                     const char *filename = filename_path ? filename_path + 1 : entries[i].name;
+ 
+-                    sprintf((char *)ptr_gs_run_game_file, "%s;%s;%s.gba", core_name, core_name, filename);
+-                    sprintf((char *)ptr_gs_run_game_name, "%s", filename);
+-
+-                    char *dot_position = strrchr(ptr_gs_run_game_name, '.');
+-                    if (dot_position != NULL) {
+-                        *dot_position = '\0';
+-                    }
++                    request_native_launch(core_name, entries[i].path);
+ 
+                     recent_games_add(core_name, filename, entries[i].path);
+                     game_queued = true;
+@@ -1629,15 +1632,7 @@
+                 }
+ 
+                 // Launch selected file with js2000 core using format: corename;full_path
+-                sprintf((char *)ptr_gs_run_game_file, "js2000;js2000;%s.gba", entry->name);
+-                // Don't set ptr_gs_run_folder - inherit from menu core for savestates to work
+-                sprintf((char *)ptr_gs_run_game_name, "%s", entry->name);
+-
+-                // Remove extension from game name
+-                char *dot_position = strrchr(ptr_gs_run_game_name, '.');
+-                if (dot_position != NULL) {
+-                    *dot_position = '\0';
+-                }
++                request_native_launch("js2000", entry->path);
+ 
+                 game_queued = true; // Pass to retro_run, can only load the core from there
+                 return;
+@@ -1706,17 +1701,9 @@
+                 recent_games_add(core_name, filename, entry->path);
+             }
+ 
+-            sprintf((char *)ptr_gs_run_game_file, "%s;%s;%s.gba", core_name, core_name, filename); // TODO: Replace second core_name with full directory (besides /mnt/sda1) and seperate core_name from directory
+-            // Don't set ptr_gs_run_folder - inherit from menu core for savestates to work
+-            sprintf((char *)ptr_gs_run_game_name, "%s", filename); // Expects the filename without any extension
+-
+-            // Remove extension from ptr_gs_run_game_name
+-            char *dot_position = strrchr(ptr_gs_run_game_name, '.');
+-            if (dot_position != NULL) {
+-                *dot_position = '\0';
+-            }
+-
+-            game_queued = true; // Pass to retro_run, can only load the core from there
++                request_native_launch(core_name, entry->path);
++
++                game_queued = true; // Pass to retro_run, can only load the core from there
+         }
+     }
+ 
+@@ -1937,15 +1924,11 @@
+         video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
+     }
+     if (game_queued) {
+-        const char *stub_path = "/mnt/sda1/temp_launch.gba";
+-        FILE *stub_file = fopen(stub_path, "wb");
+-        if (stub_file) {
+-            fwrite(ptr_gs_run_game_file, 1, strlen(ptr_gs_run_game_file), stub_file);
+-            fclose(stub_file);
+-        } else {
+-            return;
+-        }
+-        direct_loader(stub_path, 0);
++        /* Hand off to picoarch's native launcher: request_native_launch() already
++           wrote /tmp/frogui_launch.txt; ask picoarch to exit and boot the chosen
++           core+rom (see picoarch main.c quit()). */
++        if (environ_cb)
++            environ_cb(RETRO_ENVIRONMENT_SHUTDOWN, NULL);
+         return;
+     }
+ }
