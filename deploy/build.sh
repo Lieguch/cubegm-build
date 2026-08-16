@@ -142,6 +142,12 @@ if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
     fi
 fi
 [ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
+# --- gs interface stub injection (open-source build; see stockfw.h) ---
+cp -f "$HERE/../gs_stub.c" FrogUI/gs_stub.c 2>/dev/null || true
+if [ -f FrogUI/Makefile ]; then
+  sed -i 's/^SOURCES_C := frogos.c/SOURCES_C := frogos.c gs_stub.c/' FrogUI/Makefile
+fi
+
 
 # -----------------------------------------------------------------------------
 # STAGE 5 -- build picoarch for RK3036G (ARM, NOT MIPS!)
