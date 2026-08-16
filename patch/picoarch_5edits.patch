@@ -45,7 +45,7 @@ index 9978411..fe4f9d8 100644
 +#ifdef PLATFORM_SF3000
 +    /* Generic evdev gamepad backend (see plat_sf3000.c). SDL keeps driving
 +     * the built-in panel; evdev auto-supports any standard HID USB gamepad
-+     * via BTN_*/ABS_* codes -- no per-device profile required. */
++     * via BTN_ / ABS_* codes -- no per-device profile required. */
 +    in_evdev_init(&in_evdev_platform_data);
 +#endif
      in_probe();
