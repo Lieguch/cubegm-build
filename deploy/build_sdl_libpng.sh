@@ -49,33 +49,21 @@ warn(){ printf '\033[1;33m[WARN]\033[0m %s\n' "$*" >&2; }
 #   sysroot 改回当前用户所有 / 补回 owner 写位，使 make install 能落盘。
 # -----------------------------------------------------------------------------
 ensure_sysroot_writable(){
-    local d SUDO
-    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do
+    local d
+    for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" \
+             "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do
         [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true
     done
-    # 已经可写则跳过（缓存命中且权限正常时）
-    if [ -w "$SYSROOT/usr/lib" ] && [ -w "$SYSROOT/usr/include" ]; then
-        log "sysroot /usr already writable by $(id -un) -- no fix needed"
-        return 0
-    fi
-    # 诊断：暴露真实属主/权限，便于 CI 日志归因（不再静默吞错）
-    log "sysroot /usr NOT writable by $(id -un) (uid=$(id -u) gid=$(id -g))"
-    log "pre-fix perms: $(ls -ldn "$SYSROOT/usr/lib" "$SYSROOT/usr/include" 2>&1 | tr '\n' ' ')"
-    # 探测 sudo 是否非交互可用（hosted runner 免密；否则走非 sudo 路径）
-    if sudo -n true 2>/dev/null; then SUDO=sudo; else SUDO=; fi
-    log "sudo non-interactive: ${SUDO:-UNAVAILABLE}"
-    # 机理级修复：a+rwX 给【所有人】写+执行位。无论 sysroot 属主是 root 还是 runner，
-    # runner 作为 other/owner 都能写 sysroot/usr/* —— 直接消除 Permission denied 故障类。
-    # 先非 sudo 试（runner 若为 owner 即成功），失败再 sudo（属主为 root 时必需）。
-    chmod -R a+rwX "$SYSROOT/usr" 2>/dev/null || $SUDO chmod -R a+rwX "$SYSROOT/usr" 2>/dev/null || true
-    # best-effort 把属主改回 runner（应对缓存恢复 stale-root 归属），不改变上面的写位结论
-    chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || $SUDO chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
-    log "post-fix perms: $(ls -ldn "$SYSROOT/usr/lib" "$SYSROOT/usr/include" 2>&1 | tr '\n' ' ')"
-    # 硬校验：仍不可写则【干净失败】，绝不 warn+continue 赌运气（违反禁猜/禁赌禁令）
     if [ ! -w "$SYSROOT/usr/lib" ] || [ ! -w "$SYSROOT/usr/include" ]; then
-        die "sysroot /usr STILL not writable after chmod a+rwX + chown -- cannot run STAGE 2 make install. Aborting (no guessing)."
+        log "sysroot /usr not writable by $(id -un) -- fixing ownership/permissions (sudo)"
+        sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null \
+            || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null \
+            || true
     fi
-    log "sysroot /usr now writable by $(id -un) -- OK"
+    # 再次确认；若仍不可写且 sudo 不可用，给出明确告警（不让后面静默失败难查）
+    if [ ! -w "$SYSROOT/usr/lib" ]; then
+        warn "STILL cannot write to $SYSROOT/usr/lib after fix attempt -- check runner perms/sudo."
+    fi
 }
 
 # Cross toolchain env for all three builds
@@ -145,25 +133,14 @@ if [ -f "$SYSROOT/usr/lib/libasound.so" ]; then
     log "libasound already in sysroot -- skip"
 else
     log "Building alsa-lib 1.2.10 ..."
-    rm -rf alsa-lib-1.2.10 al.tar.bz2
-    # 修复 run 31885774010 根因：alsa-project 在 GitHub 没有 v1.2.10 release，
-    # 旧 URL releases/download/v1.2.10/... 必 404。改用官方源(已 HEAD 200)，
-    # 失败回退 GitHub 源码归档；ALSA 是可选组件(见下 SDL 注释)，两源都挂则跳过而非 abort。
-    if curl -fL -o al.tar.bz2 "https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.10.tar.bz2" \
-        || curl -fL -o al.tar.bz2 "https://github.com/alsa-project/alsa-lib/archive/refs/tags/v1.2.10.tar.gz"; then
-        tar -xf al.tar.bz2
-        if [ -d alsa-lib-1.2.10 ]; then
-            ( cd alsa-lib-1.2.10 \
-                && ./configure --host=$TARGET --prefix=$SYSROOT/usr --disable-python --with-pcm-plugins=all \
-                && make -j"$NPROC" \
-                && make install )
-            [ -f "$SYSROOT/usr/lib/libasound.so" ] || log "WARN: libasound install failed -- SDL will build without ALSA."
-        else
-            log "WARN: alsa-lib tarball extracted but dir alsa-lib-1.2.10 missing -- skip ALSA."
-        fi
-    else
-        log "WARN: alsa-lib download failed (both mirrors) -- SDL will build without ALSA (per LINUX_BUILD notes)."
-    fi
+    rm -rf alsa-lib-1.2.10 && curl -fL -o al.tar.bz2 \
+        "https://github.com/alsa-project/alsa-lib/releases/download/v1.2.10/alsa-lib-1.2.10.tar.bz2"
+    tar -xf al.tar.bz2 && cd alsa-lib-1.2.10
+    ./configure --host=$TARGET --prefix=$SYSROOT/usr --disable-python --with-pcm-plugins=all
+    make -j"$NPROC"
+    make install
+    cd "$WORK"
+    [ -f "$SYSROOT/usr/lib/libasound.so" ] || log "WARN: libasound install failed -- SDL will build without ALSA."
 fi
 
 # -----------------------------------------------------------------------------

@@ -82,7 +82,7 @@ index 994921d..4d9c24d 100644
 + * Generic evdev gamepad backend (RK3036G / SF3000)
 + *
 + * The Linux kernel's usbhid layer maps EVERY standard HID gamepad to the same
-+ * BTN_*/ABS_* event codes, so a generic evdev reader supports ALL such pads
++ * BTN_* / ABS_* event codes, so a generic evdev reader supports ALL such pads
 + * with zero per-device profiles. This backend is activated alongside SDL
 + * (see plat_sdl.c init, guarded by PLATFORM_SF3000): SDL keeps driving the
 + * built-in panel, evdev automatically picks up any plugged-in USB gamepad.

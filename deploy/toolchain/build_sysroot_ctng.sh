@@ -64,22 +64,3 @@ echo "export CC=armv7a-hardfloat-linux-gnueabihf-gcc"
 echo "export CFLAGS=\"--sysroot=$SYSROOT -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2\""
 echo
 echo "DONE. 之后对每个产物跑 verify_target_abi.sh 做 ABI 门禁（EM_ARM / 0x5000400 / <=GLIBC_2.17）。"
-
-echo "== 6) 放开 sysroot 写权限（供 STAGE 2 交叉编 zlib/libpng/alsa/SDL 的 make install 落盘）=="
-# 实测 run 31882525698 根因：crosstool-NG 把 sysroot 内文件/目录装成受限权限
-# （如 /usr/include/stdio.h = r--r--r-- 0444、/usr/lib、/usr/share 对运行 bootstrap 的
-#  非-root 用户 runner 不可写），导致 STAGE 2 make install 写 /usr/lib、/usr/share/man
-#  时 Permission denied -> make: *** [Makefile:309: install-libs] Error 1 -> bootstrap exit 2。
-# 本脚本以 runner 身份构建 sysroot，整个 sysroot 归 runner 所有，问题纯是【权限位】被设成
-#  不可写（0555/0444），不是属主。因此以当前用户直接 chmod 即可（无需 sudo）。
-#  先 best-effort chown（应对缓存恢复带来的 stale-uid / root 归属），再【无条件】chmod -R u+rwX
-#  （真正修复权限位；旧 build_sdl_libpng.sh 的 sudo chown ... || sudo chmod ... 因 || 短路，
-#   chown 成功时 chmod 永不执行，正是本次 Permission denied 的元凶）。
-if [ -d "$SYSROOT" ]; then
-  chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
-  chmod -R u+rwX "$SYSROOT" 2>/dev/null || sudo chmod -R u+rwX "$SYSROOT" 2>/dev/null || true
-  for d in "$SYSROOT/usr" "$SYSROOT/usr/lib" "$SYSROOT/usr/include" "$SYSROOT/usr/bin" "$SYSROOT/usr/share" "$SYSROOT/usr/lib/pkgconfig"; do [ -d "$d" ] || mkdir -p "$d" 2>/dev/null || sudo mkdir -p "$d" 2>/dev/null || true; done
-  echo "sysroot 权限已放开；/usr/lib 可写检查: $([ -w "$SYSROOT/usr/lib" ] && echo YES || echo NO)"
-else
-  echo "[WARN] $SYSROOT 不存在，跳过权限放开"
-fi
