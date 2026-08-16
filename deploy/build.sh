@@ -46,6 +46,35 @@ log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
 err(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; }
 die(){ err "$*"; exit 1; }
 
+# --- resilient network ops (timeout + retry) ---
+# A flaky runner network otherwise hangs git clone/submodule forever, turning
+# the CI run into a zombie. Wrap every network op in timeout(300s) + 5 retries.
+git_clone(){
+    local repo="$1" dest="$2" branch="${3:-}"
+    for n in 1 2 3 4 5; do
+        log "git clone attempt $n/5: $repo -> $dest"
+        rm -rf "$dest"
+        if timeout 300 git clone --depth 1 ${branch:+-b "$branch"} "$repo" "$dest"; then
+            return 0
+        fi
+        log "  clone attempt $n failed; retrying in 5s..."
+        sleep 5
+    done
+    die "git clone failed after 5 attempts: $repo"
+}
+git_submodule(){
+    local dir="$1"
+    for n in 1 2 3 4 5; do
+        log "submodule update attempt $n/5 in $dir"
+        if ( cd "$dir" && timeout 300 git submodule update --init --recursive ); then
+            return 0
+        fi
+        log "  submodule attempt $n failed; retrying in 5s..."
+        sleep 5
+    done
+    die "submodule init failed after 5 attempts in $dir"
+}
+
 [ "$(uname -s)" = "Linux" ] || die "This script must run on a Linux x86_64 build host."
 command -v git >/dev/null || die "git not found."
 command -v make >/dev/null || die "make not found."
@@ -99,7 +128,7 @@ ALSA_INC="$WORKDIR/alsa-lib/include"
 if [ ! -d "$ALSA_INC/alsa" ]; then
     log "Fetching alsa-lib headers (include/ only)..."
     rm -rf "$WORKDIR/alsa-lib"
-    git clone --depth 1 "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
+    git_clone "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
 fi
 ALSA_CFLAGS="-I$ALSA_INC"
 
@@ -121,7 +150,7 @@ if [ -n "${PICOARCH_LOCAL:-}" ] && [ -d "$PICOARCH_LOCAL" ]; then
     rm -rf picoarch && cp -a "$PICOARCH_LOCAL" picoarch
 elif [ ! -d picoarch ]; then
     log "Cloning picoarch (r36sx branch)..."
-    git clone --depth 1 -b r36sx "$PICOARCH_REPO" picoarch
+    git_clone "$PICOARCH_REPO" picoarch r36sx
 else
     log "Reusing existing picoarch/ (ensure it is on r36sx AND patched)."
 fi
@@ -129,8 +158,7 @@ fi
 if [ ! -f picoarch/libretro-common/include/libretro.h ] \
    && [ ! -f picoarch/libretro-common/include/libretro/libretro.h ]; then
     log "Initializing libretro-common submodule (required for RETRO_DEVICE_ID_*)..."
-    ( cd picoarch && git submodule update --init --recursive ) \
-        || log "WARN: submodule init failed; run manually: cd picoarch && git submodule update --init libretro-common"
+    git_submodule picoarch
 fi
 # Apply the 5-edit patch (RTC + evdev gamepad) if a clean checkout and patch present.
 if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
@@ -141,13 +169,7 @@ if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
         log "5-edit patch already applied or not applicable -- skipping."
     fi
 fi
-[ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
-# --- gs interface stub injection (open-source build; see stockfw.h) ---
-cp -f "$HERE/../gs_stub.c" FrogUI/gs_stub.c 2>/dev/null || true
-if [ -f FrogUI/Makefile ]; then
-  sed -i 's/^SOURCES_C := frogos.c/SOURCES_C := frogos.c gs_stub.c/' FrogUI/Makefile
-fi
-
+[ -d FrogUI ] || git_clone "$FROGUI_REPO" FrogUI
 
 # -----------------------------------------------------------------------------
 # STAGE 5 -- build picoarch for RK3036G (ARM, NOT MIPS!)
@@ -182,6 +204,22 @@ log "picoarch built."
 # -----------------------------------------------------------------------------
 # STAGE 6 -- build FrogUI launcher core
 # -----------------------------------------------------------------------------
+# 方案1 (CubeGM): keep the gs game-launch symbol NAMES from upstream FrogUI,
+# but bridge them to picoarch's native launch protocol (see patch header).
+# Upstream declared ptr_gs_run_game_* / direct_loader only under #ifdef SF2000
+# (a hardcoded ROM loader at 0x80001500, meaningless on RK3036G). Our build is
+# NOT SF2000, so we apply a self-contained bridge patch that backs the symbols
+# with real buffers and a functional direct_loader() stub writing
+# /tmp/frogui_launch.txt + requesting RETRO_ENVIRONMENT_SHUTDOWN.
+if [ -f "$HERE/../patch/frogui_gs_bridge.patch" ]; then
+    if git -C FrogUI apply --check "$HERE/../patch/frogui_gs_bridge.patch" 2>/dev/null; then
+        log "Applying CubeGM gs->picoarch launch bridge to FrogUI..."
+        git -C FrogUI apply "$HERE/../patch/frogui_gs_bridge.patch"
+    else
+        log "WARN: gs bridge patch already applied or not applicable -- skipping."
+    fi
+fi
+
 log "Building FrogUI (frogui_libretro.so)..."
 pushd FrogUI >/dev/null
 make CC="$CC" CXX="$CXX" || true   # some FrogUI builds use a wrapper; fall back below
@@ -204,7 +242,7 @@ mkdir -p "$CORE_OUT"
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
-    [ -d "$d" ] || git clone --depth 1 "https://github.com/libretro/$c.git" "$d"
+    [ -d "$d" ] || git_clone "https://github.com/libretro/$c.git" "$d"
     pushd "$d" >/dev/null
     make clean >/dev/null 2>&1 || true
     make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
