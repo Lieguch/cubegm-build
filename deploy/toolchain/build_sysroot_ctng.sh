@@ -64,3 +64,16 @@ echo "export CC=armv7a-hardfloat-linux-gnueabihf-gcc"
 echo "export CFLAGS=\"--sysroot=$SYSROOT -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2\""
 echo
 echo "DONE. 之后对每个产物跑 verify_target_abi.sh 做 ABI 门禁（EM_ARM / 0x5000400 / <=GLIBC_2.17）。"
+
+echo "== 6) 放开 sysroot 写权限（供 STAGE 2 make install 落盘）=="
+# 实测 run 31882525698 根因：crosstool-NG 把 sysroot 内文件/目录装成受限权限位（0555/0444），
+# 导致 STAGE 2 make install 写 /usr/lib、/usr/share/man 时 Permission denied。
+# 本脚本以 runner 身份构建 sysroot，sysroot 归 runner 所有，问题纯是权限位不可写。
+# 先 best-effort chown（应对缓存恢复带来的 stale-uid / root 归属），再 chmod -R a+rwX
+# （给【所有人】写+执行位，无论属主是 runner 还是 root 都能写——已验证：run 31885774010
+#  libpng 成功装进 sysroot；同机制 run 33 在 STAGE 2 内 a+rwX 也验证通过）。
+if [ -d "$SYSROOT" ]; then
+  chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || sudo chown -R "$(id -u):$(id -g)" "$SYSROOT" 2>/dev/null || true
+  chmod -R a+rwX "$SYSROOT" 2>/dev/null || sudo chmod -R a+rwX "$SYSROOT" 2>/dev/null || true
+  echo "sysroot 权限已放开；/usr/lib 可写检查: $([ -w "$SYSROOT/usr/lib" ] && echo YES || echo NO)"
+fi
