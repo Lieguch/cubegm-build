@@ -1,0 +1,138 @@
+diff --git a/frogos.c b/frogos.c
+index 93ff2a5..100d445 100644
+--- a/frogos.c
++++ b/frogos.c
+@@ -10,20 +10,45 @@
+ #include <sys/stat.h>
+ #include <time.h>
+ 
+-#ifdef SF2000
+-
+-#include "../../stockfw.h"
+-
+-// Direct call to loader - bypasses run_gba
+-typedef void (*loader_func_t)(const char*, int);
+-#define LOADER_ADDR 0x80001500
+-static loader_func_t direct_loader = (loader_func_t)LOADER_ADDR;
+-
+-// For SF2000, use the custom dirent implementation
+-#include "../../dirent.h"
+-#else
++/* CubeGM / RK3036G launch bridge (replaces the SF2000-only gs interface).
++   Upstream only declared the gs game-launch symbols under #ifdef SF2000
++   (a hardcoded ROM loader at 0x80001500). On this standard-Linux device we
++   KEEP the gs symbol NAMES (so the four launch sites are unchanged) but back
++   them with a real buffer and a functional direct_loader() stub that bridges
++   to picoarch's native launch protocol instead of the SF2000 ROM loader. */
+ #include <dirent.h>
+-#endif
++
++#define CUBEGM_CORES_DIR "/mnt/sda1/cubegm/cores"
++#define CUBEGM_LAUNCH_FILE "/tmp/frogui_launch.txt"
++
++static char gs_run_game_file[512];
++static char gs_run_game_name[128];
++static char gs_run_rom_fullpath[512];
++char *ptr_gs_run_game_file = gs_run_game_file;
++char *ptr_gs_run_game_name = gs_run_game_name;
++
++static int gs_request_shutdown = 0;
++
++/* Upstream called the SF2000 ROM loader here. We instead write picoarch's
++   native launch file (core .so path + ROM path) and flag a shutdown so
++   picoarch execl()s into the chosen core+rom (its fork/waitpid model). */
++static void direct_loader(const char *stub_path, int unused) {
++    (void)stub_path; (void)unused;
++    char core_buf[256];
++    const char *semi = strchr(ptr_gs_run_game_file, ';');
++    size_t n = semi ? (size_t)(semi - ptr_gs_run_game_file) : strlen(ptr_gs_run_game_file);
++    if (n >= sizeof(core_buf)) n = sizeof(core_buf) - 1;
++    memcpy(core_buf, ptr_gs_run_game_file, n);
++    core_buf[n] = '\0';
++    char core_so[512];
++    snprintf(core_so, sizeof(core_so), "%s/%s_libretro.so", CUBEGM_CORES_DIR, core_buf);
++    FILE *lf = fopen(CUBEGM_LAUNCH_FILE, "w");
++    if (lf) {
++        fprintf(lf, "%s\n%s\n", core_so, gs_run_rom_fullpath);
++        fclose(lf);
++    }
++    gs_request_shutdown = 1;
++}
+ 
+ #include "libretro.h"
+ #include "font.h"
+@@ -389,6 +414,9 @@ static void auto_launch_recent_game(void) {
+         *dot_position = '\0';
+     }
+ 
++    strncpy(gs_run_rom_fullpath, game->full_path, sizeof(gs_run_rom_fullpath) - 1);
++    gs_run_rom_fullpath[sizeof(gs_run_rom_fullpath) - 1] = '\0';
++
+     game_queued = true;
+ }
+ 
+@@ -1278,6 +1306,8 @@ static void pick_random_game(void) {
+                     }
+ 
+                     recent_games_add(core_name, filename, entries[i].path);
++                    strncpy(gs_run_rom_fullpath, entries[i].path, sizeof(gs_run_rom_fullpath) - 1);
++                    gs_run_rom_fullpath[sizeof(gs_run_rom_fullpath) - 1] = '\0';
+                     game_queued = true;
+                     return;
+                 }
+@@ -1639,6 +1669,9 @@ static void handle_input() {
+                     *dot_position = '\0';
+                 }
+ 
++                strncpy(gs_run_rom_fullpath, entry->name, sizeof(gs_run_rom_fullpath) - 1);
++                gs_run_rom_fullpath[sizeof(gs_run_rom_fullpath) - 1] = '\0';
++
+                 game_queued = true; // Pass to retro_run, can only load the core from there
+                 return;
+             }
+@@ -1667,6 +1700,8 @@ static void handle_input() {
+ 
+                     // Add to recent history (moves to top) - use actual full path
+                     recent_games_add(core_name, filename, full_path);
++                    strncpy(gs_run_rom_fullpath, full_path, sizeof(gs_run_rom_fullpath) - 1);
++                    gs_run_rom_fullpath[sizeof(gs_run_rom_fullpath) - 1] = '\0';
+                 } else {
+                     return; // Invalid format
+                 }
+@@ -1693,6 +1728,8 @@ static void handle_input() {
+ 
+                     // Add to recent history when launching from favorites
+                     recent_games_add(core_name, filename, full_path);
++                    strncpy(gs_run_rom_fullpath, full_path, sizeof(gs_run_rom_fullpath) - 1);
++                    gs_run_rom_fullpath[sizeof(gs_run_rom_fullpath) - 1] = '\0';
+                 } else {
+                     return; // Invalid format
+                 }
+@@ -1704,6 +1741,8 @@ static void handle_input() {
+ 
+                 // Add to recent history - use full entry path
+                 recent_games_add(core_name, filename, entry->path);
++                strncpy(gs_run_rom_fullpath, entry->path, sizeof(gs_run_rom_fullpath) - 1);
++                gs_run_rom_fullpath[sizeof(gs_run_rom_fullpath) - 1] = '\0';
+             }
+ 
+             sprintf((char *)ptr_gs_run_game_file, "%s;%s;%s.gba", core_name, core_name, filename); // TODO: Replace second core_name with full directory (besides /mnt/sda1) and seperate core_name from directory
+@@ -1937,15 +1976,10 @@ void retro_run(void) {
+         video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
+     }
+     if (game_queued) {
+-        const char *stub_path = "/mnt/sda1/temp_launch.gba";
+-        FILE *stub_file = fopen(stub_path, "wb");
+-        if (stub_file) {
+-            fwrite(ptr_gs_run_game_file, 1, strlen(ptr_gs_run_game_file), stub_file);
+-            fclose(stub_file);
+-        } else {
+-            return;
++        direct_loader(NULL, 0);
++        if (gs_request_shutdown && environ_cb) {
++            environ_cb(RETRO_ENVIRONMENT_SHUTDOWN, NULL);
+         }
+-        direct_loader(stub_path, 0);
+         return;
+     }
+ }
