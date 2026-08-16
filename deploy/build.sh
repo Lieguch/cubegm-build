@@ -48,19 +48,20 @@ die(){ err "$*"; exit 1; }
 
 # --- resilient network ops (timeout + retry) ---
 # A flaky runner network otherwise hangs git clone/submodule forever, turning
-# the CI run into a zombie. Wrap every network op in timeout(300s) + 5 retries.
+# the CI run into a zombie. Wrap every network op in timeout(600s) + 8 retries
+# (partial clone --filter=blob:none defeats the huge-repo/timeout failure on fceumm).
 git_clone(){
     local repo="$1" dest="$2" branch="${3:-}"
-    for n in 1 2 3 4 5; do
-        log "git clone attempt $n/5: $repo -> $dest"
+    for n in 1 2 3 4 5 6 7 8; do
+        log "git clone attempt $n/8: $repo -> $dest"
         rm -rf "$dest"
-        if timeout 300 git clone --depth 1 ${branch:+-b "$branch"} "$repo" "$dest"; then
+        if timeout 600 git clone --depth 1 --filter=blob:none ${branch:+-b "$branch"} "$repo" "$dest"; then
             return 0
         fi
         log "  clone attempt $n failed; retrying in 5s..."
         sleep 5
     done
-    die "git clone failed after 5 attempts: $repo"
+    die "git clone failed after 8 attempts: $repo"
 }
 git_submodule(){
     local dir="$1"
