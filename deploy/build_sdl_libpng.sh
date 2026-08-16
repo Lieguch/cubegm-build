@@ -140,7 +140,7 @@ if [ -f "$SYSROOT/usr/lib/libasound.so" ]; then
 else
     log "Building alsa-lib 1.2.10 ..."
     rm -rf alsa-lib-1.2.10 && curl -fL -o al.tar.bz2 \
-        "https://github.com/alsa-project/alsa-lib/releases/download/v1.2.10/alsa-lib-1.2.10.tar.bz2"
+        "https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.10.tar.bz2"
     tar -xf al.tar.bz2 && cd alsa-lib-1.2.10
     ./configure --host=$TARGET --prefix=$SYSROOT/usr --disable-python --with-pcm-plugins=all
     make -j"$NPROC"
