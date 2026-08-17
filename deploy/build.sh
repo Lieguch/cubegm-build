@@ -304,69 +304,127 @@ ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/cc"
 OLDPATH="$PATH"
 export PATH="$CROSS_BIN:$PATH"
 CORE_FAIL=""
-for c in $CORES; do
-    log "Building libretro core: $c"
-    d="$WORKDIR/libretro-$c"
-    repo="$c"
-    [ "$c" = "fceumm" ] && repo="libretro-fceumm"
-    if [ "$c" = "picodrive" ]; then
-        [ -d "$d" ] || git_clone_recursive "https://github.com/libretro/$repo.git" "$d"
-    else
-        [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
+# ===== FBA-family wrapper (official treefrog fba-gcc/g++ translated to armhf) =====
+# FBA/FBNeo assume signed char and type-pun heavily -> need -fsigned-char
+# -fno-strict-aliasing (else segfault at game load). Only FBA-family picks this up.
+cat > "$CROSS_BIN/fba-gcc" <<FBAWRAP
+#!/bin/bash
+exec "$REAL_CC" -fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard \
+    -fsigned-char -fno-strict-aliasing \
+    -I"$ALSA_INC" -Ilibretro-common/include "\$@"
+FBAWRAP
+cat > "$CROSS_BIN/fba-g++" <<FBAWRAP
+#!/bin/bash
+exec "$REAL_CXX" -fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard \
+    -fsigned-char -fno-strict-aliasing \
+    -I"$ALSA_INC" -Ilibretro-common/include "\$@"
+FBAWRAP
+chmod +x "$CROSS_BIN/fba-gcc" "$CROSS_BIN/fba-g++"
+AR="${CC%%gcc}ar"
+RANLIB="${CC%%gcc}ranlib"
+
+# ===== data-driven core build (mirrors treefrog-ui build_all.sh, ARM/RK3036G port) =====
+# Specs: name|url|subdir|makefile|MAKEFLAGS|MARKERS
+#   name     = output base (name_libretro.so)
+#   url      = official git repo (clone_cores.sh)
+#   subdir   = dir inside clone holding the Makefile ("" = root)
+#   makefile = "" or Makefile.libretro
+#   MAKEFLAGS= appended make vars (e.g. -lstdc++ -lpthread LTO= use_libchdr=0)
+#   MARKERS  = comma list: fba (use fba wrapper), submod (init submodules),
+#              cmake (mgba), gpsp (two-stage relink)
+# Arcade aliases: fbalpha/pgm/fba all resolve to FBNeo (one build, copied).
+CORE_SPECS='fbneo|https://github.com/libretro/FBNeo|src/burner/libretro||-lstdc++ -lpthread|fba
+mame2000|https://github.com/libretro/mame2000-libretro||||-lstdc++
+fbalpha2012|https://github.com/libretro/fbalpha2012_cps1||||-lstdc++|fba
+snes9x|https://github.com/libretro/snes9x|libretro|||
+snes9x2005|https://github.com/tzubertowski/snes9x2005|||LTO=
+snes9x2010|https://github.com/libretro/snes9x2010||Makefile.libretro|LTO=
+mgba|https://github.com/libretro/mgba||||cmake
+vbam|https://github.com/libretro/vbam-libretro|libretro|Makefile.libretro||-lstdc++
+gpsp|https://github.com/libretro/gpsp||||gpsp
+picodrive|https://github.com/libretro/picodrive||Makefile.libretro|use_libchdr=0|submod
+genesis_plus_gx|https://github.com/libretro/Genesis-Plus-GX||Makefile.libretro||-lstdc++
+fceumm|https://github.com/tzubertowski/libretro-fceumm||Makefile.libretro||-lstdc++
+nestopia|https://github.com/libretro/nestopia|libretro||||
+stella|https://github.com/libretro/stella2014-libretro||||-lstdc++
+prosystem|https://github.com/libretro/prosystem-libretro||||-lstdc++
+gambatte|https://github.com/tzubertowski/libretro-gambatte||Makefile.libretro||-lstdc++
+tgbdual|https://github.com/libretro/tgbdual-libretro||||-lstdc++
+pcsx_rearmed|https://github.com/libretro/pcsx_rearmed||Makefile.libretro||-lstdc++|submod
+mednafen_pce|https://github.com/libretro/beetle-pce-fast-libretro||||-lstdc++
+prboom|https://github.com/libretro/libretro-prboom||||-lstdc++
+scummvm|https://github.com/libretro/scummvm||||-lstdc++|submod'
+CORE_ALIASES='fbalpha:fbneo pgm:fbneo fba:fbneo'
+
+build_one_core () {
+    local name="$1" url="$2" subdir="$3" mk="$4" mflags="$5" markers="$6"
+    log "Building libretro core: $name"
+    local d="$WORKDIR/libretro-$name"
+    [ -d "$d" ] || git_clone "$url" "$d" || { log "ERROR: clone $name failed"; CORE_FAIL="${CORE_FAIL} $name"; return; }
+    if echo "$markers" | grep -q submod; then
+        ( cd "$d" && git submodule update --init --recursive ) || true
     fi
-    # picodrive's real submodules (cyclone/libchdr/emu2413/dr_libs/libpicofe)
-    [ "$c" = "picodrive" ] && ( cd "$d" && git submodule update --init --recursive ) || true
-    pushd "$d" >/dev/null
-    case "$c" in
+    local CCW="$CROSS_BIN/gcc" CXXW="$CROSS_BIN/g++"
+    if echo "$markers" | grep -q fba; then CCW="$CROSS_BIN/fba-gcc"; CXXW="$CROSS_BIN/fba-g++"; fi
+    local so builddir="$d"
+    [ -n "$subdir" ] && builddir="$d/$subdir"
+    case "$name" in
         mgba)
-            # mgba uses CMake directly (already works); keep using the real
-            # cross compiler so behaviour is unchanged.
-            log "  mgba: cmake build (LIBMGBA_ONLY + BUILD_LIBRETRO)"
             rm -rf build-cubegm
-            cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release \
-                  -DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON \
+            cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release -DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON \
                   -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
                   -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" \
                   -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-                  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
-                  -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS" \
-                  . >/dev/null || log "WARN: mgba cmake configure had issues."
-            cmake --build build-cubegm --target mgba_libretro -- -j"$(nproc)" \
-                || log "WARN: mgba build had issues."
+                  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS" . >/dev/null 2>&1 \
+                  || log "WARN: mgba configure had issues"
+            cmake --build build-cubegm --target mgba_libretro -- -j"$(nproc)" 2>&1 | tail -3
             so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
             ;;
-        snes9x|nestopia)
-            # Official ARM libretro platform. The PATH wrapper injects -fPIC +
-            # ALSA + libretro-common/include, so we must NOT override CFLAGS
-            # (that would clobber each Makefile's own include paths). The `armv`
-            # platform gives -fPIC + -marm + hard-float and avoids the Thumb
-            # "dangerous relocation" that `platform=unix` produced.
-            make -C libretro clean >/dev/null 2>&1 || true
-            make -C libretro platform=armv-neon-hardfloat -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
-            ;;
-        fceumm|picodrive)
-            make -f Makefile.libretro clean >/dev/null 2>&1 || true
-            make -f Makefile.libretro platform=armv-neon-hardfloat use_libchdr=0 -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
+        gpsp)
+            make clean >/dev/null 2>&1 || true
+            make platform=armv CC="$CCW" CXX="$CXXW" AR="$AR" RANLIB="$RANLIB" -j"$(nproc)" 2>&1 | tail -3 || true
+            rm -f gpsp_libretro.so
+            make platform=armv CC="$CROSS_BIN/g++" CXX="$CROSS_BIN/g++" AR="$AR" RANLIB="$RANLIB" \
+                LDFLAGS="$LDFLAGS -lstdc++" gpsp_libretro.so 2>&1 | tail -3
+            so=$(find . -name "gpsp_libretro.so" 2>/dev/null | head -1)
             ;;
         *)
-            make clean >/dev/null 2>&1 || true
-            make platform=armv-neon-hardfloat -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
+            pushd "$builddir" >/dev/null
+            if [ -n "$mk" ]; then
+                make -f "$mk" clean >/dev/null 2>&1 || true
+                make -f "$mk" platform=armv-neon-hardfloat $mflags -j"$(nproc)" 2>&1 | tail -3
+            else
+                make clean >/dev/null 2>&1 || true
+                make platform=armv-neon-hardfloat $mflags -j"$(nproc)" 2>&1 | tail -3
+            fi
+            popd >/dev/null
+            so=$(find "$d" -name "${name}_libretro.so" 2>/dev/null | head -1)
             ;;
     esac
     if [ -n "$so" ]; then
-        cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
+        cp "$so" "$CORE_OUT/${name}_libretro.so" && log "  -> $CORE_OUT/${name}_libretro.so"
     else
-        log "ERROR: core $c did not produce a .so"
-        CORE_FAIL="${CORE_FAIL} $c"
+        log "ERROR: core $name did not produce a .so"
+        CORE_FAIL="${CORE_FAIL} $name"
     fi
-    popd >/dev/null
+}
+
+SPEC_FILE="$WORKDIR/core_specs.txt"
+printf '%s\n' "$CORE_SPECS" > "$SPEC_FILE"
+while IFS='|' read -r name url subdir mk mflags markers; do
+    [ -z "$name" ] && continue
+    build_one_core "$name" "$url" "$subdir" "$mk" "$mflags" "$markers"
+done < "$SPEC_FILE"
+
+# Resolve arcade aliases (copy FBNeo output to fbalpha/pgm/fba)
+for alias_spec in $CORE_ALIASES; do
+    aname=${alias_spec%%:*}; base=${alias_spec##*:}
+    if [ -f "$CORE_OUT/${base}_libretro.so" ] && [ ! -f "$CORE_OUT/${aname}_libretro.so" ]; then
+        cp "$CORE_OUT/${base}_libretro.so" "$CORE_OUT/${aname}_libretro.so" \
+            && log "  alias -> $CORE_OUT/${aname}_libretro.so"
+    fi
 done
+
 if [ -n "$CORE_FAIL" ]; then
     log "STAGE7 FAILED -- missing cores:${CORE_FAIL}"
     exit 1

@@ -203,3 +203,27 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
 - `main` = v5（含 §13.5 修复），本次修复后预期真绿。
 - `wip/frogui-gs-interface`、`wip/frogui-native-launch` = 旧 `gs`/`native` 改名，**仍 v4（假绿风险）**，待同步 v5 修复。
 - 历史 `gs`/`native` 分支已删除。
+
+
+## 14. 从"CI 绿"转向"构建对等/超越原厂的系统" — STAGE7 核心扩展（feat/core-expansion）
+
+> 方向纠正（用户 2026-08-17）：此前误把"CI 转绿"当终点；真实目标是**模仿 TreeFrogUI/picoarch/FrogUI 开源代码，构建功能对等甚至超越原厂 CubeGM 的系统**。CI 绿只是 Stage0 地基。
+
+### 14.1 系统缺口（已用真实文件核对）
+- `deploy/cubegm/cores/config.xml` 注册 **24 个核心**（覆盖原厂 20 系统 + gpsp/prosystem + 超越项 PCE/FBNeo/PrBoom/ScummVM）。
+- 旧 `build.sh` STAGE7 仅编出 **5 个**（mgba/snes9x/fceumm/picodrive/nestopia）。**系统实际只有 5 核心，远未功能对等**。
+- 启动链路 `zhijack.sh`、菜单桥接 `frogui_gs_bridge.patch`、picoarch evdev/RTC 补丁、STAGE9 打包均已完成（Stage1 MVP 骨架齐备）。
+
+### 14.2 官方依据（已取回 `tzubertowski/treefrog-ui`）
+- `clone_cores.sh`：57 核心**官方仓库清单**（含 tzubertowski 分支）。
+- `build_all.sh`：每核心**官方构建配方 + 补丁列表**（设备级修正：FBA 族 `-fsigned-char -fno-strict-aliasing`、mame2003/fbneo `-shared -lstdc++ -lpthread`、gpsp 两阶段重链、pcsx_rearmed/scummvm submodule 等）。
+- 官方为 **SF3000(MIPS)** 构建；本机 **RK3036G(armhf)**，故只移植其**仓库名+配方+补丁**到我们的工具链（`platform=armv-neon-hardfloat` + sysroot wrapper）。
+
+### 14.3 实现（feat/core-expansion 分支，保持 main 绿）
+- STAGE7 改为**数据驱动**：`CORE_SPECS`（name|url|subdir|makefile|MAKEFLAGS|MARKERS）映射 config.xml 每个核心 → 官方仓库 + 配方。
+- 新增 `fba-gcc/fba-g++` wrapper（signed-char/no-strict-aliasing，仅 FBA 族用）。
+- 每核心：克隆（官方 URL）→ 按需 submodule → `make platform=armv-neon-hardfloat`（FBA 用 fba wrapper；mgba cmake；gpsp 两阶段；picodrive `use_libchdr=0`）→ 拷贝 `name_libretro.so`。
+- 街机别名：fbalpha/pgm/fba 由 FBNeo 一次构建拷贝（避免重复）。
+- 保留 `CORE_FAIL` fail-fast + STAGE8 ABI 门禁（EM_ARM/0x5000400/glibc≤2.17）。
+- 每个核心失败按"真实 CI 日志 → 官方源 → 修 → 重提"迭代（铁律）。
+- 推到 `feat/core-expansion`，CI 验证全绿后再合并 main（main=已知可工作状态）。
