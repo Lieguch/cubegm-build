@@ -169,3 +169,37 @@ The wrapper then `exec`s the absolute real compiler -> no PATH re-resolution -> 
 All other v3 behaviour unchanged (still `platform=armv-neon-hardfloat`, still injects
 `-fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -I<alsa> -Ilibretro-common/include`
 and does NOT override `CFLAGS=` so each core's own include paths survive).
+
+
+## 13. STAGE7 v5 -- 真绿门禁 + RK3036G 核心全编出（含 CORE_FAIL 修复）
+
+> 状态：v4 是**假绿**（5 核只 3 核真编出，picodrive/nestopia 被 `|| log WARN` 吞掉不 fail-fast）。
+> v5 目标 = 真绿：5 核全编出 `.so` + STAGE8 ABI 门禁 PASS。所有根因均经**真实 CI 日志 + 官方源**核对，非猜测。
+
+### 13.1 v4 假绿复盘（run 88 真实日志）
+- 仅 3 核产出 `.so`：mgba / snes9x / fceumm。
+- `WARN: core picodrive build had issues.` / `WARN: core nestopia build had issues.` 被 `||` 吞掉，job 仍 green。
+- STAGE8 门禁只检查到 5 个对象（picoarch/frogui/fceumm/mgba/snes9x），picodrive/nestopia 无 `.so` → 无对象 → 不报错。
+
+### 13.2 nestopia 真因（官方核对 retro_miscellaneous.h @ commit fc21888）
+- glibc-2.17 的 `<stdint.h>` 把 `SIZE_MAX` 置于 `__STDC_LIMIT_MACROS` 保护后；nestopia 用 `-std=gnu99` 未定义该宏 → `retro_miscellaneous.h:523 #error PRI_SIZET: unknown SIZE_MAX`。
+- 修复：编译器 wrapper `exec` 行追加 `-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS`（wrapper 注入，所有核心共享）。
+
+### 13.3 picodrive 真因（官方核对 Makefile:89 / :350）
+- 默认 `use_libchdr ?= 1` 启用 `USE_LIBCHDR`，拉入捆绑 `lzma-24.05`，其 `CpuArch.c` 用 `AT_HWCAP2`/`HWCAP2_*`（glibc-2.17 / 旧内核头 sysroot 未定义）→ `error: 'AT_HWCAP2' undeclared`。
+- 修复：STAGE7 `fceumm|picodrive` 分支 make 加 `use_libchdr=0`。代价：picodrive 不支持 CHD 压缩光盘；RK3036G 无此需求，可接受（等价官方 armhf 构建）。
+
+### 13.4 fail-fast 门禁
+- 循环内：`[ -n "$so" ]` 为假 → `CORE_FAIL="${CORE_FAIL} $c"`。
+- 循环后：`[ -n "$CORE_FAIL" ]` → `log STAGE7 FAILED ...; exit 1`。未来"绿"=真绿。
+
+### 13.5 CORE_FAIL unbound 崩溃（run 32019897845 真实日志，commit 49198ec）
+- `set -euo pipefail` 下 `CORE_FAIL` 在引用前未初始化 → `deploy/build.sh: line 370: CORE_FAIL: unbound variable`，job 失败。
+- **关键证据**：该次运行 5 个核心（mgba/snes9x/fceumm/picodrive/nestopia）**全部产出 `.so`**（nestopia 在崩溃行前已 `[build] -> .../cores/nestopia_libretro.so`），即 v5 修复已生效，仅门禁末段 unbound 变量致 job 失败。
+- 修复：循环前 `CORE_FAIL=""`（commit 524c380749）。`bash -n` 通过。
+- 预期：修复后 v5 运行 = 5 核全编出 + STAGE8 ABI 门禁（verify_target_abi.sh 对 7 个对象：picoarch/frogui/5 核）PASS = 真绿。
+
+### 13.6 分支现状（2026-08-17）
+- `main` = v5（含 §13.5 修复），本次修复后预期真绿。
+- `wip/frogui-gs-interface`、`wip/frogui-native-launch` = 旧 `gs`/`native` 改名，**仍 v4（假绿风险）**，待同步 v5 修复。
+- 历史 `gs`/`native` 分支已删除。
