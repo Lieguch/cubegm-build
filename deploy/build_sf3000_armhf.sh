@@ -30,17 +30,13 @@
 #    4. libretro-common submodule initialised in the picoarch source
 #       (provides libretro.h). Apply ../patch/picoarch_5edits.patch first for
 #       the RTC GET_SYSTEM_TIME fix (helps time-based strategy/sim saves).
-#    5. Apply ../patch/picoarch_mstar_guard.patch -- wraps the upstream
-#       #ifndef PLATFORM_SF3000 miyoo HW-scaling block in
-#       `#if !defined(RK3036G_NO_MIYOO_SCALE)` so the MStar-only `<mi_sys.h>`
-#       / `<mi_gfx.h>` includes are SKIPPED on RK3036G (no MStar SDK). Without
-#       this the build dies at `fatal error: mi_sys.h: No such file or
-#       directory`. deploy/build.sh applies both patches automatically.
 #
 #  ENV (inherited from deploy/build.sh, or set manually):
 #    SYSROOT  CC  CXX  CROSS_COMPILE  CFLAGS  CXXFLAGS  LDFLAGS
 # =============================================================================
 set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd)"
+[ -z "$SCRIPT_DIR" ] && SCRIPT_DIR="$PWD"
 cd "${PICOARCH_DIR:-$(dirname "$0")/picoarch}"
 HERE="$PWD"
 
@@ -52,7 +48,7 @@ ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O
 # Compose CFLAGS: ARM arch + 2.17 sysroot + SDL headers + NEON C scaler.
 # We build the GENERIC 'unix' platform (NO -DPLATFORM_SF3000): standard Linux
 # fbdev video / ALSA audio / evdev input. Panel is 1280x720 (RK3036G LCD).
-CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DRK3036G_NO_MIYOO_SCALE -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
+CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
 CXXFLAGS="$CFLAGS"
 LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -lasound -Wl,--gc-sections -s ${LDFLAGS}"
 
@@ -77,6 +73,33 @@ fi
 if grep -q 'uc_mcontext.pc' main.c; then
     log "Patching main.c: armhf mcontext PC field (pc -> arm_pc)"
     sed -i 's/->uc_mcontext\.pc;/->uc_mcontext.arm_pc;/' main.c
+fi
+
+# --- RK3036G has NO MStar MI (mi_sys/mi_gfx) hardware. The upstream 'unix'
+#     platform's miyoo HW-scaling block (#ifndef PLATFORM_SF3000 in plat_sdl.c)
+#     #includes <mi_sys.h>/<mi_gfx.h> and calls MI_SYS_*/MI_GFX_* APIs absent
+#     on RK3036G -> fatal compile error. Provide malloc-backed STUB headers so
+#     the block compiles/links; at runtime GFX_BlitSurfaceExec falls back to
+#     SDL_BlitSurface (the generic SDL 'screen' never sets pixelsPa), so the
+#     NEON software scaler still drives the display. This keeps the generic
+#     'unix' platform (no -DPLATFORM_SF3000) intact -- avoiding the ~16
+#     SF3000-specific code paths that would otherwise activate. Stubs live in
+#     deploy/ and are copied next to plat_sdl.c (picked up via -I./).
+# resolve this script's own directory (deploy/) robustly, cwd-independent.
+# Must run BEFORE any chdir: $0/BASH_SOURCE can be relative once we cd away.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd)"
+[ -z "$SCRIPT_DIR" ] && SCRIPT_DIR="$PWD"
+# locate the MStar MI stub headers (committed at deploy/ alongside this script)
+STUB_SRC="$SCRIPT_DIR"
+if [ ! -f "$STUB_SRC/mi_sys_stub.h" ] && [ -f "$SCRIPT_DIR/../deploy/mi_sys_stub.h" ]; then
+    STUB_SRC="$SCRIPT_DIR/../deploy"
+fi
+if [ ! -f mi_sys.h ] && [ -f "$STUB_SRC/mi_sys_stub.h" ]; then
+    log "Copying MStar MI stub headers (mi_sys.h / mi_gfx.h) for RK3036G from $STUB_SRC"
+    cp "$STUB_SRC/mi_sys_stub.h" mi_sys.h
+    cp "$STUB_SRC/mi_gfx_stub.h" mi_gfx.h
+else
+    log "WARN: MI stub headers not found at $STUB_SRC -- <mi_sys.h> will be missing (build will fail)"
 fi
 
 # sanity: ensure SDL config is reachable in the sysroot
