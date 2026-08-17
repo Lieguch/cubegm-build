@@ -209,3 +209,35 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
   `mi_sys.h` 纳入排除区；块外无引用块内专属符号（GFX_*/MI_* 全在块内），排除后无悬空引用。
 - **状态**：已对 `main` 重新 workflow_dispatch 触发，待真实日志核验真绿。
   wip 两分支未改动（仍 sf3000 路径），本轮不重触发。
+
+## 16. 2026-08-17 main 修复回归（§15 的 sed gate 自身损坏 + 概念缺陷）→ 改用 MI 桩头
+
+- **§15 修复被证伪**：§15 的 commit f530f027 用 `sed` 向 plat_sdl.c 注入
+  `#if !defined(RK3036G_NO_MIYOO_SCALE)` 包裹 miyoo 块，并加
+  `-DRK3036G_NO_MIYOO_SCALE`。重新 dispatch 后 run #105/#106/#107 仍
+  `completed+failure`，真实日志（build-output/bootstrap.log）报：
+  `sed: -e expression #1, char 50: unterminated 's' command`。
+  根因：该 `sed s|...$|...|` 替换串内含**未转义裸换行**，sed 把换行当命令结束符，
+  s 命令在闭合 `|` 前终止 -> 语法错误（纯 LF 脚本同样触发，与 CRLF 无关）。
+- **概念缺陷（更重要）**：即便 sed 写对，gate 掉整段 miyoo 块也不成立——
+  该块的 `buffer_init()`/`buffer_scale()` 是**通用 `unix` 路径必需**的
+  （plat_sdl.c:910 在 `scale_size!=NONE` 调用 `buffer_scale()`；块外/SF3000 块
+  均不提供通用版），gate 掉会致链接期 undefined reference。§15 判定"(b) 重定义"
+  对当前 r36sx 真源**不成立**（SF3000 版 buffer_init/buffer_scale 在
+  `#ifdef PLATFORM_SF3000` 内，与 miyoo 块互斥，无重定义）。
+- **正确修复（Contents API 提交，仅改 main）**：
+  1. 新增 `deploy/mi_sys_stub.h` + `deploy/mi_gfx_stub.h`：MStar MI 的 malloc 支撑
+     shim（MI_SYS_*/MI_GFX_* 全为 no-op/内存分配），让 miyoo 块**编译+链接通过**。
+  2. `deploy/build_sf3000_armhf.sh`：删除损坏的 sed 与无用的 `-DRK3036G_NO_MIYOO_SCALE`；
+     改为构建时把两桩头 `cp` 到 picoarch 根目录（经 `-I./` 命中 `#include <mi_sys.h>`）。
+     运行期 `GFX_BlitSurfaceExec` 因通用 SDL `screen` 不设 `pixelsPa`（pixelsPa 宏展开为
+     `unused1`），必走 `SDL_BlitSurface` 回退，NEON 软件缩放（scale1x..6x_n16）照常驱动显示。
+  3. **不**定义 `PLATFORM_SF3000`：避免激活 plat_sdl.c 内 ~16 处 SF3000 专属代码
+     （cubevol 输入 / driver.so 音频 / /dev/fb0 mmap），那些在 RK3036G 上会破坏输入/音频。
+  修复纯叠加（新增 2 文件 + 改 1 脚本），不删除原厂/里程碑文件。
+- **验证**：桩头在宿主机用 gcc -Wall -Wextra 模拟 plat_sdl.c 的 MI 调用全部通过
+  （类型与上游真源一致，MI_PHY=uintptr_t 等同原厂 SDK）；`bash -n` 通过；桩头经
+  `-I./` 命中、不触碰其他源。
+- **状态**：已对 `main` 重新 workflow_dispatch 触发（待 #108+ 真实日志核验真绿）。
+  wip 两分支仍 `platform=sf3000`（该块已被 `#ifdef PLATFORM_SF3000` 排除），未受影响、
+  未改动、不重触发。三分支 HANDOFF 保持 §16 一致。
