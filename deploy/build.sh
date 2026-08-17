@@ -245,15 +245,55 @@ mkdir -p "$CORE_OUT"
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
-    [ -d "$d" ] || git_clone "https://github.com/libretro/$c.git" "$d"
+    # repo name mapping: the NES core lives in libretro-fceumm, not fceumm
+    repo="$c"
+    [ "$c" = "fceumm" ] && repo="libretro-fceumm"
+    [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
     pushd "$d" >/dev/null
-    make clean >/dev/null 2>&1 || true
-    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-         platform=armv7-neon-hardfloat \
-         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-         -j"$(nproc)" || log "WARN: core $c build had issues (may need per-core tweaks)."
-    # locate the produced .so
-    so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
+    case "$c" in
+        mgba)
+            # mgba is a CMake project; its libretro core builds via cmake
+            log "  mgba: cmake build (LIBMGBA_ONLY + BUILD_LIBRETRO)"
+            rm -rf build-cubegm
+            cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release \
+                  -DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON \
+                  -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
+                  -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" \
+                  -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+                  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
+                  -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS" \
+                  . >/dev/null || log "WARN: mgba cmake configure had issues."
+            cmake --build build-cubegm --target mgba_libretro -- -j"$(nproc)" \
+                || log "WARN: mgba build had issues."
+            so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
+            ;;
+        snes9x|nestopia)
+            # these cores keep their libretro Makefile under libretro/
+            make -C libretro clean >/dev/null 2>&1 || true
+            make -C libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+                 platform=armv7-neon-hardfloat \
+                 CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+                 -j"$(nproc)" || log "WARN: core $c build had issues."
+            so=$(find libretro -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
+            ;;
+        fceumm|picodrive)
+            # root Makefile.libretro is the libretro entry point
+            make clean >/dev/null 2>&1 || true
+            make -f Makefile.libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+                 platform=armv7-neon-hardfloat \
+                 CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+                 -j"$(nproc)" || log "WARN: core $c build had issues."
+            so=$(find . -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
+            ;;
+        *)
+            make clean >/dev/null 2>&1 || true
+            make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+                 platform=armv7-neon-hardfloat \
+                 CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+                 -j"$(nproc)" || log "WARN: core $c build had issues."
+            so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
+            ;;
+    esac
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
     popd >/dev/null
 done
