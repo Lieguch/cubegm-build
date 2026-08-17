@@ -389,3 +389,36 @@ push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两
   3. Removed `| tail -40` so the FULL make output (incl. the real error:) lands in bootstrap.log / build-output for agent diagnosis.
 - Status: main dispatched; pending verification of #130+ as completed+success. wip branches remain stale-green (old sf3000 path, #94/#95), untouched.
 - Iron-rule check: ADD/minimal change only; no non-agent / milestone files deleted; fix derived from real CI commands + upstream source, not guesswork.
+
+
+## §22 (二次修复) — main #132 `undefined reference to 'rewind_apply'` 链接失败根因与修复 — 2026-08-17T17:47:32Z
+
+### 现象（真实 CI 日志 #132，head 4d44b094，commit 982d200+4d44b09）
+- `main.c:529:13: warning: 'rewind_apply' used but never defined`
+- `main.c:(.text+0x740): undefined reference to 'rewind_apply'`
+- `collect2: error: ld returned 1 exit status` → `make: *** [Makefile:144: picoarch] Error 1`
+- 对 #132 的 `bootstrap.log` 全量 grep：`-DPLATFORM_SF3000` 出现次数 = **0**（main.o 编译行 line 306 仅含 `-DUSE_C_SCALER -DRK3036G_NO_MIYOO_SCALE -DSCREEN_WIDTH=1280 ...`）。
+
+### 根因（基于真实日志 + 上游 Makefile@r36sx 实测，非猜测）
+`deploy/build_sf3000_armhf.sh` 在 `make` 命令行列传 `CFLAGS="$CFLAGS"`，按 **GNU Make 语义：命令行变量赋值会覆盖 Makefile 内的 `CFLAGS +=`**。
+上游 Makefile r36sx 的 sf3000 分支靠 `CFLAGS += -DPLATFORM_SF3000` 来注入该宏，但被命令行覆盖 → **实际编译命令从未带 `-DPLATFORM_SF3000`**。
+后果：
+1. `main.c:838` 的 `rewind_apply()` 定义位于 `#ifdef PLATFORM_SF3000` 块内 → 宏缺失被编译掉 → 仅有 line 529 前向声明 → 链接报 undefined reference（#132 直接失败原因）。
+2. `plat_sf3000.c` 的 `#ifdef PLATFORM_SF3000` 块被跳过 → 选错后端代码路径（潜在隐性错误）。
+3. 顺带：§22 已把 `platform=unix`→`platform=sf3000`（修复了 plat_linux.c 的 `scale_update_scaler()` 未定义编译错误），但本宏缺失导致链接阶段仍失败。
+
+### 修复（commit 89a85ee1109db8a0abe70b3a21256acd77099a61，仅改 `deploy/build_sf3000_armhf.sh`）
+- 在 CFLAGS 行 `-DUSE_C_SCALER` 之后**显式补加 `-DPLATFORM_SF3000`**，使其随命令行列 CFLAGS 传入，绕过 Makefile `+=` 被覆盖问题。
+- 同步把上方注释块改为说明"我们自行注入该宏"（原本误称 Makefile 注入），并新增 CRITICAL 段解释 Make 命令行覆盖语义与回归来源。
+- 不改动 miyoo 块处理：`-DRK3036G_NO_MIYOO_SCALE` 仍保留，build.sh 的 MStar guard patch 仍 wrap miyoo 块为 `#if !defined(RK3036G_NO_MIYOO_SCALE)` 并 hoist `static struct GFX_Buffer buffer;`（守卫 `PLATFORM_SF3000 || RK3036G_NO_MIYOO_SCALE`）→ 现在 PLATFORM_SF3000 也定义，buffer 由 hoisted 块提供，无重定义、无未声明。
+
+### 铁律自检
+- 仅 ADD/最小编辑 `deploy/build_sf3000_armhf.sh` 与 `HANDOFF.md`；**未删除**任何非 agent 创建或里程碑文件。
+- 修复基于 #132 真实 `bootstrap.log` + 上游 Makefile 实测，非臆测、非盲目重试。
+- 已验证：新内容中 `-DPLATFORM_SF3000` 在 CFLAGS 行出现 1 次（另有注释说明），编译命令将带该宏。
+- 下一步：dispatch main 触发 #133，下一周期核验 `completed+success`。
+
+### 中英对照（EN）
+- Symptom: link error `undefined reference to 'rewind_apply'` (main.c:838 def lives in `#ifdef PLATFORM_SF3000`).
+- Root cause: `make CFLAGS="$CFLAGS"` on cmdline OVERRIDES Makefile `CFLAGS += -DPLATFORM_SF3000`.
+- Fix: explicitly add `-DPLATFORM_SF3000` to the script's CFLAGS line (commit 89a85ee). Re-trigger via dispatch; verify #133 success next cycle.
