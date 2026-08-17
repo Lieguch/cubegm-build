@@ -279,3 +279,24 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
 - **状态**：已对 `main` 重新 workflow_dispatch 触发（待 #108+ 真实日志核验真绿）。
   wip 两分支仍 `platform=sf3000`（该块已被 `#ifdef PLATFORM_SF3000` 排除），未受影响、
   未改动、不重触发。三分支 HANDOFF 保持 §16 一致。
+
+## 17. 2026-08-17 main 二次回归（竞争补丁方案 mstar_guard 仍坏）→ 恢复桩头方案
+
+- **竞争修复被证伪**：本会话中 main 出现竞争改动（blob c73ec4a）：恢复
+  `-DRK3036G_NO_MIYOO_SCALE` 并在 build.sh 应用 `patch/picoarch_mstar_guard.patch`。
+  该 patch 把**整段** miyoo 块（含 `buffer_init()`/`buffer_scale()`）包进
+  `#if !defined(RK3036G_NO_MIYOO_SCALE)`。宏一旦定义，整块被编译剔除 ->
+  通用 `unix` 路径在 plat_sdl.c:910 调用的 `buffer_scale()` 变为**链接期
+  undefined reference** -> 构建仍失败。此即 §16 已指出的同一概念缺陷。
+- **正确修复（恢复桩头方案，blob f11821b0，仅改 main 的 deploy/build_sf3000_armhf.sh）**：
+  1. **不**定义 `-DRK3036G_NO_MIYOO_SCALE` -> miyoo 块保持激活（buffer_init/buffer_scale
+     照常定义，链接不缺符号）；
+  2. 沿用 §16 的 `deploy/mi_sys_stub.h`+`mi_gfx_stub.h` 桩头（已提交），构建时 cp 到
+     picoarch 根（经 `-I./` 命中 `#include <mi_sys.h>`），块得以编译+链接；
+  3. `mstar_guard.patch` 文件**保留在 main 不删除**；宏未定义时它只是无害的空包层。
+  4. `SCRIPT_DIR` 在脚本顶部用 `BASH_SOURCE[0]` 解析（cwd 无关），加 `../deploy` 兜底
+     与 WARN 日志，修正此前 `DEPLOY_DIR` 在 `cd picoarch` 后变空导致 cp 静默跳过的漏。
+- **验证**：bash -n 通过；3 种 `$0`（绝对 / 相对 ../ / 相对 ./）模拟均正确解析并找到桩头；
+  桩头 gcc -Wall -Wextra 模拟通过。待 push 自动触发的 run 真实日志核验真绿。
+- **状态**：main 已通过 push 自动触发新 run（build.yml 监听 push main）；wip 两分支仍
+  sf3000 路径，未受影响、未改动、不重触发。三分支 HANDOFF 保持 §17 一致。
