@@ -219,3 +219,31 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
   `libpicofe/linux/` 已提供 `in_evdev.c`/`sndout_alsa.c`/`fbdev.c`；miyoomini/trimui 端口均走通用 SDL，证明此路可行。
 - `picoarch_5edits.patch`（RTC GET_SYSTEM_TIME）保留：对策略/模拟游戏时间存档有利；其 evdev 段因守卫 `PLATFORM_SF3000` 在 unix 下惰性无害。
 - 约束：GitHub Actions 2000 分钟/月；失败/取消 run 不计费，成功 run 才计费 -> 本次为"先求一次性正确构建"。
+
+## 15. 2026-08-17 main picoarch `unix` 构建回归（mi_sys.h）及修复
+
+- **现象**：`main` 最新 run #104（id 32036760794，13:48Z）`completed+failure`；
+  CI 真实日志（build-output/bootstrap.log）报错
+  `plat_sdl.c:174:10: fatal error: mi_sys.h: No such file or directory`
+  -> `[ERROR] picoarch build failed`。
+- **根因（已联网核对上游真源 tzubertowski/TreeFrogUI_picoarch@r36sx plat_sdl.c）**：
+  上游 r36sx 的 `plat_sdl.c` 把一段 **Miyoo/mini 专属硬件缩放**实现包在
+  `#ifndef PLATFORM_SF3000` 内（即非 SF3000 平台即编译）。本仓库 `main` 的
+  `deploy/build_sf3000_armhf.sh` 按 §14 决策用通用 `platform=unix`（**不**定义
+  `PLATFORM_SF3000`），该块被激活，导致：
+    (a) `#include <mi_sys.h>`/`<mi_gfx.h>`（MStar/Ingenic MI 缩放器头，RK3036G 无）-> 致命错误；
+    (b) 块内 `static buffer_init()`/`static buffer_scale()` 与文件下方**无条件**的通用 SDL 版
+        重名 -> 重定义错误。
+  RK3036G 是标准 buildroot Linux（纯 fbdev SDL），本就应使用通用软件 SDL 缩放路径。
+  **注**：wip 两分支仍用 `platform=sf3000`+`-DPLATFORM_SF3000`，该块被排除，故未受影响
+  （旧/假绿路径）。如日后迁移到 `unix` 路径，须套用同款 gate。
+- **修复（commit f530f027，仅改 main 的 deploy/build_sf3000_armhf.sh）**：
+  在块外层再套 `#if !defined(RK3036G_NO_MIYOO_SCALE)`（脚本 sed 注入于
+  `#ifndef PLATFORM_SF3000` 之后、对应 `#endif` 之前），并在 CFLAGS 加
+  `-DRK3036G_NO_MIYOO_SCALE`。幂等、前向安全（上游若删块则 grep 跳过，行为不变）。
+  效果：RK3036G 走通用软件 SDL 缩放，恢复 §14 决策前的绿态。
+- **验证**：`bash -n` 通过；对上游 plat_sdl.c 实测 sed 包裹后 #if 嵌套正确
+  （172 `#ifndef` -> 173 内层 gate -> 491 内层 `#endif` -> 492 外层 `#endif`），
+  `mi_sys.h` 纳入排除区；块外无引用块内专属符号（GFX_*/MI_* 全在块内），排除后无悬空引用。
+- **状态**：已对 `main` 重新 workflow_dispatch 触发，待真实日志核验真绿。
+  wip 两分支未改动（仍 sf3000 路径），本轮不重触发。
