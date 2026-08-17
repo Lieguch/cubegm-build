@@ -528,3 +528,37 @@ main 的 build.sh **缺少** wip/frogui-gs-interface 分支的 `menu_libretro.so
 ### 铁律自检
 - 仅改 `.github/workflows/build.yml` + 追加 `HANDOFF.md` §25；未删除任何非 agent 创建或里程碑文件。
 - 根因基于 #141/#143 真实 run log（`RESULT: PASS` + `cannot lock ref`）取证，非猜。
+
+## §26 — main STAGE7 回归修复：恢复 §11–§13 验证过的编译器 wrapper 核心构建（2026-08-17T19:30Z）
+
+### 现象（build-output/bootstrap.log run #144，commit b8ac9c0）
+- picoarch / FrogUI 已真绿（ABI gate PASS，BOOTSTRAP COMPLETE），但 5 个 libretro 核心全部 WARN/best-effort 未编出：
+  - mgba / snes9x / nestopia：`WARN: core ... build had issues`（§11 复盘：CFLAGS 覆盖 + 内层 gcc 用主机编译器 + 缺 -fPIC/-marm）。
+  - fceumm：`WARN: core fceumm clone failed (network/auth) -- skipping`（仓库名错：克隆 `libretro/fceumm` 不存在，应为 `libretro/libretro-fceumm`）。
+  - picodrive：`platform/common/mp3.c:11: fatal error: pico/pico_int.h: No such file`（未递归克隆 libretro-common 子模块；且默认 `use_libchdr=1` 会触发 lzma `AT_HWCAP2` 报错，见 §13.3）。
+- STAGE7 当前实现是**回退版 naive loop**：`make platform=armv7-neon-hardfloat CC=$CC CFLAGS=$CFLAGS`（注意 `armv7-` 拼写错误，正确为 `armv-neon-hardfloat`），无编译器 wrapper、无 per-core recipe、失败被 `|| log WARN` 吞掉。
+
+### 根因
+§11–§13 已验证并落地的「编译器 wrapper + platform=armv-neon-hardfloat + per-core recipe + fail-fast」核心构建逻辑，在后续 picoarch/FrogUI 多轮修复（§15–§25）中**从 deploy/build.sh 丢失**，被回退为 naive loop。三处具体回归：
+1. 缺编译器 wrapper（§11）：核心 Makefile 内层 `gcc` 调用用主机编译器 → .so 在设备/链接期崩。
+2. `platform=armv7-neon-hardfloat` 拼写错（应为 `armv-neon-hardfloat`，§13 对齐 libretro-super 官方平台）；且命令行 `CFLAGS=` 覆盖各核心自身 include（§11 点 2），致 `pico_int.h` / `libretro-common` 头找不到。
+3. fceumm 仓库名未映射为 `libretro-fceumm`（§4.5）；picodrive 未递归克隆子模块 + 未 `use_libchdr=0`（§13.3）。
+
+### 修复（仅改 `deploy/build.sh` STAGE7，atomic）
+- 恢复 §11–§13 验证过的编译器 wrapper：裸名 `gcc/g++/cc` + 完整 triplet 均指向 wrapper 脚本，`exec` 真交叉编译器（绝对路径，无 PATH 递归），统一注入 `-fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -I<alsa> -Ilibretro-common/include -DFCEU_VERSION_NUMERIC=9900 -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS`。
+- per-core recipe：
+  - mgba → CMake（LIBMGBA_ONLY + BUILD_LIBRETRO，交叉编译器）。
+  - snes9x / nestopia → `make -C libretro platform=armv-neon-hardfloat`（不覆盖 CFLAGS，wrapper 注入）。
+  - fceumm / picodrive → `make -f Makefile.libretro platform=armv-neon-hardfloat use_libchdr=0`。
+- fceumm 仓库映射 `libretro-fceumm`；picodrive 递归克隆 + `git submodule update --init --recursive`。
+- 克隆 best-effort（3 次重试，失败跳过该 core，不致命）；构建失败计入 `CORE_FAIL`，循环后 `exit 1`（fail-fast，§13.4：真绿 = 5 核全编出）。
+
+### 验证（本地，非 CI）
+- `bash -n build_fixed.sh` → SYNTAX OK。
+- wrapper 生成模拟：printf 产出 `exec "<real-gcc>" -fPIC -marm ... "$@"`，PATH 命中后正确调用**绝对路径**真编译器并注入全部 flag（无递归、无残留反斜杠）。
+- 仓库核对：`libretro/libretro-fceumm`、`libretro/picodrive` 均 HTTP 200；`armv-neon-hardfloat` 为 libretro 官方平台（§13 已对上游 Makefile 取证）。
+- 提交触发 main 新 run；下一周期核验 5 核 .so 是否全部产出 + STAGE8 ABI gate PASS（picoarch/FrogUI/5 核共 7 对象）。
+
+### 铁律自检
+- 仅改 `deploy/build.sh`（STAGE7 块）+ 追加本 §；未删除任何非 agent 创建或里程碑文件。
+- 修复基于 run #144 真实 bootstrap.log + §11–§13 已取证的上游 libretro Makefile，非臆测。
