@@ -134,3 +134,15 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
 - patch/picoarch_5edits.patch：RTC + evdev 手柄补丁（plat_sf3000.c/plat_sdl.c/core.c）。
 - tools/verify_build_scripts.py：未定义 helper 静态门禁。
 - .github/workflows/build.yml：CI 定义 + 缓存 key。
+
+## 11. STAGE7 核心构建 v3 修复（2026-08-17，RK3036G armhf）
+- 现象：v2（gcc 软链 + `platform=unix` + `LTO=` + nestopia `-I.`）仍"假绿"——build.sh 用 `|| log "WARN"` 吞掉 4 核心失败，STAGE8 ABI 门禁只过 mgba。真日志（build-output/bootstrap.log）证实 snes9x/fceumm/picodrive/nestopia 全 FAIL。
+- 真因（真实日志 + 官方 Makefile 源码实证，非猜测）：
+  1. `platform=unix` 在 ARM 上不保证 bundled `libretro-common` 子树被 `-fPIC` 编译 → `relocation ... recompile with -fPIC`；且 unix 分支不强制 `-marm`，Thumb+`-fPIC`+bfd 链接器 → `dangerous relocation: unsupported relocation`（snes9x `sdsp.o`、fceumm NES mapper `.o`）。
+  2. 命令行 `CFLAGS="..."` 覆盖了各核心 Makefile 自身的 include 追加（如 picodrive `CFLAGS += -I platform/libretro/libretro-common/include`），导致 `compat/strcasestr.h`/`boolean.h`/`retro_common_api.h` 找不到。
+  3. nestopia 的 `libretro.h` 不在 `libretro/` 而位于捆绑的 `libretro-common/include/`，原 `-I.` 无效。
+- 修复（对齐 libretro-super 官方 `armv-neon-hardfloat` 平台）：
+  - STAGE7 用**编译器 wrapper**：裸名 `gcc/g++/cc` 与完整 triplet `arm-linux-gnueabihf-{gcc,g++}` 都指向 wrapper 脚本，wrapper 调用**真交叉编译器（绝对路径）**并统一追加 `-fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -I<alsa> -Ilibretro-common/include -DFCEU_VERSION_NUMERIC=9900`。`-fPIC` 覆盖所有内层规则（含 libretro-common），`-marm` 消除 Thumb relocation，`-Ilibretro-common/include` 修 nestopia，`-DFCEU_VERSION_NUMERIC=9900` 修 fceumm。
+  - 四个核心统一 `platform=armv-neon-hardfloat`，**不再覆盖 `CFLAGS=`**，各 Makefile 保留自身 include。
+  - mgba 仍走 CMake（已可用，不变）。
+- 门禁（STAGE8）：须拿满 5 个核心 `.so`（mgba/snes9x/fceumm/picodrive/nestopia）+ picoarch + frogui_libretro.so；任一缺失即未真绿，须回真实日志定位。
