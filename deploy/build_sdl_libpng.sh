@@ -100,8 +100,21 @@ if [ -f "$SYSROOT/usr/lib/libz.so" ] || [ -f "$SYSROOT/usr/lib/libz.a" ]; then
     log "zlib already in sysroot -- skip"
 else
     log "Building zlib 1.3 (cross) ..."
-    rm -rf zlib-1.3 && curl -fL -o z.tar.gz "https://zlib.net/fossils/zlib-1.3.tar.gz" \
-        || curl -fL -o z.tar.gz "https://github.com/madler/zlib/releases/download/v1.3/zlib-1.3.tar.gz"
+    # 2026-08-16 native-launch run: zlib.net returned a 200 with a 11984-byte
+    # non-gzip body (rate-limit page), which curl -fL accepted and tar then
+    # rejected. Verify the tarball really is gzip; if not, fall back to the
+    # GitHub mirror and retry the net download before giving up.
+    rm -rf zlib-1.3
+    ok=0
+    for n in 1 2 3; do
+        curl -fsSL -o z.tar.gz "https://zlib.net/fossils/zlib-1.3.tar.gz" \
+            && gzip -t z.tar.gz 2>/dev/null && ok=1 && break
+        log "zlib mirror 1 failed (attempt $n) -- trying GitHub mirror..."
+        curl -fsSL -o z.tar.gz "https://github.com/madler/zlib/releases/download/v1.3/zlib-1.3.tar.gz" \
+            && gzip -t z.tar.gz 2>/dev/null && ok=1 && break
+        log "zlib download attempt $n failed -- retrying..."
+    done
+    [ "$ok" = 1 ] || die "zlib 1.3 download failed after retries (both mirrors)"
     tar -xf z.tar.gz && cd zlib-1.3
     # zlib 非标准 autoconf：交叉编译必须设 CHOST（而非 --host），并靠已 export 的
     # CC/CFLAGS(--sysroot) 把产物编成 armhf 并装进 $SYSROOT/usr
