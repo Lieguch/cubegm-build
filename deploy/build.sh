@@ -238,6 +238,25 @@ log "picoarch built."
 # -----------------------------------------------------------------------------
 # STAGE 6 -- build FrogUI launcher core
 # -----------------------------------------------------------------------------
+# CubeGM gs->picoarch launch bridge: upstream FrogUI only declares the gs
+# game-launch symbols (ptr_gs_run_game_file / ptr_gs_run_game_name / direct_loader
+# / xlog) under #ifdef SF2000 (a hardcoded ROM loader). On this standard-Linux
+# RK3036G device we apply a self-contained bridge patch (patch/frogui_gs_bridge.patch)
+# that backs those symbol NAMES with a real buffer + a functional direct_loader()
+# stub (writes picoarch's native launch file). Without it, frogos.c fails to
+# compile ('ptr_gs_run_game_file' undeclared) and no frogui_libretro.so is
+# produced -> STAGE 8 ABI gate dies. Verified: patch applies cleanly to upstream
+# tzubertowski/FrogUI@master frogos.c (git apply --check == 0). See HANDOFF S22.
+if [ -f "$HERE/../patch/frogui_gs_bridge.patch" ]; then
+    if git -C FrogUI apply --check "$HERE/../patch/frogui_gs_bridge.patch" 2>/dev/null; then
+        log "Applying CubeGM gs->picoarch launch bridge to FrogUI..."
+        git -C FrogUI apply "$HERE/../patch/frogui_gs_bridge.patch"
+    else
+        log "WARN: frogui_gs_bridge.patch not applicable to this FrogUI checkout -- build may fail."
+    fi
+else
+    log "WARN: patch/frogui_gs_bridge.patch missing -- FrogUI gs bridge will not be applied."
+fi
 log "Building FrogUI (frogui_libretro.so)..."
 pushd FrogUI >/dev/null
 make CC="$CC" CXX="$CXX" || true   # some FrogUI builds use a wrapper; fall back below
@@ -260,7 +279,17 @@ mkdir -p "$CORE_OUT"
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
-    [ -d "$d" ] || git clone --depth 1 "https://github.com/libretro/$c.git" "$d"
+    # Best-effort clone: a transient network/auth failure (e.g. 'could not read
+    # Username for https://github.com', observed on libretro/fceumm in run #135)
+    # must NOT abort the whole build under 'set -e'. Skip the core and continue;
+    # the device ships its own cores and STAGE 8/9 tolerate missing core .so files.
+    if [ ! -d "$d" ]; then
+        if ! git clone --depth 1 "https://github.com/libretro/$c.git" "$d" 2>/dev/null; then
+            log "WARN: core $c clone failed (network/auth) -- skipping (best-effort)."
+            rm -rf "$d" 2>/dev/null
+            continue
+        fi
+    fi
     pushd "$d" >/dev/null
     make clean >/dev/null 2>&1 || true
     make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
