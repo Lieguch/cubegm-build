@@ -2,7 +2,7 @@
 
 > 用途：供接手的 Agent / 大模型快速接手，读完即可继续，无需从头探索。
 > 维护：每次达到版本里程碑（v0.x / v1.0）或重大变更后更新本文件与 VERSION。
-> 最近更新：2026-08-17（三分支 STAGE6/STAGE7 修复 + zlib 下载加固已推送，等待重新 dispatch；根因均以 build-output 分支真实日志取证）
+> 最近更新：2026-08-17（三分支 FrogUI 修复已全绿；STAGE7 四核心修复已推送并 dispatch，验证中；根因均以 build-output 分支真实日志 + 上游 Makefile 真源取证）
 
 ## 1. 项目目标
 为 RK3036G 掌机（R36SX / DataFrog SF3000 / SF3500 / GB350 等）做 CubeGM 固件开源替代。
@@ -47,7 +47,7 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
 4. **共同**：STAGE7 克隆 `https://github.com/libretro/fceumm.git` 8 次全失败（该仓库不存在，正确为 `libretro/libretro-fceumm`）→ die。
 
 ### 已推送修复（2026-08-17，均经真实证据/官方文档实证）
-1. **三分支 `deploy/build.sh` STAGE7 重写为 per-core 构建**：mgba→cmake（`-DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON`，交叉链 C/C 编译器 + flags）；snes9x|nestopia→`make -C libretro`；fceumm|picodrive→`make -f Makefile.libretro`；统一 `platform=armv7-neon-hardfloat`。fceumm 仓库映射为 `libretro-fceumm`。
+1. **三分支 `deploy/build.sh` STAGE7 重写为 per-core 构建**：mgba→cmake（`-DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON`，交叉链 C/C 编译器 + flags）；snes9x|nestopia→`make -C libretro`；fceumm|picodrive→`make -f Makefile.libretro`；统一 `platform=classic_armv7_a7`（**关键**：nestopia/snes9x/fceumm/picodrive 的上游 Makefile 均**不支持** `armv7-neon-hardfloat`，此前统一传该名会回退到 `unix` 用 host 配置编译/链接，导致 nestopia 找不到 libretro.h、snes9x 缺 libgcc 链接、fceumm 缺 FCEU_DEFINES）；picodrive 克隆后 `git submodule update --init --recursive`（libretro-common 子模块提供 libretro-common 头文件，否则 `streams/trans_stream.h` 缺失）。fceumm 仓库映射为 `libretro-fceumm`。
 2. **根目录 `patch/frogui_gs_bridge.patch` 三分支统一为 int 版**（382a38b1，138 行）：`static bool→int` 消除 `<stdbool.h>` 位置依赖；与 `deploy/patch/` 内容一致。gs 分支覆盖 bool 旧版；native 分支**新增**该文件；main 分支 STAGE6 新增补丁应用逻辑（`git apply --check` 失败则 WARN 跳过）。
 3. **三分支 `deploy/build_sdl_libpng.sh` zlib 下载加固**：`curl -fsSL` + `gzip -t` 校验（从机理消除"200+坏 body"）→ 坏则切 GitHub 镜像 → 最多 3 次重试 → 仍失败才 die。
 4. **FrogUI 链接 blocker 修复（2026-08-17，经上游 `tzubertowski/FrogUI` 真源实证）—— 消除 ABI 门禁 FAIL 的唯一 blocker**：
@@ -55,9 +55,8 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
    - **修复 A（xlog 桩）**：`patch/frogui_gs_bridge.patch` 首 hunk 注入 `#ifndef xlog\n#define xlog printf\n#endif`（镜像上游意图，frogos.c 含 settings.h 但无 xlog 定义）。
    - **修复 B（产物名归一）**：上游 Makefile 第36行 `TARGET := $(TARGET_NAME)_libretro.so`，`TARGET_NAME=menu` → 真实产出 `menu_libretro.so`；而 STAGE6/STAGE8/STAGE9 + ABI 门禁都找 `frogui_libretro.so` → `deploy/build.sh` STAGE6 在产出 `menu_libretro.so` 后 `cp menu_libretro.so frogui_libretro.so`（仅归一文件名，不改上游 TARGET_NAME，避免回归）。
    - 验证：`git apply --check` 通过；三分支 `build.sh` `bash -n` 通过。
-- 提交（本轮 FrogUI 修复）：build.sh HEAD main=`7b2412dedd`/gs=`82dc1ecbe4`/native=`d28c678f7c`；patch 因 CRLF 问题重推为 LF → main=`ca4602900f`/gs=`eb0fea1d1c`/native=`0987cdfbd3`。
-- **已二次 dispatch**（patch 改 LF 后）：三分支后台监控中。STAGE7 四核心（nestopia/snes9x/fceumm/picodrive）编译错误仍为 WARN 级（不阻断绿），下一轮按官方 Makefile 逐一修。
-- **已 dispatch 三分支**（build.yml 仅监听 `workflow_dispatch` + push main/master，wip 分支 push 不自动触发）→ 本轮已手动 dispatch，后台监控中；STAGE7 四核心编译错误仍为 WARN 级（非门禁阻断），待 FrogUI 门禁过后再按真实日志逐一修。
+- 提交（2026-08-17）：FrogUI patch 改 LF 重推 → main=`ca4602900f`/gs=`eb0fea1d1c`/native=`0987cdfbd3`（**此轮三分支 CI 均已 `success`，FrogUI 修复彻底生效**）。
+- **STAGE7 四核心修复（2026-08-17，经各核心上游 Makefile 真源实证）已推送并第三次 dispatch**：platform 名统一改为 `classic_armv7_a7` + picodrive 递归子模块。三分支 run 均 `completed success`（本次为验证 FrogUI 修复的 run）；新的 STAGE7 修复 run 后台监控中，预期让四核心真正产出 .so（之前为 WARN 级，不阻断绿但那 4 系统暂不能模拟）。
 
 ### 接手监控约定（用户 2026-08-16 深夜新增铁律）
 - **每次修复必须联网查对应开源软件官方文档**求方案，禁止猜测/试错。本次依据：cppreference（C `stdbool`）、git-scm.com（`--filter=blob:none` 部分克隆）。
