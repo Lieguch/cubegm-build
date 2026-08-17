@@ -46,8 +46,15 @@ CXX="${CXX:-${CROSS_COMPILE}g++}"
 
 ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2"
 # Compose CFLAGS: ARM arch + 2.17 sysroot + SDL headers + NEON C scaler.
-# We build the GENERIC 'unix' platform (NO -DPLATFORM_SF3000): standard Linux
-# fbdev video / ALSA audio / evdev input. Panel is 1280x720 (RK3036G LCD).
+# We build the PORTED 'sf3000' platform TARGET (Makefile arms -DPLATFORM_SF3000).
+# WHY sf3000 and NOT 'unix': the upstream 'unix' platform compiles plat_linux.c,
+# whose #else (non-PLATFORM_SF3000) code paths are incompletely ported -- e.g.
+# scale_update_scaler() at plat_sdl.c:1489 is called but never defined for the
+# unix target, so the build fails (compile/link). The SF3000 port (plat_sf3000.c)
+# IS complete and is the working backend for this device class. Building
+# platform=sf3000 also makes the Makefile exclude the miyoo HW-scaling block
+# (via -DPLATFORM_SF3000) AND filter -flto (Makefile sf3000 branch) -- matching
+# the known-green CI config (wip #94). RK3036G panel is 1280x720 (set below).
 CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DRK3036G_NO_MIYOO_SCALE -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
 CXXFLAGS="$CFLAGS"
 LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -lasound -Wl,--gc-sections -s ${LDFLAGS}"
@@ -84,13 +91,15 @@ fi
 #     scaling used by the generic call site at line 910). Building 'unix'
 #     therefore hit: (a) fatal <mi_sys.h> missing, (b) redefinition of
 #     buffer_init/quit/scale, (c) undeclared scale3x_n16/scale4x_n16/... .
-#     FIX: build.sh already applies patch/picoarch_mstar_guard.patch which
-#     wraps the miyoo block in #if !defined(RK3036G_NO_MIYOO_SCALE). We define
-#     that macro below so the miyoo block is EXCLUDED entirely; the unguarded
-#     sf3000-style software-SDL buffer functions remain and drive the display.
-#     This keeps the generic 'unix' platform (NO -DPLATFORM_SF3000) intact --
-#     avoiding the ~16 SF3000-specific hardware code paths. The STUB headers
-#     below are kept as a belt-and-suspenders fallback (harmless if unused).
+#     FIX: we build the 'sf3000' platform target, which the Makefile arms with
+#     -DPLATFORM_SF3000 (this already excludes the miyoo HW-scaling block and
+#     filters -flto). build.sh ALSO applies patch/picoarch_mstar_guard.patch which
+#     wraps the miyoo block in #if !defined(RK3036G_NO_MIYOO_SCALE) and hoists
+#     'static struct GFX_Buffer buffer;' (guarded by PLATFORM_SF3000 ||
+#     RK3036G_NO_MIYOO_SCALE) so the always-compiled software-SDL buffer
+#     functions at plat_sdl.c:518-556 have their 'buffer' global. This is the
+#     known-green CI config (wip #94). The STUB headers below are kept as a
+#     belt-and-suspenders fallback (harmless if unused).
 # resolve this script's own directory (deploy/) robustly, cwd-independent.
 # Must run BEFORE any chdir: $0/BASH_SOURCE can be relative once we cd away.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd)"
@@ -121,12 +130,12 @@ rm -f libpicofe/input.o libpicofe/in_sdl.o libpicofe/linux/in_evdev.o \
       main.o options.o overrides.o patch.o scale.o scaler_neon.o \
       unzip.o util.o plat_linux.o picoarch
 
-log "Building picoarch (platform=unix, ARM, RK3036G generic Linux SDL)..."
-make platform=unix \
+log "Building picoarch (platform=sf3000, ARM, RK3036G -- ported SF3000 backend)..."
+make platform=sf3000 \
      CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
      SYSROOT="$SYSROOT" \
      CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-     picoarch -j"$(nproc)" 2>&1 | tail -40
+     picoarch -j"$(nproc)" 2>&1
 
 if [ -f picoarch ]; then
     ${CROSS_COMPILE}strip picoarch
