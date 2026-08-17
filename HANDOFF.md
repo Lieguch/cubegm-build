@@ -467,3 +467,34 @@ fatal: could not read Username for 'https://github.com': No such device or addre
 - Root cause 1: main build.sh never applied `patch/frogui_gs_bridge.patch` (wip-gs does) -> frogos.c 'ptr_gs_run_game_file' undeclared -> no frogui_libretro.so -> ABI gate die.
 - Root cause 2: `git clone` of libretro/fceumm hit transient auth error (exit 128) and `set -euo pipefail` killed the build.
 - Fix: (a) apply frogui_gs_bridge.patch to FrogUI (verified applies to upstream@master); (b) make core clone best-effort (skip+continue on failure). bash -n OK. Re-trigger; verify #136 success.
+
+
+## §24 — main #140 FrogUI 已编译但 ABI gate 因 `frogui_libretro.so` 缺失而 die（三次修复） — 2026-08-17T18:08:48Z
+
+### 现象（build-output/bootstrap.log #140）
+- FrogUI 实际**编译并链接成功**：log 行 `LD menu_libretro.so`（frogos.c 在应用 gs-bridge patch 后已无 `ptr_gs` 报错）。
+- 但 build.sh STAGE 6 仅检查 `frogui_libretro.so`，而上游 FrogUI Makefile 设 `TARGET_NAME=menu` → 产出 `menu_libretro.so`，故 `frogui_libretro.so` 不存在。
+- STAGE 8 ABI gate：`ERROR: not a file: FrogUI/frogui_libretro.so` → RC=1 → `|| die` → bootstrap exit 1（仍是 failure）。
+- 另：fceumm 克隆鉴权失败已被 #135 修复（best-effort skip，不再致命）；核心 mgba/snes9x/nestopia `No makefile`、picodrive `pico/pico_int.h` 缺失均为 `|| log WARN` 容忍（best-effort，不阻断 green，ABI gate 对缺失 core .so 容错）。
+
+### 根因
+main 的 build.sh **缺少** wip/frogui-gs-interface 分支的 `menu_libretro.so -> frogui_libretro.so` 归一化步骤（wip-gs build.sh 行 250-256）。上游 FrogUI 产出名与本项目 ABI gate / deploy 期望名不一致。
+
+### 修复（commit d87ebff99de2ca2bfe24827ad827fe68b6d28169，仅改 `deploy/build.sh`）
+- STAGE 6 `popd` 之后插入归一化块（镜像 wip-gs）：若 `FrogUI/menu_libretro.so` 存在且 `Frogui/frogui_libretro.so` 不存在，则 `cp FrogUI/menu_libretro.so FrogUI/frogui_libretro.so` 并 log 归一化。
+- 本地 `bash -n new_build2.sh` → SYNTAX OK；该块与 wip-gs 已验证可绿的版本逐字一致。
+
+### 验证预期
+- 重触发后 #141 应 `completed+success`：picoarch 绿（#132 rewind_apply 已修）+ FrogUI .so 归一化产出（ABI gate PASS）+ 核心 best-effort（缺失容忍）。
+- 注：核心（mgba/snes9x/nestopia/picodrive）当前均 WARN（"No makefile" / 头缺失），属既有的 best-effort 设计（ABI gate 与 STAGE 9 对缺失 core .so 用 `2>/dev/null` 容错）。设备功能核心来自 cubegm/cores 既有 .so；若需 CI 内置核心，需另立项修复各 core 的 Makefile 调用（超出本次 green 目标）。
+
+### 铁律自检
+- 仅 ADD/最小编辑 `deploy/build.sh` 与 `HANDOFF.md`；未删除任何非 agent 创建或里程碑文件。
+- 修复基于 #140 真实 `bootstrap.log` + 对照 green wip-gs 分支 STAGE 6，非臆测、非盲目重试。
+- 下一步：dispatch main 触发 #141，核验 `completed+success`。
+
+### 中英对照（EN）
+- Symptom: FrogUI compiled (menu_libretro.so) but build.sh looked for frogui_libretro.so -> ABI gate 'not a file' die (exit 1).
+- Root cause: main missing the menu_libretro.so -> frogui_libretro.so normalization that wip-gs has.
+- Fix: add normalization block (commit d87ebff); bash -n OK. Cores remain best-effort (WARN, tolerated).
+- Next: re-trigger; verify #141 success.
