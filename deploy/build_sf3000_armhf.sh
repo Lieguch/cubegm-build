@@ -46,7 +46,7 @@ ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O
 # Compose CFLAGS: ARM arch + 2.17 sysroot + SDL headers + NEON C scaler.
 # We build the GENERIC 'unix' platform (NO -DPLATFORM_SF3000): standard Linux
 # fbdev video / ALSA audio / evdev input. Panel is 1280x720 (RK3036G LCD).
-CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
+CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DRK3036G_NO_MIYOO_SCALE -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
 CXXFLAGS="$CFLAGS"
 LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -lasound -Wl,--gc-sections -s ${LDFLAGS}"
 
@@ -71,6 +71,14 @@ fi
 if grep -q 'uc_mcontext.pc' main.c; then
     log "Patching main.c: armhf mcontext PC field (pc -> arm_pc)"
     sed -i 's/->uc_mcontext\.pc;/->uc_mcontext.arm_pc;/' main.c
+fi
+
+if grep -q "end miyoo hardware scaling support" plat_sdl.c; then
+    log "Patching plat_sdl.c: gate miyoo HW-scaling block off for RK3036G"
+    sed -i 's|#ifndef PLATFORM_SF3000$|#ifndef PLATFORM_SF3000
+#if !defined(RK3036G_NO_MIYOO_SCALE)|' plat_sdl.c
+    sed -i 's|#endif // end miyoo hardware scaling support|#endif // RK3036G_NO_MIYOO_SCALE
+#endif // end miyoo hardware scaling support|' plat_sdl.c
 fi
 
 # sanity: ensure SDL config is reachable in the sysroot
