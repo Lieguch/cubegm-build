@@ -167,22 +167,14 @@ nl = '\r\n' if '\r\n' in s else '\n'
 anchor = '// begin miyoo hardware scaling support'
 hoist = (
     '// RK3036G: when the miyoo MStar HW-scaling block below is excluded' + nl +
-    '// (RK3036G_NO_MIYOO_SCALE defined), the unguarded software-SDL' + nl +
-    '// buffer_init/quit/scale further down still need the framebuffer' + nl +
-    '// buffer global + its GFX_Buffer type, which the excluded block' + nl +
-    '// used to provide. Declare them at file scope here so the generic' + nl +
-    '// RK3036G path compiles without the mi_sys/mi_gfx SDK.  The phyAddr' + nl +
-    '// field is intentionally omitted (MI_PHY comes from mi_sys.h, which' + nl +
-    '// is excluded here) because the generic path never touches it.' + nl +
-    '#if defined(RK3036G_NO_MIYOO_SCALE)' + nl +
-    'struct GFX_Buffer {' + nl +
-    '\tvoid*\t\tvirAddr;' + nl +
-    '\tint \t\twidth;' + nl +
-    '\tint \t\theight;' + nl +
-    '\tint \t\tdepth;' + nl +
-    '\tint \t\tpitch;' + nl +
-    '\tuint32_t \tsize;' + nl +
-    '};' + nl +
+    '// (RK3036G_NO_MIYOO_SCALE, set by build_sf3000_armhf.sh; or PLATFORM_SF3000),' + nl +
+    '// the unguarded software-SDL buffer_init/quit/scale further down still' + nl +
+    '// need the framebuffer "buffer" global. The GFX_Buffer *type* is ALREADY' + nl +
+    '// provided by plat.h (struct GFX_Buffer, ~line 22) -- do NOT redefine it' + nl +
+    '// here or you get "redefinition of struct GFX_Buffer" vs plat.h:22.' + nl +
+    '// Declare ONLY the global instance at file scope (guarded to exactly the' + nl +
+    '// cases where the miyoo block is excluded) so the generic path compiles.' + nl +
+    '#if defined(PLATFORM_SF3000) || defined(RK3036G_NO_MIYOO_SCALE)' + nl +
     'static struct GFX_Buffer buffer;' + nl +
     '#endif' + nl + nl
 )
