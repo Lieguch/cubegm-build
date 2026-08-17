@@ -46,7 +46,14 @@ CXX="${CXX:-${CROSS_COMPILE}g++}"
 
 ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2"
 # Compose CFLAGS: ARM arch + 2.17 sysroot + SDL headers + NEON C scaler.
-# We build the PORTED 'sf3000' platform TARGET (Makefile arms -DPLATFORM_SF3000).
+# We build the PORTED 'sf3000' platform TARGET and arm -DPLATFORM_SF3000 OURSELVES.
+#
+# CRITICAL: GNU Make semantics. We pass CFLAGS="$CFLAGS" on the `make` command
+# line, which OVERRIDES the Makefile's `CFLAGS += -DPLATFORM_SF3000` (a command-line
+# variable assignment shadows `+=` in the recipe). Without arming the macro here,
+# main.c:838 rewind_apply() (defined inside #ifdef PLATFORM_SF3000) is compiled out
+# -> 'undefined reference to rewind_apply' at link (regression run #132), and
+# plat_sf3000.c's #ifdef PLATFORM_SF3000 blocks are skipped. Arm it explicitly.
 # WHY sf3000 and NOT 'unix': the upstream 'unix' platform compiles plat_linux.c,
 # whose #else (non-PLATFORM_SF3000) code paths are incompletely ported -- e.g.
 # scale_update_scaler() at plat_sdl.c:1489 is called but never defined for the
@@ -55,7 +62,7 @@ ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O
 # platform=sf3000 also makes the Makefile exclude the miyoo HW-scaling block
 # (via -DPLATFORM_SF3000) AND filter -flto (Makefile sf3000 branch) -- matching
 # the known-green CI config (wip #94). RK3036G panel is 1280x720 (set below).
-CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DRK3036G_NO_MIYOO_SCALE -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
+CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DPLATFORM_SF3000 -DRK3036G_NO_MIYOO_SCALE -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
 CXXFLAGS="$CFLAGS"
 LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -lasound -Wl,--gc-sections -s ${LDFLAGS}"
 
