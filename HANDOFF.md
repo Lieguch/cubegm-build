@@ -2,7 +2,7 @@
 
 > 用途：供接手的 Agent / 大模型快速接手，读完即可继续，无需从头探索。
 > 维护：每次达到版本里程碑（v0.x / v1.0）或重大变更后更新本文件与 VERSION。
-> 最近更新：2026-08-17（三分支 FrogUI 修复已全绿；STAGE7 四核心修复已推送并 dispatch，验证中；根因均以 build-output 分支真实日志 + 上游 Makefile 真源取证）
+> 最近更新：2026-08-17（三分支 FrogUI 修复已全绿；STAGE7 四核心经三轮修复——v2 用 gcc/g++ 软链前置 PATH + snes9x LTO= + nestopia -I. + fceumm 宏 + picodrive 递归子模块——已推送并第四轮 dispatch，验证中；根因均以 build-output 分支真实日志 + 上游 Makefile 真源取证）
 
 ## 1. 项目目标
 为 RK3036G 掌机（R36SX / DataFrog SF3000 / SF3500 / GB350 等）做 CubeGM 固件开源替代。
@@ -47,7 +47,10 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
 4. **共同**：STAGE7 克隆 `https://github.com/libretro/fceumm.git` 8 次全失败（该仓库不存在，正确为 `libretro/libretro-fceumm`）→ die。
 
 ### 已推送修复（2026-08-17，均经真实证据/官方文档实证）
-1. **三分支 `deploy/build.sh` STAGE7 重写为 per-core 构建**：mgba→cmake（`-DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON`，交叉链 C/C 编译器 + flags）；snes9x|nestopia→`make -C libretro`；fceumm|picodrive→`make -f Makefile.libretro`；统一 `platform=classic_armv7_a7`（**关键**：nestopia/snes9x/fceumm/picodrive 的上游 Makefile 均**不支持** `armv7-neon-hardfloat`，此前统一传该名会回退到 `unix` 用 host 配置编译/链接，导致 nestopia 找不到 libretro.h、snes9x 缺 libgcc 链接、fceumm 缺 FCEU_DEFINES）；picodrive 克隆后 `git submodule update --init --recursive`（libretro-common 子模块提供 libretro-common 头文件，否则 `streams/trans_stream.h` 缺失）。fceumm 仓库映射为 `libretro-fceumm`。
+1. **三分支 `deploy/build.sh` STAGE7 重写为 per-core 构建**：mgba→cmake（`-DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON`，交叉链 C/C 编译器 + flags）；snes9x|nestopia→`make -C libretro`；fceumm|picodrive→`make -f Makefile.libretro`；统一 `platform=unix`。picodrive 克隆后 `git submodule update --init --recursive`（libretro-common 子模块提供头文件，否则 `streams/trans_stream.h` 缺失）。fceumm 仓库映射为 `libretro-fceumm`。
+
+   **关键陷阱（2026-08-17 第三次 CI 实测暴露，推翻"platform=unix 即够"假设）**：仅在 make 命令行传 `CC="$CC" CFLAGS=...` **不够**——snes9x/nestopia/fceumm/picodrive 的上游 Makefile 在编各自 `libretro-common` 子树时**硬编码 `gcc`/`g++`**（命令行 CC 传不到内层规则），导致这些 .o 用**主机 gcc** 编译（实测 fceumm 的 `src/drivers/libretro/libretro-common/*.c` 由主机 `gcc` 编出），最终 .so 链接失败或设备上崩。snes9x 还因 `unix` 分支 `LTO ?= -flto` 与 `-fPIC` + ARM bfd 链接器冲突报 `dangerous relocation: unsupported relocation (R_ARM_CALL unresolvable)`。nestopia 的 `libretro.h` 就在 `libretro/` 目录（cwd），但 Makefile 用 `<libretro.h>` 角括号包含且 INCDIRS 只有 `-I.. -I../source`，缺 `-I.`。
+   **最终修复（v2，已推送并第四轮 dispatch）**：① STAGE7 循环前把交叉编译器软链成 `gcc`/`g++`/`cc` 前置 PATH（buildroot/crosstool 标准做法，覆盖所有硬编码 gcc 的内层规则）；② snes9x 传 `LTO=` 关 LTO；③ nestopia CFLAGS 加 `-I.`；④ fceumm 传 `-DFCEU_VERSION_NUMERIC=9900`；⑤ picodrive 递归克隆子模块。
 2. **根目录 `patch/frogui_gs_bridge.patch` 三分支统一为 int 版**（382a38b1，138 行）：`static bool→int` 消除 `<stdbool.h>` 位置依赖；与 `deploy/patch/` 内容一致。gs 分支覆盖 bool 旧版；native 分支**新增**该文件；main 分支 STAGE6 新增补丁应用逻辑（`git apply --check` 失败则 WARN 跳过）。
 3. **三分支 `deploy/build_sdl_libpng.sh` zlib 下载加固**：`curl -fsSL` + `gzip -t` 校验（从机理消除"200+坏 body"）→ 坏则切 GitHub 镜像 → 最多 3 次重试 → 仍失败才 die。
 4. **FrogUI 链接 blocker 修复（2026-08-17，经上游 `tzubertowski/FrogUI` 真源实证）—— 消除 ABI 门禁 FAIL 的唯一 blocker**：
@@ -56,7 +59,7 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
    - **修复 B（产物名归一）**：上游 Makefile 第36行 `TARGET := $(TARGET_NAME)_libretro.so`，`TARGET_NAME=menu` → 真实产出 `menu_libretro.so`；而 STAGE6/STAGE8/STAGE9 + ABI 门禁都找 `frogui_libretro.so` → `deploy/build.sh` STAGE6 在产出 `menu_libretro.so` 后 `cp menu_libretro.so frogui_libretro.so`（仅归一文件名，不改上游 TARGET_NAME，避免回归）。
    - 验证：`git apply --check` 通过；三分支 `build.sh` `bash -n` 通过。
 - 提交（2026-08-17）：FrogUI patch 改 LF 重推 → main=`ca4602900f`/gs=`eb0fea1d1c`/native=`0987cdfbd3`（**此轮三分支 CI 均已 `success`，FrogUI 修复彻底生效**）。
-- **STAGE7 四核心修复（2026-08-17，经各核心上游 Makefile 真源实证）已推送并第三次 dispatch**：platform 名统一改为 `classic_armv7_a7` + picodrive 递归子模块。三分支 run 均 `completed success`（本次为验证 FrogUI 修复的 run）；新的 STAGE7 修复 run 后台监控中，预期让四核心真正产出 .so（之前为 WARN 级，不阻断绿但那 4 系统暂不能模拟）。
+- **STAGE7 四核心修复（2026-08-17）**：第一轮 classic_armv7_a7（错，snes9x -fwhole-program 链接失败）→ 第二轮 platform=unix（仍失败：CC 未传到 libretro-common 子树、snes9x LTO、nestopia 错 -I 路径，CI 真绿但核心未编出）→ **第三轮 v2 修复**（gcc/g++ 软链前置 PATH + snes9x `LTO=` + nestopia `-I.` + fceumm `-DFCEU_VERSION_NUMERIC=9900` + picodrive 递归子模块），已推送并第四轮 dispatch，后台监控中，预期四核心真正产出 .so。
 
 ### 接手监控约定（用户 2026-08-16 深夜新增铁律）
 - **每次修复必须联网查对应开源软件官方文档**求方案，禁止猜测/试错。本次依据：cppreference（C `stdbool`）、git-scm.com（`--filter=blob:none` 部分克隆）。
@@ -80,10 +83,11 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
    - TreeFrogUI/FrogUI 体系**原本是 MIPS 掌机（SF2000/GB300/SF3000-Hichip）前端**，并非 ARM；但 libretro 各核心是跨架构的。RK3036G = 双核 Cortex-A7 armhf（NEON+VFPv4，glibc≤2.17）。
    - **正确适配 = libretro 官方 ARM-Linux 共享库 recipe**（libretro-super `recipes/linux/cores-linux-armhf-generic.conf`）：`platform=unix` + 交叉工具链 `arm-linux-gnueabihf`（本项目即 crosstool-NG 构建的 sysroot 工具链），并保留 `ARCH_FLAGS=-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2`（A7+NEON 优化）。这比通用 `linux` 分支更贴 A7，且是 libretro 标准共享库构建路径。
    - **此前误用 `classic_armv7_a7` 的真实坑**（已逐一查各核心 Makefile 真源确认）：
-     1. snes9x：该分支带 `-fwhole-program`（LTO 整程序优化）→ 编 .so 时 `ld returned 1`（retro_* 导出符号被整程序优化吞掉）。改 `platform=unix`（标准 -fPIC 共享库，无 whole-program）。
-     2. fceumm：其 Makefile **仅 PS2 分支**定义 `FCEU_VERSION_NUMERIC`，unix/classic 分支均无 → 编译报 `FCEU_VERSION_NUMERIC undeclared`。改 `platform=unix` + make 传 `FCEU_VERSION_NUMERIC=9900`（即 `-DFCEU_VERSION_NUMERIC=9900`）。
-     3. nestopia：Makefile 任何分支都没把内嵌的 `libretro-common/include` 加入 include 路径（libretro.h 实际在 `libretro/libretro-common/include/`）→ `libretro.h: No such file`。改 `platform=unix` + CFLAGS 追加 `-Ilibretro-common/include`。
-     4. picodrive：`libretro-common` 是**真 git submodule**（路径 `platform/libretro/libretro-common/`）；`git clone --depth 1`（git_clone 原无 --recursive）不拉子模块 → `streams/trans_stream.h`/`compat/strcasestr.h` 找不到。改：clone 用 `git clone --recursive`（新增 `git_clone_recursive` 函数）；`platform=unix`（picodrive 不认识 classic_armv7_a7，静默回退 unix）。
+     1. snes9x：该分支带 `-fwhole-program`（LTO 整程序优化）→ 编 .so 时 `ld returned 1`（retro_* 导出符号被整程序优化吞掉）。改 `platform=unix`（标准 -fPIC 共享库，无 whole-program）；但 unix 分支仍带 `LTO ?= -flto`，与 -fPIC + ARM bfd 链接器冲突报 `dangerous relocation`，故**再传 `LTO=` 关闭 LTO**（v2 修复点）。
+     2. fceumm：其 Makefile **仅 PS2 分支**定义 `FCEU_VERSION_NUMERIC`，unix/classic 分支均无 → 编译报 `FCEU_VERSION_NUMERIC undeclared`。改 `platform=unix` + make 传 `-DFCEU_VERSION_NUMERIC=9900`。
+     3. nestopia：Makefile 用 `<libretro.h>` 角括号包含，而 `libretro.h` 就在 `libretro/`（cwd），INCDIRS 仅 `-I.. -I../source` 缺 `-I.` → `libretro.h: No such file`。改 `platform=unix` + CFLAGS 追加 `-I.`（**不是** `-Ilibretro-common/include`，那路径不存在）。
+     4. picodrive：`libretro-common` 是**真 git submodule**（路径 `platform/libretro/libretro-common/`）；`git clone --depth 1` 不拉子模块 → 头文件缺失。改：`git clone --recursive`（新增 `git_clone_recursive`）；`platform=unix`。
+   - **比上面 4 点更隐蔽的统一根因（v2 才解决）**：核心 Makefile 编各自 `libretro-common` 子树时**硬编码 `gcc`/`g++`**（如 fceumm 的 `src/drivers/libretro/libretro-common/*.c` 实测由主机 `gcc` 编出），make 命令行的 `CC=` 传不到内层规则。→ 软链交叉编译器为 `gcc`/`g++`/`cc` 并前置 PATH（buildroot 标准做法），覆盖所有内层规则。
    - **“绿”≠核心编出**：build.sh 把核心失败当 WARN 吞（`|| log "WARN: core $c build had issues."`）。真实产出须看 build-output 分支 STAGE7 日志，或 STAGE8 ABI 门禁是否拿到全部 5 个 .so。STAGE8 全过才算真绿。
    - 验证原则：每次修复前读对应开源官方 Makefile/recipe 真源，不凭经验拍 flags（见铁律 §9）。
 
