@@ -55,7 +55,8 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
    - **修复 A（xlog 桩）**：`patch/frogui_gs_bridge.patch` 首 hunk 注入 `#ifndef xlog\n#define xlog printf\n#endif`（镜像上游意图，frogos.c 含 settings.h 但无 xlog 定义）。
    - **修复 B（产物名归一）**：上游 Makefile 第36行 `TARGET := $(TARGET_NAME)_libretro.so`，`TARGET_NAME=menu` → 真实产出 `menu_libretro.so`；而 STAGE6/STAGE8/STAGE9 + ABI 门禁都找 `frogui_libretro.so` → `deploy/build.sh` STAGE6 在产出 `menu_libretro.so` 后 `cp menu_libretro.so frogui_libretro.so`（仅归一文件名，不改上游 TARGET_NAME，避免回归）。
    - 验证：`git apply --check` 通过；三分支 `build.sh` `bash -n` 通过。
-- 提交（本轮 FrogUI 修复叠加于上一轮 per-core/zlib）：main build.sh+patch HEAD=`7b2412dedd`；gs-interface=`82dc1ecbe4`；native-launch=`d28c678f7c`。
+- 提交（本轮 FrogUI 修复）：build.sh HEAD main=`7b2412dedd`/gs=`82dc1ecbe4`/native=`d28c678f7c`；patch 因 CRLF 问题重推为 LF → main=`ca4602900f`/gs=`eb0fea1d1c`/native=`0987cdfbd3`。
+- **已二次 dispatch**（patch 改 LF 后）：三分支后台监控中。STAGE7 四核心（nestopia/snes9x/fceumm/picodrive）编译错误仍为 WARN 级（不阻断绿），下一轮按官方 Makefile 逐一修。
 - **已 dispatch 三分支**（build.yml 仅监听 `workflow_dispatch` + push main/master，wip 分支 push 不自动触发）→ 本轮已手动 dispatch，后台监控中；STAGE7 四核心编译错误仍为 WARN 级（非门禁阻断），待 FrogUI 门禁过后再按真实日志逐一修。
 
 ### 接手监控约定（用户 2026-08-16 深夜新增铁律）
@@ -74,6 +75,7 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
 6. zlib 下载：zlib.net 可能返回 200 + 限流坏 body（`curl -fL` 不校验内容 → tar 报 not in gzip format）。现加固为 `gzip -t` 校验 + GitHub 镜像 fallback + 3 次重试。
 7. STAGE7 核心构建是 per-core（非裸 make）：mgba 走 cmake、snes9x/nestopia 走 `libretro/` 子目录、fceumm/picodrive 走根目录 `Makefile.libretro`；fceumm 仓库是 `libretro/libretro-fceumm`（裸 `libretro/fceumm` 不存在，克隆必 fail）。
 8. FrogUI 启动桥接补丁必须放**根目录** `patch/frogui_gs_bridge.patch`（build.sh 引用 `$HERE/../patch/`），int 版 SHA 382a38b1；`deploy/patch/` 下同内容不会被引用。
+9. **CRLF 致命坑（2026-08-17 实证）**：`git apply`/`--check` 在 CI（ubuntu，工作树 LF）拒绝 **CRLF** 补丁（`patch does not apply` @line10）→ 补丁被 `--check` 跳过 → `ptr_gs_run_game_*`/`xlog` 未定义 → FrogUI 编译失败 → ABI 门禁 FAIL。本地 `git apply --check` 用 LF 副本会通过，掩盖此问题。**铁律：所有 `.patch` 必须经 Contents API 以 LF 落地**（推送前 `replace("\r\n","\n")`）；build.sh 同样必须 LF。
 
 ## 6. 沙箱操作铁律（CI 之外不能编译，只能靠 API 改仓库）
 - git push 被墙（MITM 拦截上传）→ 用 GitHub Git Data API / Contents API 落地提交（见本地 MEMORY.md §5）。
