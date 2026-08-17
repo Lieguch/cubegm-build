@@ -203,3 +203,19 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
 - `main` = v5（含 §13.5 修复），本次修复后预期真绿。
 - `wip/frogui-gs-interface`、`wip/frogui-native-launch` = 旧 `gs`/`native` 改名，**仍 v4（假绿风险）**，待同步 v5 修复。
 - 历史 `gs`/`native` 分支已删除。
+
+## 14. 平台后端重大更正（2026-08-17，已联网核对上游真源）
+
+**此前方向错误，已纠正。** 早前把 FrogUI to picoarch 启动机制判定为"需改写 fork/exec / 无 launch 文件 / 无 SHUTDOWN"并计划重写，是对上游的误读。
+
+- 上游 `tzubertowski/TreeFrogUI_picoarch`@r36sx `main.c:27` 定义 `LAUNCH_FILE="/tmp/frogui_launch.txt"`；
+  `quit()`(main.c:1107) 读该文件并 `execl()` 进 core+rom；`core.c` 处理 `RETRO_ENVIRONMENT_SHUTDOWN`->`should_quit`。
+  => 仓库 `patch/frogui_gs_bridge.patch`（写 launch 文件 + SHUTDOWN）**与上游一致，保留，勿改写**。
+- **真正缺陷在平台后端**：`deploy/build_sf3000_armhf.sh` 强制 `platform=sf3000`+`-DPLATFORM_SF3000`，
+  激活 `plat_sf3000.c`/`plat_sdl.c` 中 SF3000 专属的 `cubevol`(/tmp/joy_key 共享内存输入) + `driver.so`(dlopen 音频) + fb0 mmap 视频——
+  这些在 RK3036G（标准 buildroot Linux：DRM/KMS + ALSA + evdev）上**不存在**，导致前端无输入/无音频。
+- **修复（本次提交）**：`build_sf3000_armhf.sh` 改 `platform=sf3000`->`platform=unix`（通用 SDL：视频 fbdev / 音频 ALSA / 输入 SDL evdev 手柄），
+  去掉 `-DPLATFORM_SF3000`，加 `-DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2`，LDFLAGS 加 `-lasound`。
+  `libpicofe/linux/` 已提供 `in_evdev.c`/`sndout_alsa.c`/`fbdev.c`；miyoomini/trimui 端口均走通用 SDL，证明此路可行。
+- `picoarch_5edits.patch`（RTC GET_SYSTEM_TIME）保留：对策略/模拟游戏时间存档有利；其 evdev 段因守卫 `PLATFORM_SF3000` 在 unix 下惰性无害。
+- 约束：GitHub Actions 2000 分钟/月；失败/取消 run 不计费，成功 run 才计费 -> 本次为"先求一次性正确构建"。
