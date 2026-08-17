@@ -355,3 +355,15 @@ push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两
 - **修复（deploy/build.sh，commit 09f0647）**：把 mstar_guard 应用从脆弱的 `git apply` 改为**直接的、幂等、行尾无关**的 python 编辑——`grep` 是否已含 `RK3036G_NO_MIYOO_SCALE`（幂等），否则用 python 在 `// begin miyoo hardware scaling support` 前插入文件作用域 `buffer` 全局守卫块（`#if defined(RK3036G_NO_MIYOO_SCALE)`），并把 miyoo 块包裹进 `#if !defined(RK3036G_NO_MIYOO_SCALE)`；按文件实际行尾（CRLF/LF）插入，绝不会被静默跳过。patch 文件 `patch/picoarch_mstar_guard.patch` 保留作文档（build.sh 不再依赖它，符合"只加不减"）。
 - **验证（本地）**：对 post-5edits plat_sdl.c 应用该 python 编辑 → `RK3036G_NO_MIYOO_SCALE` 出现 4 次、buffer 在 188 行被 hoist、preprocessor `#if/#endif` 平衡(21/21)；inner python 独立运行通过。
 - **下一步**：dispatch 重触发 main 构建，核验 #124+ 是否转 completed+success。
+
+
+## §21 — 修正 build.sh hoist 块：不再重定义 struct GFX_Buffer（修复 main #124–#126 'redefinition of struct GFX_Buffer' vs plat.h:22）
+- **现象**：#124（head 09f0647，含 §19 patch + §20 build.sh 幂等 python 编辑）/ #125 / #126（head 27b10e4，§20 HANDOFF）连续 completed+failure。实际日志（run 32046903588 的 build/5 步骤）显示 `[build] Applied MStar guard (exclude miyoo HW-scaling + hoist buffer)` 已成功应用，但编译报 `plat_sdl.c:180:8: error: redefinition of 'struct GFX_Buffer'` / `plat.h:22:8: note: originally defined here` → `plat_linux.o` Error 1 → picoarch build failed。
+- **根因（核对上游 tzubertowski/TreeFrogUI_picoarch@r36sx 的 plat.h + plat_sdl.c）**：
+  - `picoarch/plat.h`（~22 行）**已经定义** `struct GFX_Buffer { void* virAddr; int width/height/depth/pitch; size_t size; }`——上游公共头里就有的类型；软件-SDL `buffer_init/quit/scale`（plat_sdl.c:518–556）所用的 `buffer` 字段（width/height/depth/pitch/size/virAddr）全部落在该类型内。
+  - §19 的 hoist 块在 `plat_sdl.c` 内**重新定义**了 `struct GFX_Buffer`（含同名字段），与 `plat.h:22` 的类型**重复定义**。此前该冲突被 miyoo 块内的 `#include <mi_sys.h>` 致命错误"掩盖"（miyoo 块 active 时 174 行先报错，轮不到 275 行的重复定义）；现在 miyoo 块被 `-DRK3036G_NO_MIYOO_SCALE` 排除后，hoist 块里的重复定义直接暴露。
+  - 之前 #119/#120 的 'buffer' undeclared，是因为 `static struct GFX_Buffer buffer;`（原 304，在 miyoo 块内）随 miyoo 块被排除而消失；正确修复是**只 hoist `buffer` 变量**、类型继续用 `plat.h:22`，而不是连类型一起重定义。
+- **修复（deploy/build.sh，commit c75eac069d）**：将 hoist 块从"重定义 struct + 声明 buffer"改为**仅声明文件作用域变量** `static struct GFX_Buffer buffer;`，守卫条件改为 `#if defined(PLATFORM_SF3000) || defined(RK3036G_NO_MIYOO_SCALE)`——恰好覆盖"miyoo 块被排除"的两种情况（sf3000 走 `PLATFORM_SF3000`；unix/RK3036G 走 `-DRK3036G_NO_MIYOO_SCALE`），且与 miyoo 块内的 `static struct GFX_Buffer buffer;`（304）**永不同时生效**（miyoo 块在任一宏定义下都被排除），故不会出现重复声明。类型一律取自 `plat.h:22`，彻底消除 redefinition。
+  - 本地模拟验证：对上游 r36sx plat_sdl.c 应用新 hoist + miyoo wrap → `struct GFX_Buffer {` 在 plat_sdl.c 仅剩 miyoo 块内一处（已被 guard 排除），hoist 不再定义类型；`static struct GFX_Buffer buffer;` 出现 2 次但分别被互斥的 guard 保护；preprocessor `#if/#endif` 平衡（19 开 = 19 闭）。
+- **验证**：`patch/picoarch_mstar_guard.patch` 文档同步（去除类型重定义，对齐 guard 条件）。inner python 独立运行通过；新 build.sh blob 经 Contents API PUT（base 8ec63ec4，commit c75eac069d）。
+- **下一步**：dispatch 重触发 main 构建，核验 #127+ 是否转 completed+success。wip 两分支（#94/#95，sf3000 路径，仍绿）本轮不重触发——其 build 同样经过 build.sh 的 hoist 逻辑，宏 `PLATFORM_SF3000` 命中 → buffer 由本修复提供，保持绿。
