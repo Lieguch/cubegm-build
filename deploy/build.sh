@@ -303,7 +303,7 @@ ln -sf "$CROSS_BIN/$TRIPLET_GXX" "$CROSS_BIN/g++"
 ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/cc"
 OLDPATH="$PATH"
 export PATH="$CROSS_BIN:$PATH"
-
+CORE_FAIL=""
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
