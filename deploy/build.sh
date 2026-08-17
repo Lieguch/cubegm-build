@@ -295,7 +295,7 @@ make_wrapper () {
     cat > "$CROSS_BIN/$name" <<WRAP
 #!/bin/bash
 exec "$real" -fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard \
-    -I"$ALSA_INC" -Ilibretro-common/include -DFCEU_VERSION_NUMERIC=9900 "\$@"
+    -I"$ALSA_INC" -Ilibretro-common/include -DFCEU_VERSION_NUMERIC=9900 -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS "\$@"
 WRAP
     chmod +x "$CROSS_BIN/$name"
 }
@@ -306,7 +306,7 @@ ln -sf "$CROSS_BIN/$TRIPLET_GXX" "$CROSS_BIN/g++"
 ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/cc"
 OLDPATH="$PATH"
 export PATH="$CROSS_BIN:$PATH"
-
+CORE_FAIL=""
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
@@ -351,7 +351,7 @@ for c in $CORES; do
             ;;
         fceumm|picodrive)
             make -f Makefile.libretro clean >/dev/null 2>&1 || true
-            make -f Makefile.libretro platform=armv-neon-hardfloat -j"$(nproc)" \
+            make -f Makefile.libretro platform=armv-neon-hardfloat use_libchdr=0 -j"$(nproc)" \
                 || log "WARN: core $c build had issues."
             so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
@@ -362,9 +362,18 @@ for c in $CORES; do
             so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
     esac
-    [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
+    if [ -n "$so" ]; then
+        cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
+    else
+        log "ERROR: core $c did not produce a .so"
+        CORE_FAIL="${CORE_FAIL} $c"
+    fi
     popd >/dev/null
 done
+if [ -n "$CORE_FAIL" ]; then
+    log "STAGE7 FAILED -- missing cores:${CORE_FAIL}"
+    exit 1
+fi
 export PATH="$OLDPATH"
 
 # STAGE 8 -- ABI gate
