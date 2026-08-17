@@ -337,3 +337,14 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
 **验证**：`bash -n` 通过；Contents API PUT 成功（build 脚本新 blob 5d291bf1，commit 4527d7a）。
 push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两分支本轮不推送代码（其最新 run
 仍绿；build.yml 仅 `push main/master` 触发，HANDOFF 同步不会触发其构建）。
+
+## §19 — mstar_guard patch 补 `buffer` 全局（修复 main #119/#120 'buffer' undeclared）
+- **现象**：#118/#119/#120 连续 `completed+failure`；加回 `-DRK3036G_NO_MIYOO_SCALE`（commit 4527d7a）后 miyoo 块被正确排除，重定义消失，但报错转为 `plat_sdl.c:521/543/573: error: 'buffer' undeclared`（make 目标 `plat_linux.o`）。
+- **根因（核对上游 tzubertowski/TreeFrogUI_picoarch@r36sx plat_sdl.c）**：`static struct GFX_Buffer buffer;`（原 304 行）与 `struct GFX_Buffer` 类型（275 行）都定义在 miyoo 块（`#ifndef PLATFORM_SF3000` … `#endif`）**内部**。排除 miyoo 块后，`buffer` 全局随之消失，而文件下方**无宏守卫**的软件-SDL `buffer_init/quit/scale`（518–556）仍引用 `buffer`/其字段 → 未声明。
+- **修复（`patch/picoarch_mstar_guard.patch` 重写）**：在 miyoo 块**之前**插入文件作用域守卫块 `#if defined(RK3036G_NO_MIYOO_SCALE) … struct GFX_Buffer { virAddr,width,height,depth,pitch,size }; static struct GFX_Buffer buffer; … #endif`，并保留原 miyoo 块包裹（`#if !defined(RK3036G_NO_MIYOO_SCALE)`）。
+  - 宏定义时：miyoo 块被排除（无 GFX_Buffer 重复定义冲突），本守卫块提供 `buffer` → 软件函数可用。
+  - 宏未定义时（sf3000 路径）：本守卫块不生效，miyoo 块照常提供 `buffer` → sf3000 绿不变。
+  - 省略 `phyAddr` 字段（其类型 `MI_PHY` 来自 `<mi_sys.h>`，已被排除），软件路径从不触碰它。
+- **验证**：本地以 post-5edits plat_sdl.c 为基线，`git apply --check` 通过；preprocessor `#if/#endif` 计数平衡（19/19）。
+- **推送**：patch blob 经 Contents API PUT（base `97a3459b…`，branch main），commit e0daf0f872。
+- **下一步**：dispatch 重触发 main 构建，核验 #121+ 是否转 `completed+success`。
