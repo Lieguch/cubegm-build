@@ -263,14 +263,31 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # STAGE 7 -- build standard libretro cores
+#
+# NOTE on cross-compilation: several libretro core Makefiles hardcode `gcc` /
+# `g++` when building their bundled libretro-common sub-tree (e.g. fceumm's
+# src/drivers/libretro/libretro-common). A `CC=...` passed on the make command
+# line does NOT reach those objects, so they get compiled for the host and the
+# final .so is either unlinkable or broken on the device. The robust,
+# buildroot/crosstool-style fix is to expose the cross compiler as `gcc`/`g++`
+# on PATH for the duration of the core build loop.
 # -----------------------------------------------------------------------------
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT"
+
+CROSS_BIN="$WORKDIR/cross-bin"
+rm -rf "$CROSS_BIN"; mkdir -p "$CROSS_BIN"
+ln -sf "$CC"  "$CROSS_BIN/gcc"
+ln -sf "$CXX" "$CROSS_BIN/g++"
+ln -sf "$CC"  "$CROSS_BIN/cc"
+OLDPATH="$PATH"
+export PATH="$CROSS_BIN:$PATH"
+
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
-    # repo name mapping: the NES core lives in libretro-fceumm, not fceumm
     repo="$c"
     [ "$c" = "fceumm" ] && repo="libretro-fceumm"
     if [ "$c" = "picodrive" ]; then
@@ -279,13 +296,11 @@ for c in $CORES; do
         [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
     fi
     # picodrive bundles libretro-common as a git submodule; without it the
-    # libretro-common headers (e.g. streams/trans_stream.h) are missing and
-    # the core fails to build. Other cores have no submodule, so guard it.
+    # libretro-common headers are missing and the core fails to build.
     [ "$c" = "picodrive" ] && ( cd "$d" && git submodule update --init --recursive ) || true
     pushd "$d" >/dev/null
     case "$c" in
         mgba)
-            # mgba is a CMake project; its libretro core builds via cmake
             log "  mgba: cmake build (LIBMGBA_ONLY + BUILD_LIBRETRO)"
             rm -rf build-cubegm
             cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release \
@@ -301,24 +316,28 @@ for c in $CORES; do
             so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
             ;;
         snes9x|nestopia)
-            # These cores keep their libretro Makefile under libretro/.
-            # Use platform=unix: the standard libretro ARM-Linux shared-lib
-            # recipe. classic_armv7_a7 pulls -fwhole-program into snes9x which
-            # breaks the .so link, and nestopia needs libretro-common on -I.
+            # platform=unix: standard libretro ARM-Linux shared-lib recipe
+            # (-fPIC, no -fwhole-program). snes9x: disable LTO -- flto combined
+            # with -fPIC and the ARM bfd linker yields "dangerous relocation:
+            # unsupported relocation" (R_ARM_CALL unresolvable). nestopia: its
+            # libretro.h lives next to libretro.cpp, so add -I. (cwd == libretro/).
             make -C libretro clean >/dev/null 2>&1 || true
             core_cflags="$CFLAGS"
-            [ "$c" = "nestopia" ] && core_cflags="$core_cflags -Ilibretro-common/include"
+            [ "$c" = "nestopia" ] && core_cflags="$core_cflags -I."
+            snes_lto=""
+            [ "$c" = "snes9x" ] && snes_lto="LTO="
             make -C libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=unix \
+                 platform=unix $snes_lto \
                  CFLAGS="$core_cflags" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
                  -j"$(nproc)" || log "WARN: core $c build had issues."
             so=$(find libretro -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
         fceumm|picodrive)
-            # Root Makefile.libretro is the libretro entry point. platform=unix:
-            # fceumm unix branch gives -fPIC; its Makefile only defines
-            # FCEU_VERSION_NUMERIC for PS2, so pass it here. picodrive does not
-            # recognise classic_armv7_a7 and silently falls back to unix.
+            # platform=unix: fceumm unix branch gives -fPIC; its Makefile only
+            # defines FCEU_VERSION_NUMERIC for PS2, so pass it here. picodrive
+            # does not know classic_armv7_a7 and silently falls back to unix.
+            # Both rely on the PATH `gcc` symlink for their libretro-common
+            # sub-tree (otherwise it is compiled for the host).
             make clean >/dev/null 2>&1 || true
             core_cflags="$CFLAGS"
             [ "$c" = "fceumm" ] && core_cflags="$core_cflags -DFCEU_VERSION_NUMERIC=9900"
@@ -340,8 +359,8 @@ for c in $CORES; do
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
     popd >/dev/null
 done
+export PATH="$OLDPATH"
 
-# -----------------------------------------------------------------------------
 # STAGE 8 -- ABI gate
 # -----------------------------------------------------------------------------
 log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.17)..."
