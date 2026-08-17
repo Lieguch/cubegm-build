@@ -4,5 +4,5 @@
 # 整构建首绿且真机功能验收通过 -> 打 v1.0 tag + 维护 stable 分支。
 
 当前：0.1.0-dev
-状态：STAGE1/STAGE2 已验证通过（run34 日志证据）；STAGE3 picoarch SDL.h 包含修复已推送(210c798a)，run36 待验证。
+状态：STAGE1/STAGE2 已验证通过（run34 日志证据）；STAGE3-7 修复（STAGE7 per-core + 根目录 int 补丁 + zlib 加固）2026-08-17 已推送（main=82a7d83），待重新 dispatch 验证。
 尚未打 v0.1 tag（等首个全绿构建）。
