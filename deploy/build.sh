@@ -274,9 +274,32 @@ mkdir -p "$CORE_OUT"
 
 CROSS_BIN="$WORKDIR/cross-bin"
 rm -rf "$CROSS_BIN"; mkdir -p "$CROSS_BIN"
-ln -sf "$CC"  "$CROSS_BIN/gcc"
-ln -sf "$CXX" "$CROSS_BIN/g++"
-ln -sf "$CC"  "$CROSS_BIN/cc"
+
+# v3 -- a COMPILER WRAPPER (not a plain symlink). Every call to the cross
+# compiler -- including each core's bundled libretro-common sub-tree, which
+# hardcodes `gcc`/`$(CC)` and ignores make command-line CFLAGS -- must be
+# compiled with -fPIC and see the ALSA headers + (for nestopia) the bundled
+# libretro-common include dir. We expose the wrapper under BOTH the bare names
+# (`gcc`/`g++`/`cc`) and the full triplet (`arm-linux-gnueabihf-gcc` etc.) so it
+# catches every rule. The real compiler is invoked by absolute path (no PATH
+# lookup) to avoid infinite recursion.
+REAL_CC="$CC"; REAL_CXX="$CXX"
+TRIPLET="${CC##*/}"        # e.g. arm-linux-gnueabihf-gcc
+TRIPLET_GXX="${CXX##*/}"   # e.g. arm-linux-gnueabihf-g++
+make_wrapper () {
+    local name="$1"; local real="$2"
+    cat > "$CROSS_BIN/$name" <<WRAP
+#!/bin/bash
+exec "$real" -fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard \
+    -I"$ALSA_INC" -Ilibretro-common/include -DFCEU_VERSION_NUMERIC=9900 "\$@"
+WRAP
+    chmod +x "$CROSS_BIN/$name"
+}
+make_wrapper "$TRIPLET"      "$REAL_CC"
+make_wrapper "$TRIPLET_GXX"  "$REAL_CXX"
+ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/gcc"
+ln -sf "$CROSS_BIN/$TRIPLET_GXX" "$CROSS_BIN/g++"
+ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/cc"
 OLDPATH="$PATH"
 export PATH="$CROSS_BIN:$PATH"
 
@@ -290,12 +313,13 @@ for c in $CORES; do
     else
         [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
     fi
-    # picodrive bundles libretro-common as a git submodule; without it the
-    # libretro-common headers are missing and the core fails to build.
+    # picodrive's real submodules (cyclone/libchdr/emu2413/dr_libs/libpicofe)
     [ "$c" = "picodrive" ] && ( cd "$d" && git submodule update --init --recursive ) || true
     pushd "$d" >/dev/null
     case "$c" in
         mgba)
+            # mgba uses CMake directly (already works); keep using the real
+            # cross compiler so behaviour is unchanged.
             log "  mgba: cmake build (LIBMGBA_ONLY + BUILD_LIBRETRO)"
             rm -rf build-cubegm
             cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release \
@@ -311,44 +335,27 @@ for c in $CORES; do
             so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
             ;;
         snes9x|nestopia)
-            # platform=unix: standard libretro ARM-Linux shared-lib recipe
-            # (-fPIC, no -fwhole-program). snes9x: disable LTO -- flto combined
-            # with -fPIC and the ARM bfd linker yields "dangerous relocation:
-            # unsupported relocation" (R_ARM_CALL unresolvable). nestopia: its
-            # libretro.h lives next to libretro.cpp, so add -I. (cwd == libretro/).
+            # Official ARM libretro platform. The PATH wrapper injects -fPIC +
+            # ALSA + libretro-common/include, so we must NOT override CFLAGS
+            # (that would clobber each Makefile's own include paths). The `armv`
+            # platform gives -fPIC + -marm + hard-float and avoids the Thumb
+            # "dangerous relocation" that `platform=unix` produced.
             make -C libretro clean >/dev/null 2>&1 || true
-            core_cflags="$CFLAGS"
-            [ "$c" = "nestopia" ] && core_cflags="$core_cflags -I."
-            snes_lto=""
-            [ "$c" = "snes9x" ] && snes_lto="LTO="
-            make -C libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=unix $snes_lto \
-                 CFLAGS="$core_cflags" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-                 -j"$(nproc)" || log "WARN: core $c build had issues."
-            so=$(find libretro -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
+            make -C libretro platform=armv-neon-hardfloat -j"$(nproc)" \
+                || log "WARN: core $c build had issues."
+            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
         fceumm|picodrive)
-            # platform=unix: fceumm unix branch gives -fPIC; its Makefile only
-            # defines FCEU_VERSION_NUMERIC for PS2, so pass it here. picodrive
-            # does not know classic_armv7_a7 and silently falls back to unix.
-            # Both rely on the PATH `gcc` symlink for their libretro-common
-            # sub-tree (otherwise it is compiled for the host).
-            make clean >/dev/null 2>&1 || true
-            core_cflags="$CFLAGS"
-            [ "$c" = "fceumm" ] && core_cflags="$core_cflags -DFCEU_VERSION_NUMERIC=9900"
-            make -f Makefile.libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=unix \
-                 CFLAGS="$core_cflags" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-                 -j"$(nproc)" || log "WARN: core $c build had issues."
-            so=$(find . -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
+            make -f Makefile.libretro clean >/dev/null 2>&1 || true
+            make -f Makefile.libretro platform=armv-neon-hardfloat -j"$(nproc)" \
+                || log "WARN: core $c build had issues."
+            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
         *)
             make clean >/dev/null 2>&1 || true
-            make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=unix \
-                 CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-                 -j"$(nproc)" || log "WARN: core $c build had issues."
-            so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
+            make platform=armv-neon-hardfloat -j"$(nproc)" \
+                || log "WARN: core $c build had issues."
+            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
     esac
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
