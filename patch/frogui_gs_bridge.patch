@@ -36,7 +36,7 @@ index 93ff2a5..100d445 100644
 +char *ptr_gs_run_game_file = gs_run_game_file;
 +char *ptr_gs_run_game_name = gs_run_game_name;
 +
-+static bool gs_request_shutdown = false;
++static int gs_request_shutdown = 0;
 +
 +/* Upstream called the SF2000 ROM loader here. We instead write picoarch's
 +   native launch file (core .so path + ROM path) and flag a shutdown so
@@ -56,7 +56,7 @@ index 93ff2a5..100d445 100644
 +        fprintf(lf, "%s\n%s\n", core_so, gs_run_rom_fullpath);
 +        fclose(lf);
 +    }
-+    gs_request_shutdown = true;
++    gs_request_shutdown = 1;
 +}
  
  #include "libretro.h"
