@@ -141,22 +141,65 @@ if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
         log "5-edit patch already applied or not applicable -- skipping."
     fi
 fi
-# Apply the MStar guard patch (skip miyoo HW-scaling block on RK3036G).
-# Upstream `plat_sdl.c:172` starts a `#ifndef PLATFORM_SF3000` block that
-# `#include <mi_sys.h>` and `#include <mi_gfx.h>` from the MStar/SigmaStar SDK
-# (used by Miyoo Mini / TrimUI). RK3036G is a standard Rockchip buildroot
-# device with NO MStar SDK, so this block must be excluded on our build. The
-# patch wraps the block in `#if !defined(RK3036G_NO_MIYOO_SCALE)`, and we pass
-# `-DRK3036G_NO_MIYOO_SCALE` in CFLAGS (see build_sf3000_armhf.sh) so the
-# inner preprocessor branch is FALSE and the MStar headers are never included.
-if [ -f "$HERE/../patch/picoarch_mstar_guard.patch" ]; then
-    if git -C picoarch apply --check "$HERE/../patch/picoarch_mstar_guard.patch" 2>/dev/null; then
-        log "Applying MStar guard patch (skip miyoo HW-scaling on RK3036G)..."
-        git -C picoarch apply "$HERE/../patch/picoarch_mstar_guard.patch"
+# -----------------------------------------------------------------------------
+# Apply MStar guard: exclude the miyoo HW-scaling block on RK3036G.
+# The upstream plat_sdl.c miyoo block (#ifndef PLATFORM_SF3000, ~172-490)
+# #includes mi_sys.h / mi_gfx.h (absent on RK3036G) and redefines
+# buffer_init/buffer_scale/buffer_quit, colliding with the UNGUARDED generic
+# software-SDL functions at plat_sdl.c:518-556 (always compiled). We guard the
+# block with #if !defined(RK3036G_NO_MIYOO_SCALE) and, when that macro is set
+# (build_sf3000_armhf.sh passes -DRK3036G_NO_MIYOO_SCALE), also hoist the
+# buffer global + GFX_Buffer type to file scope so the generic path compiles.
+# Done as a direct, idempotent, line-ending-agnostic edit (NOT git apply) so it
+# can never be silently skipped by a CRLF/context mismatch on the cloned tree.
+# -----------------------------------------------------------------------------
+MG_FILE="picoarch/plat_sdl.c"
+if [ -f "$MG_FILE" ]; then
+    if grep -q 'RK3036G_NO_MIYOO_SCALE' "$MG_FILE"; then
+        log "MStar guard already present in $MG_FILE -- skipping."
     else
-        log "MStar guard patch already applied or not applicable -- skipping."
+        python3 - "$MG_FILE" <<'PYEOF'
+import sys
+p = sys.argv[1]
+with open(p, 'r', encoding='utf-8', errors='replace', newline='') as f:
+    s = f.read()
+nl = '\r\n' if '\r\n' in s else '\n'
+anchor = '// begin miyoo hardware scaling support'
+hoist = (
+    '// RK3036G: when the miyoo MStar HW-scaling block below is excluded' + nl +
+    '// (RK3036G_NO_MIYOO_SCALE defined), the unguarded software-SDL' + nl +
+    '// buffer_init/quit/scale further down still need the framebuffer' + nl +
+    '// buffer global + its GFX_Buffer type, which the excluded block' + nl +
+    '// used to provide. Declare them at file scope here so the generic' + nl +
+    '// RK3036G path compiles without the mi_sys/mi_gfx SDK.  The phyAddr' + nl +
+    '// field is intentionally omitted (MI_PHY comes from mi_sys.h, which' + nl +
+    '// is excluded here) because the generic path never touches it.' + nl +
+    '#if defined(RK3036G_NO_MIYOO_SCALE)' + nl +
+    'struct GFX_Buffer {' + nl +
+    '\tvoid*\t\tvirAddr;' + nl +
+    '\tint \t\twidth;' + nl +
+    '\tint \t\theight;' + nl +
+    '\tint \t\tdepth;' + nl +
+    '\tint \t\tpitch;' + nl +
+    '\tuint32_t \tsize;' + nl +
+    '};' + nl +
+    'static struct GFX_Buffer buffer;' + nl +
+    '#endif' + nl + nl
+)
+assert anchor in s, "miyoo anchor not found in plat_sdl.c"
+s = s.replace(anchor, hoist + anchor, 1)
+miyoo_ifndef = '#ifndef PLATFORM_SF3000'
+wrap_open = '#if !defined(RK3036G_NO_MIYOO_SCALE)'
+miyoo_endif = '#endif // end miyoo hardware scaling support'
+s = s.replace(miyoo_ifndef, miyoo_ifndef + nl + wrap_open, 1)
+s = s.replace(miyoo_endif, '#endif // RK3036G_NO_MIYOO_SCALE' + nl + miyoo_endif, 1)
+with open(p, 'w', encoding='utf-8', newline='') as f:
+    f.write(s)
+PYEOF
+        log "Applied MStar guard (exclude miyoo HW-scaling + hoist buffer) to $MG_FILE"
     fi
 fi
+
 # ---------------------------------------------------------------------------
 # RK3036G = ARM (armhf, glibc-2.17). picoarch upstream targets x86/MIPS, so its
 # crash signal handler reads uc_mcontext.pc -- but on ARM glibc-2.17 mcontext_t
