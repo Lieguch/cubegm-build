@@ -62,7 +62,7 @@ ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O
 # platform=sf3000 also makes the Makefile exclude the miyoo HW-scaling block
 # (via -DPLATFORM_SF3000) AND filter -flto (Makefile sf3000 branch) -- matching
 # the known-green CI config (wip #94). RK3036G panel is 1280x720 (set below).
-CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DPLATFORM_SF3000 -DRK3036G_NO_MIYOO_SCALE -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
+CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DPLATFORM_SF3000 -DRK3036G_NO_MIYOO_SCALE -DPLATFORM_SF3000 -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
 CXXFLAGS="$CFLAGS"
 LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -lasound -Wl,--gc-sections -s ${LDFLAGS}"
 
