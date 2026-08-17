@@ -94,8 +94,17 @@ jobs:
           git config user.name "WorkBuddy Agent"
           git add -A
           git commit -q -m "build report $(date -u +%Y-%m-%dT%H:%M:%SZ) run ${{ github.run_number }}" || echo "nothing to commit"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" build-output
-          echo "Published build-output branch (BUILD_REPORT.txt + logs)."
+          # build-output is a DIAGNOSTIC-ONLY branch. Concurrent runs (a push + a
+          # workflow_dispatch for the same commit) race on the force-push and hit
+          # "cannot lock ref" -> the step fails -> an otherwise-GREEN build is marked
+          # red. That must not happen, so make the publish best-effort: a rejected
+          # force-push is non-fatal here. A genuinely broken firmware build still
+          # fails EARLIER at the STAGE 8 ABI gate ("|| die").
+          if git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" build-output; then
+            echo "Published build-output branch (BUILD_REPORT.txt + logs)."
+          else
+            echo "WARN: build-output publish raced with a concurrent run (non-fatal; diagnostic branch only)."
+          fi
 
       - name: Create release with device payload
         if: success()

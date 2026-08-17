@@ -498,3 +498,33 @@ main 的 build.sh **缺少** wip/frogui-gs-interface 分支的 `menu_libretro.so
 - Root cause: main missing the menu_libretro.so -> frogui_libretro.so normalization that wip-gs has.
 - Fix: add normalization block (commit d87ebff); bash -n OK. Cores remain best-effort (WARN, tolerated).
 - Next: re-trigger; verify #141 success.
+
+## §25 — main 实际已绿：#141/#143 的 failure 是 build-output 分支 push 竞态（伪红），非构建缺陷 — 2026-08-17T18:22Z
+
+### 现象（run #141 d87ebff / #143 5217a6a799）
+- 两 run 均 `completed+failure`，但**构建本体已绿**：
+  - `RESULT: PASS  picoarch/picoarch`（ABI gate）
+  - `RESULT: PASS  FrogUI/frogui_libretro.so`（归一化产物通过 ABI gate）
+  - `[bootstrap] BOOTSTRAP COMPLETE (on this Linux host).`
+- 唯一失败在最后诊断步：`git push -f build-output` 报
+  `! [remote rejected] build-output -> build-output (cannot lock ref ... is at <X> but expected <Y>)` -> 步骤 `exit 1` -> 整 job 判红。
+- 同 commit 5217a6a799 的 #142 **抢先 push 成功 -> #142 全绿**。故 #143 为并发 push+dispatch 的**伪红**，不影响固件产物（Actions Artifact / Release 正常）。
+
+### 根因
+`.github/workflows/build.yml` 末尾「Publish build report to build-output branch」用
+`git push -f` 推诊断分支；同一 commit 被 push 与 workflow_dispatch 同时触发两次 run，
+二者竞态锁 ref。该步 `if: always()` 且未容错 -> 输给竞态的 run 被判红。
+
+### 修复（仅改 `.github/workflows/build.yml`，atomic commit 与 HANDOFF 同行）
+- 将 `git push -f build-output` 改为 `if git push -f ...; then ...; else echo WARN; fi`
+  （best-effort）。真实构建失败仍由 STAGE 8 ABI gate `|| die` 提前判红，不受影响。
+- 目的：并发 push 竞态不再使绿构建判红；#142 全绿已证明构建本身正确。
+
+### 验证预期
+- 重触发后 main 最新 run 应 `completed+success`：构建绿 + build-output 竞态已容错。
+- 注：本次修正由自动化自愈 Agent 发现（读 #143 真实 run log，定位到 push 竞态），
+  非臆测；构建在 #141 起即已真绿。
+
+### 铁律自检
+- 仅改 `.github/workflows/build.yml` + 追加 `HANDOFF.md` §25；未删除任何非 agent 创建或里程碑文件。
+- 根因基于 #141/#143 真实 run log（`RESULT: PASS` + `cannot lock ref`）取证，非猜。
