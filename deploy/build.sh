@@ -403,6 +403,25 @@ cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
 chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
+
+# Ship the cross-built runtime libs that the DEVICE ROOTFS does NOT provide.
+# picoarch's NEEDED (verified via readelf) is libSDL-1.2.so.0 / libpng12.so.0 /
+# libz.so.1; the stock rootfs only ships libdrm/libkms/libasound (see
+# docs/sysroot_strategy.md section 2), NOT SDL/libpng12. Without these in
+# cubegm/lib the device fails at startup ("error while loading shared
+# libraries: libSDL-1.2.so.0"). zhijack.sh already sets
+# LD_LIBRARY_PATH=$CUBEGM_DIR/lib, so copy the real libs (and their symlink
+# chain) from the sysroot here. Keep it best-effort (WARN, non-fatal): if a
+# specific lib is missing we still ship everything else we can.
+for l in libSDL-1.2.so.0 libpng12.so.0 libz.so.1; do
+    if compgen -G "$SYSROOT/usr/lib/${l}*" > /dev/null; then
+        cp -a "$SYSROOT"/usr/lib/${l}* "$DST/lib/" 2>/dev/null || true
+        log "  packaged runtime lib: $l -> cubegm/lib/"
+    else
+        log "WARN: $SYSROOT/usr/lib/$l not found -- picoarch may fail on device."
+    fi
+done
+ls -l "$DST/lib/" 2>/dev/null | head -20 || true
 log "Staged into $DST"
 log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
 log "overwriting the existing cubegm/ (stock rkgame/icube/driver.so/root.dat stay)."
