@@ -367,3 +367,25 @@ push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两
   - 本地模拟验证：对上游 r36sx plat_sdl.c 应用新 hoist + miyoo wrap → `struct GFX_Buffer {` 在 plat_sdl.c 仅剩 miyoo 块内一处（已被 guard 排除），hoist 不再定义类型；`static struct GFX_Buffer buffer;` 出现 2 次但分别被互斥的 guard 保护；preprocessor `#if/#endif` 平衡（19 开 = 19 闭）。
 - **验证**：`patch/picoarch_mstar_guard.patch` 文档同步（去除类型重定义，对齐 guard 条件）。inner python 独立运行通过；新 build.sh blob 经 Contents API PUT（base 8ec63ec4，commit c75eac069d）。
 - **下一步**：dispatch 重触发 main 构建，核验 #127+ 是否转 completed+success。wip 两分支（#94/#95，sf3000 路径，仍绿）本轮不重触发——其 build 同样经过 build.sh 的 hoist 逻辑，宏 `PLATFORM_SF3000` 命中 → buffer 由本修复提供，保持绿。
+
+## §22 -- main #121-#129 regression root cause: `platform=unix` builds plat_linux.c and fails (fixed in 982d200)
+- Symptom: main has failed continuously since #104 (#110-#129 all failure). Log shows only warnings
+  (SCREEN_WIDTH redefined / excess elements in struct initializer) then `make: *** [<builtin>: plat_linux.o] Error 1`,
+  with NO `error:` line. build_sf3000_armhf.sh used `make ... | tail -40`, and bootstrap.log was equally truncated, hiding the real error.
+- Root cause (verified against upstream r36sx plat_sdl.c + comparing the GREEN wip #94 real command):
+  - §14 switched the picoarch build from `platform=sf3000` to `platform=unix`. The unix target compiles **plat_linux.c**,
+    whose `#else` (non-PLATFORM_SF3000) code paths are incompletely ported -- e.g. `plat_reinit()` (plat_sdl.c:1471) calls
+    `scale_update_scaler()` (plat_sdl.c:1489) in its `#else` branch, but that function is NEVER defined for the unix target
+    -> compile-time implicit-declaration (warning) -> link-time undefined reference (error). `-flto` (kept on the unix target)
+    defers the error to the LTO phase, and `tail -40` truncates it, so no `error:` appears in the log.
+  - The GREEN wip #94 real command: `-DUSE_C_SCALER -DPLATFORM_SF3000 -DCONTENT_DIR=...`, compiling **plat_sf3000.c**, with NO
+    `-DRK3036G_NO_MIYOO_SCALE`, and the Makefile sf3000 branch auto-filters `-flto`. `-DPLATFORM_SF3000` excludes the miyoo
+    HW-scaling block (`#ifndef PLATFORM_SF3000`) AND the `#else` branch containing `scale_update_scaler()` -> clean pass.
+- Fix (commit 982d200, only deploy/build_sf3000_armhf.sh changed):
+  1. `make platform=unix` -> `make platform=sf3000` (restores the green config; Makefile auto-adds -DPLATFORM_SF3000, excludes
+     the miyoo block, and filters -flto).
+  2. build.sh's MStar guard still hoists `static struct GFX_Buffer buffer;` (guard `PLATFORM_SF3000 || RK3036G_NO_MIYOO_SCALE`);
+     triggered by -DPLATFORM_SF3000 -> `buffer` always present; software-SDL buffer_init/quit/scale (plat_sdl.c:518-556) work.
+  3. Removed `| tail -40` so the FULL make output (incl. the real error:) lands in bootstrap.log / build-output for agent diagnosis.
+- Status: main dispatched; pending verification of #130+ as completed+success. wip branches remain stale-green (old sf3000 path, #94/#95), untouched.
+- Iron-rule check: ADD/minimal change only; no non-agent / milestone files deleted; fix derived from real CI commands + upstream source, not guesswork.
