@@ -75,6 +75,24 @@ git_submodule(){
     die "submodule init failed after 5 attempts in $dir"
 }
 
+# Like git_clone but recurses into submodules. Required for picodrive, which
+# vendors libretro-common as a git submodule; without --recursive the
+# libretro-common headers (streams/trans_stream.h, compat/strcasestr.h) are
+# missing and the core fails to build.
+git_clone_recursive(){
+    local repo="$1" dest="$2" branch="${3:-}"
+    for n in 1 2 3 4 5; do
+        log "git clone --recursive attempt $n/5: $repo -> $dest"
+        rm -rf "$dest"
+        if timeout 300 git clone --depth 1 --recursive ${branch:+-b "$branch"} "$repo" "$dest"; then
+            return 0
+        fi
+        log "  clone attempt $n failed; retrying in 5s..."
+        sleep 5
+    done
+    die "git clone --recursive failed after 5 attempts: $repo"
+}
+
 [ "$(uname -s)" = "Linux" ] || die "This script must run on a Linux x86_64 build host."
 command -v git >/dev/null || die "git not found."
 command -v make >/dev/null || die "make not found."
@@ -250,7 +268,11 @@ for c in $CORES; do
     # repo name mapping: the NES core lives in libretro-fceumm, not fceumm
     repo="$c"
     [ "$c" = "fceumm" ] && repo="libretro-fceumm"
-    [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
+    if [ "$c" = "picodrive" ]; then
+        [ -d "$d" ] || git_clone_recursive "https://github.com/libretro/$repo.git" "$d"
+    else
+        [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
+    fi
     # picodrive bundles libretro-common as a git submodule; without it the
     # libretro-common headers (e.g. streams/trans_stream.h) are missing and
     # the core fails to build. Other cores have no submodule, so guard it.
@@ -274,27 +296,37 @@ for c in $CORES; do
             so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
             ;;
         snes9x|nestopia)
-            # these cores keep their libretro Makefile under libretro/
+            # These cores keep their libretro Makefile under libretro/.
+            # Use platform=unix: the standard libretro ARM-Linux shared-lib
+            # recipe. classic_armv7_a7 pulls -fwhole-program into snes9x which
+            # breaks the .so link, and nestopia needs libretro-common on -I.
             make -C libretro clean >/dev/null 2>&1 || true
+            core_cflags="$CFLAGS"
+            [ "$c" = "nestopia" ] && core_cflags="$core_cflags -Ilibretro-common/include"
             make -C libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=classic_armv7_a7 \
-                 CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+                 platform=unix \
+                 CFLAGS="$core_cflags" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
                  -j"$(nproc)" || log "WARN: core $c build had issues."
             so=$(find libretro -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
         fceumm|picodrive)
-            # root Makefile.libretro is the libretro entry point
+            # Root Makefile.libretro is the libretro entry point. platform=unix:
+            # fceumm unix branch gives -fPIC; its Makefile only defines
+            # FCEU_VERSION_NUMERIC for PS2, so pass it here. picodrive does not
+            # recognise classic_armv7_a7 and silently falls back to unix.
             make clean >/dev/null 2>&1 || true
+            core_cflags="$CFLAGS"
+            [ "$c" = "fceumm" ] && core_cflags="$core_cflags -DFCEU_VERSION_NUMERIC=9900"
             make -f Makefile.libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=classic_armv7_a7 \
-                 CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+                 platform=unix \
+                 CFLAGS="$core_cflags" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
                  -j"$(nproc)" || log "WARN: core $c build had issues."
             so=$(find . -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
             ;;
         *)
             make clean >/dev/null 2>&1 || true
             make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=classic_armv7_a7 \
+                 platform=unix \
                  CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
                  -j"$(nproc)" || log "WARN: core $c build had issues."
             so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
