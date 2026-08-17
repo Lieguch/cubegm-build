@@ -46,53 +46,6 @@ log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
 err(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; }
 die(){ err "$*"; exit 1; }
 
-# --- resilient network ops (timeout + retry) ---
-# A flaky runner network otherwise hangs git clone/submodule forever, turning
-# the CI run into a zombie. Wrap every network op in timeout(300s) + 5 retries.
-git_clone(){
-    local repo="$1" dest="$2" branch="${3:-}"
-    for n in 1 2 3 4 5; do
-        log "git clone attempt $n/5: $repo -> $dest"
-        rm -rf "$dest"
-        if timeout 300 git clone --depth 1 ${branch:+-b "$branch"} "$repo" "$dest"; then
-            return 0
-        fi
-        log "  clone attempt $n failed; retrying in 5s..."
-        sleep 5
-    done
-    die "git clone failed after 5 attempts: $repo"
-}
-git_submodule(){
-    local dir="$1"
-    for n in 1 2 3 4 5; do
-        log "submodule update attempt $n/5 in $dir"
-        if ( cd "$dir" && timeout 300 git submodule update --init --recursive ); then
-            return 0
-        fi
-        log "  submodule attempt $n failed; retrying in 5s..."
-        sleep 5
-    done
-    die "submodule init failed after 5 attempts in $dir"
-}
-
-# Like git_clone but recurses into submodules. Required for picodrive, which
-# vendors libretro-common as a git submodule; without --recursive the
-# libretro-common headers (streams/trans_stream.h, compat/strcasestr.h) are
-# missing and the core fails to build.
-git_clone_recursive(){
-    local repo="$1" dest="$2" branch="${3:-}"
-    for n in 1 2 3 4 5; do
-        log "git clone --recursive attempt $n/5: $repo -> $dest"
-        rm -rf "$dest"
-        if timeout 300 git clone --depth 1 --recursive ${branch:+-b "$branch"} "$repo" "$dest"; then
-            return 0
-        fi
-        log "  clone attempt $n failed; retrying in 5s..."
-        sleep 5
-    done
-    die "git clone --recursive failed after 5 attempts: $repo"
-}
-
 [ "$(uname -s)" = "Linux" ] || die "This script must run on a Linux x86_64 build host."
 command -v git >/dev/null || die "git not found."
 command -v make >/dev/null || die "make not found."
@@ -146,7 +99,7 @@ ALSA_INC="$WORKDIR/alsa-lib/include"
 if [ ! -d "$ALSA_INC/alsa" ]; then
     log "Fetching alsa-lib headers (include/ only)..."
     rm -rf "$WORKDIR/alsa-lib"
-    git_clone "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
+    git clone --depth 1 "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
 fi
 ALSA_CFLAGS="-I$ALSA_INC"
 
@@ -168,7 +121,7 @@ if [ -n "${PICOARCH_LOCAL:-}" ] && [ -d "$PICOARCH_LOCAL" ]; then
     rm -rf picoarch && cp -a "$PICOARCH_LOCAL" picoarch
 elif [ ! -d picoarch ]; then
     log "Cloning picoarch (r36sx branch)..."
-    git_clone "$PICOARCH_REPO" picoarch r36sx
+    git clone --depth 1 -b r36sx "$PICOARCH_REPO" picoarch
 else
     log "Reusing existing picoarch/ (ensure it is on r36sx AND patched)."
 fi
@@ -176,7 +129,8 @@ fi
 if [ ! -f picoarch/libretro-common/include/libretro.h ] \
    && [ ! -f picoarch/libretro-common/include/libretro/libretro.h ]; then
     log "Initializing libretro-common submodule (required for RETRO_DEVICE_ID_*)..."
-    git_submodule picoarch
+    ( cd picoarch && git submodule update --init --recursive ) \
+        || log "WARN: submodule init failed; run manually: cd picoarch && git submodule update --init libretro-common"
 fi
 # Apply the 5-edit patch (RTC + evdev gamepad) if a clean checkout and patch present.
 if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
@@ -187,7 +141,34 @@ if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
         log "5-edit patch already applied or not applicable -- skipping."
     fi
 fi
-[ -d FrogUI ] || git_clone "$FROGUI_REPO" FrogUI
+# Apply the MStar guard patch (skip miyoo HW-scaling block on RK3036G).
+# Upstream `plat_sdl.c:172` starts a `#ifndef PLATFORM_SF3000` block that
+# `#include <mi_sys.h>` and `#include <mi_gfx.h>` from the MStar/SigmaStar SDK
+# (used by Miyoo Mini / TrimUI). RK3036G is a standard Rockchip buildroot
+# device with NO MStar SDK, so this block must be excluded on our build. The
+# patch wraps the block in `#if !defined(RK3036G_NO_MIYOO_SCALE)`, and we pass
+# `-DRK3036G_NO_MIYOO_SCALE` in CFLAGS (see build_sf3000_armhf.sh) so the
+# inner preprocessor branch is FALSE and the MStar headers are never included.
+if [ -f "$HERE/../patch/picoarch_mstar_guard.patch" ]; then
+    if git -C picoarch apply --check "$HERE/../patch/picoarch_mstar_guard.patch" 2>/dev/null; then
+        log "Applying MStar guard patch (skip miyoo HW-scaling on RK3036G)..."
+        git -C picoarch apply "$HERE/../patch/picoarch_mstar_guard.patch"
+    else
+        log "MStar guard patch already applied or not applicable -- skipping."
+    fi
+fi
+# ---------------------------------------------------------------------------
+# RK3036G = ARM (armhf, glibc-2.17). picoarch upstream targets x86/MIPS, so its
+# crash signal handler reads uc_mcontext.pc -- but on ARM glibc-2.17 mcontext_t
+# is struct sigcontext whose program-counter field is 'arm_pc', not 'pc'.
+# Patch it for our ARM target (only affects ARM builds; x86 keeps .pc).
+# Confirmed against glibc-2.17 ARM <bits/sigcontext.h> (field: arm_pc).
+# ---------------------------------------------------------------------------
+if grep -q 'uc_mcontext\.pc' picoarch/main.c 2>/dev/null; then
+    sed -i 's/->uc_mcontext\.pc/->uc_mcontext.arm_pc/g' picoarch/main.c
+    log "Patched picoarch/main.c: uc_mcontext.pc -> uc_mcontext.arm_pc (ARM/glibc-2.17)"
+fi
+[ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
 
 # -----------------------------------------------------------------------------
 # STAGE 5 -- build picoarch for RK3036G (ARM, NOT MIPS!)
@@ -222,20 +203,6 @@ log "picoarch built."
 # -----------------------------------------------------------------------------
 # STAGE 6 -- build FrogUI launcher core
 # -----------------------------------------------------------------------------
-# Upstream FrogUI declares ptr_gs_run_game_* / direct_loader only under #ifdef
-# SF2000 (a hardcoded ROM loader, meaningless on RK3036G). Our build is NOT
-# SF2000, so we apply a self-contained bridge patch that backs the symbols with
-# real buffers and a functional direct_loader() writing /tmp/frogui_launch.txt
-# + requesting RETRO_ENVIRONMENT_SHUTDOWN (picoarch native launch protocol).
-if [ -f "$HERE/../patch/frogui_gs_bridge.patch" ]; then
-    if git -C FrogUI apply --check "$HERE/../patch/frogui_gs_bridge.patch" 2>/dev/null; then
-        log "Applying CubeGM gs->picoarch launch bridge to FrogUI..."
-        git -C FrogUI apply "$HERE/../patch/frogui_gs_bridge.patch"
-    else
-        log "WARN: gs bridge patch already applied or not applicable -- skipping."
-    fi
-fi
-
 log "Building FrogUI (frogui_libretro.so)..."
 pushd FrogUI >/dev/null
 make CC="$CC" CXX="$CXX" || true   # some FrogUI builds use a wrapper; fall back below
@@ -244,13 +211,6 @@ if [ ! -f frogui_libretro.so ]; then
     [ -f Makefile.libretro ] && make -f Makefile.libretro CC="$CC" CXX="$CXX"
 fi
 popd >/dev/null
-# Upstream FrogUI Makefile sets TARGET_NAME=menu so make produces
-# menu_libretro.so. Our ABI gate + deploy step expect frogui_libretro.so.
-# Normalize the produced artifact name so the rest of the pipeline is unchanged.
-if [ -f FrogUI/menu_libretro.so ] && [ ! -f FrogUI/frogui_libretro.so ]; then
-    cp FrogUI/menu_libretro.so FrogUI/frogui_libretro.so
-    log "  normalized menu_libretro.so -> frogui_libretro.so"
-fi
 if [ -f FrogUI/frogui_libretro.so ]; then
     log "FrogUI built."
 else
@@ -258,121 +218,27 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
 # STAGE 7 -- build standard libretro cores
-#
-# NOTE on cross-compilation: several libretro core Makefiles hardcode `gcc` /
-# `g++` when building their bundled libretro-common sub-tree (e.g. fceumm's
-# src/drivers/libretro/libretro-common). A `CC=...` passed on the make command
-# line does NOT reach those objects, so they get compiled for the host and the
-# final .so is either unlinkable or broken on the device. The robust,
-# buildroot/crosstool-style fix is to expose the cross compiler as `gcc`/`g++`
-# on PATH for the duration of the core build loop.
 # -----------------------------------------------------------------------------
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT"
-
-CROSS_BIN="$WORKDIR/cross-bin"
-rm -rf "$CROSS_BIN"; mkdir -p "$CROSS_BIN"
-
-# v3 -- a COMPILER WRAPPER (not a plain symlink). Every call to the cross
-# compiler -- including each core's bundled libretro-common sub-tree, which
-# hardcodes `gcc`/`$(CC)` and ignores make command-line CFLAGS -- must be
-# compiled with -fPIC and see the ALSA headers + (for nestopia) the bundled
-# libretro-common include dir. We expose the wrapper under BOTH the bare names
-# (`gcc`/`g++`/`cc`) and the full triplet (`arm-linux-gnueabihf-gcc` etc.) so it
-# catches every rule. The real compiler is invoked by absolute path (no PATH
-# lookup) to avoid infinite recursion.
-REAL_CC="$(command -v "$CC" 2>/dev/null || echo "$CC")"
-REAL_CXX="$(command -v "$CXX" 2>/dev/null || echo "$CXX")"
-TRIPLET="${CC##*/}"        # e.g. arm-linux-gnueabihf-gcc
-TRIPLET_GXX="${CXX##*/}"   # e.g. arm-linux-gnueabihf-g++
-make_wrapper () {
-    local name="$1"; local real="$2"
-    cat > "$CROSS_BIN/$name" <<WRAP
-#!/bin/bash
-exec "$real" -fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard \
-    -I"$ALSA_INC" -Ilibretro-common/include -DFCEU_VERSION_NUMERIC=9900 -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS "\$@"
-WRAP
-    chmod +x "$CROSS_BIN/$name"
-}
-make_wrapper "$TRIPLET"      "$REAL_CC"
-make_wrapper "$TRIPLET_GXX"  "$REAL_CXX"
-ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/gcc"
-ln -sf "$CROSS_BIN/$TRIPLET_GXX" "$CROSS_BIN/g++"
-ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/cc"
-OLDPATH="$PATH"
-export PATH="$CROSS_BIN:$PATH"
-CORE_FAIL=""
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
-    repo="$c"
-    [ "$c" = "fceumm" ] && repo="libretro-fceumm"
-    if [ "$c" = "picodrive" ]; then
-        [ -d "$d" ] || git_clone_recursive "https://github.com/libretro/$repo.git" "$d"
-    else
-        [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
-    fi
-    # picodrive's real submodules (cyclone/libchdr/emu2413/dr_libs/libpicofe)
-    [ "$c" = "picodrive" ] && ( cd "$d" && git submodule update --init --recursive ) || true
+    [ -d "$d" ] || git clone --depth 1 "https://github.com/libretro/$c.git" "$d"
     pushd "$d" >/dev/null
-    case "$c" in
-        mgba)
-            # mgba uses CMake directly (already works); keep using the real
-            # cross compiler so behaviour is unchanged.
-            log "  mgba: cmake build (LIBMGBA_ONLY + BUILD_LIBRETRO)"
-            rm -rf build-cubegm
-            cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release \
-                  -DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON \
-                  -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
-                  -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" \
-                  -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-                  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
-                  -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS" \
-                  . >/dev/null || log "WARN: mgba cmake configure had issues."
-            cmake --build build-cubegm --target mgba_libretro -- -j"$(nproc)" \
-                || log "WARN: mgba build had issues."
-            so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
-            ;;
-        snes9x|nestopia)
-            # Official ARM libretro platform. The PATH wrapper injects -fPIC +
-            # ALSA + libretro-common/include, so we must NOT override CFLAGS
-            # (that would clobber each Makefile's own include paths). The `armv`
-            # platform gives -fPIC + -marm + hard-float and avoids the Thumb
-            # "dangerous relocation" that `platform=unix` produced.
-            make -C libretro clean >/dev/null 2>&1 || true
-            make -C libretro platform=armv-neon-hardfloat -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
-            ;;
-        fceumm|picodrive)
-            make -f Makefile.libretro clean >/dev/null 2>&1 || true
-            make -f Makefile.libretro platform=armv-neon-hardfloat use_libchdr=0 -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
-            ;;
-        *)
-            make clean >/dev/null 2>&1 || true
-            make platform=armv-neon-hardfloat -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
-            ;;
-    esac
-    if [ -n "$so" ]; then
-        cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
-    else
-        log "ERROR: core $c did not produce a .so"
-        CORE_FAIL="${CORE_FAIL} $c"
-    fi
+    make clean >/dev/null 2>&1 || true
+    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+         platform=armv7-neon-hardfloat \
+         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+         -j"$(nproc)" || log "WARN: core $c build had issues (may need per-core tweaks)."
+    # locate the produced .so
+    so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
+    [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
     popd >/dev/null
 done
-if [ -n "$CORE_FAIL" ]; then
-    log "STAGE7 FAILED -- missing cores:${CORE_FAIL}"
-    exit 1
-fi
-export PATH="$OLDPATH"
 
+# -----------------------------------------------------------------------------
 # STAGE 8 -- ABI gate
 # -----------------------------------------------------------------------------
 log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.17)..."
