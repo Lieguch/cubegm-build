@@ -279,35 +279,107 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# STAGE 7 -- build standard libretro cores
+# STAGE 7 -- build standard libretro cores (RK3036G armhf)
 # -----------------------------------------------------------------------------
+# Several libretro core Makefiles hardcode `gcc`/`g++` when building their
+# bundled libretro-common sub-tree, so `CC=` on the make cmdline does NOT reach
+# those objects (they get compiled for the host). The buildroot-style fix is a
+# PATH compiler wrapper that injects -fPIC -marm + ALSA + bundled
+# libretro-common include for EVERY compiler invocation (bare + triplet names).
+# Verified against upstream libretro Makefiles (HANDOFF §11-§13), not guessed.
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT"
+
+CROSS_BIN="$WORKDIR/cross-bin"
+rm -rf "$CROSS_BIN"; mkdir -p "$CROSS_BIN"
+REAL_CC="$(command -v "$CC" 2>/dev/null || echo "$CC")"
+REAL_CXX="$(command -v "$CXX" 2>/dev/null || echo "$CXX")"
+TRIPLET="${CC##*/}"
+TRIPLET_GXX="${CXX##*/}"
+make_wrapper () {
+    local name="$1"; local real="$2"
+    printf '#!/bin/bash\nexec "%s" -fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -I"%s" -Ilibretro-common/include -DFCEU_VERSION_NUMERIC=9900 -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS "$@"\n' "$real" "$ALSA_INC" > "$CROSS_BIN/$name"
+    chmod +x "$CROSS_BIN/$name"
+}
+make_wrapper "$TRIPLET"      "$REAL_CC"
+make_wrapper "$TRIPLET_GXX"  "$REAL_CXX"
+ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/gcc"
+ln -sf "$CROSS_BIN/$TRIPLET_GXX" "$CROSS_BIN/g++"
+ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/cc"
+OLDPATH="$PATH"
+export PATH="$CROSS_BIN:$PATH"
+CORE_FAIL=""
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
-    # Best-effort clone: a transient network/auth failure (e.g. 'could not read
-    # Username for https://github.com', observed on libretro/fceumm in run #135)
-    # must NOT abort the whole build under 'set -e'. Skip the core and continue;
-    # the device ships its own cores and STAGE 8/9 tolerate missing core .so files.
-    if [ ! -d "$d" ]; then
-        if ! git clone --depth 1 "https://github.com/libretro/$c.git" "$d" 2>/dev/null; then
-            log "WARN: core $c clone failed (network/auth) -- skipping (best-effort)."
-            rm -rf "$d" 2>/dev/null
-            continue
+    repo="$c"
+    [ "$c" = "fceumm" ] && repo="libretro-fceumm"
+    # Best-effort clone with retry (transient network/auth must not abort the
+    # whole build). Skip the core if it still cannot be fetched; the device
+    # ships its own cores and STAGE 8/9 tolerate a missing core .so.
+    cloned=0
+    for n in 1 2 3; do
+        if [ "$c" = "picodrive" ]; then
+            git clone --depth 1 --recursive "https://github.com/libretro/$repo.git" "$d" >/dev/null 2>&1 && { cloned=1; break; }
+        else
+            git clone --depth 1 "https://github.com/libretro/$repo.git" "$d" >/dev/null 2>&1 && { cloned=1; break; }
         fi
+        log "  clone attempt $n failed; retrying..."
+        rm -rf "$d"
+    done
+    if [ "$cloned" != "1" ]; then
+        log "WARN: core $c clone failed (network/auth) -- skipping (best-effort)."
+        continue
     fi
+    [ "$c" = "picodrive" ] && ( cd "$d" && git submodule update --init --recursive ) >/dev/null 2>&1 || true
     pushd "$d" >/dev/null
-    make clean >/dev/null 2>&1 || true
-    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-         platform=armv7-neon-hardfloat \
-         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-         -j"$(nproc)" || log "WARN: core $c build had issues (may need per-core tweaks)."
-    # locate the produced .so
-    so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
-    [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
+    case "$c" in
+        mgba)
+            rm -rf build-cubegm
+            cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release \
+                  -DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON \
+                  -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
+                  -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" \
+                  -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+                  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
+                  -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS" \
+                  . || log "WARN: mgba cmake configure had issues."
+            cmake --build build-cubegm --target mgba_libretro -- -j"$(nproc)" \
+                || log "WARN: mgba build had issues."
+            so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
+            ;;
+        snes9x|nestopia)
+            make -C libretro clean >/dev/null 2>&1 || true
+            make -C libretro platform=armv-neon-hardfloat -j"$(nproc)" \
+                || log "WARN: core $c build had issues."
+            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
+            ;;
+        fceumm|picodrive)
+            make -f Makefile.libretro clean >/dev/null 2>&1 || true
+            make -f Makefile.libretro platform=armv-neon-hardfloat use_libchdr=0 -j"$(nproc)" \
+                || log "WARN: core $c build had issues."
+            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
+            ;;
+        *)
+            make clean >/dev/null 2>&1 || true
+            make platform=armv-neon-hardfloat -j"$(nproc)" \
+                || log "WARN: core $c build had issues."
+            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
+            ;;
+    esac
+    if [ -n "$so" ]; then
+        cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
+    else
+        log "ERROR: core $c did not produce a .so"
+        CORE_FAIL="${CORE_FAIL} $c"
+    fi
     popd >/dev/null
 done
+if [ -n "$CORE_FAIL" ]; then
+    log "STAGE7 FAILED -- missing cores:${CORE_FAIL}"
+    exit 1
+fi
+export PATH="$OLDPATH"
 
 # -----------------------------------------------------------------------------
 # STAGE 8 -- ABI gate
