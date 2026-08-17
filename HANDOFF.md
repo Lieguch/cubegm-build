@@ -50,8 +50,13 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
 1. **三分支 `deploy/build.sh` STAGE7 重写为 per-core 构建**：mgba→cmake（`-DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON`，交叉链 C/C 编译器 + flags）；snes9x|nestopia→`make -C libretro`；fceumm|picodrive→`make -f Makefile.libretro`；统一 `platform=armv7-neon-hardfloat`。fceumm 仓库映射为 `libretro-fceumm`。
 2. **根目录 `patch/frogui_gs_bridge.patch` 三分支统一为 int 版**（382a38b1，138 行）：`static bool→int` 消除 `<stdbool.h>` 位置依赖；与 `deploy/patch/` 内容一致。gs 分支覆盖 bool 旧版；native 分支**新增**该文件；main 分支 STAGE6 新增补丁应用逻辑（`git apply --check` 失败则 WARN 跳过）。
 3. **三分支 `deploy/build_sdl_libpng.sh` zlib 下载加固**：`curl -fsSL` + `gzip -t` 校验（从机理消除"200+坏 body"）→ 坏则切 GitHub 镜像 → 最多 3 次重试 → 仍失败才 die。
-- 提交：main=`545239c`(build.sh+patch)/`82a7d83`(zlib)；gs-interface=`3c55b20`/zlib 同批；native-launch=`b22bda8`。
-- **尚未重新 dispatch**（build.yml 仅监听 `workflow_dispatch` + push main/master，wip 分支 push 不自动触发）→ 三分支均需手动 dispatch 后监控。
+4. **FrogUI 链接 blocker 修复（2026-08-17，经上游 `tzubertowski/FrogUI` 真源实证）—— 消除 ABI 门禁 FAIL 的唯一 blocker**：
+   - **根因**：上游 `frogos.c:193` 调 `xlog(...)`，但 `xlog` 仅在 `settings.c` 局部 `#define xlog printf`（`settings.h` 不导出）→ `frogos.c` 链接期 `undefined reference to 'xlog'`，`menu_libretro.so` Error 1。
+   - **修复 A（xlog 桩）**：`patch/frogui_gs_bridge.patch` 首 hunk 注入 `#ifndef xlog\n#define xlog printf\n#endif`（镜像上游意图，frogos.c 含 settings.h 但无 xlog 定义）。
+   - **修复 B（产物名归一）**：上游 Makefile 第36行 `TARGET := $(TARGET_NAME)_libretro.so`，`TARGET_NAME=menu` → 真实产出 `menu_libretro.so`；而 STAGE6/STAGE8/STAGE9 + ABI 门禁都找 `frogui_libretro.so` → `deploy/build.sh` STAGE6 在产出 `menu_libretro.so` 后 `cp menu_libretro.so frogui_libretro.so`（仅归一文件名，不改上游 TARGET_NAME，避免回归）。
+   - 验证：`git apply --check` 通过；三分支 `build.sh` `bash -n` 通过。
+- 提交（本轮 FrogUI 修复叠加于上一轮 per-core/zlib）：main build.sh+patch HEAD=`7b2412dedd`；gs-interface=`82dc1ecbe4`；native-launch=`d28c678f7c`。
+- **已 dispatch 三分支**（build.yml 仅监听 `workflow_dispatch` + push main/master，wip 分支 push 不自动触发）→ 本轮已手动 dispatch，后台监控中；STAGE7 四核心编译错误仍为 WARN 级（非门禁阻断），待 FrogUI 门禁过后再按真实日志逐一修。
 
 ### 接手监控约定（用户 2026-08-16 深夜新增铁律）
 - **每次修复必须联网查对应开源软件官方文档**求方案，禁止猜测/试错。本次依据：cppreference（C `stdbool`）、git-scm.com（`--filter=blob:none` 部分克隆）。
@@ -98,7 +103,7 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
 5. 真实源码优先：动手前读真源/官方文档，不凭经验。
 
 ## 9. 下一步（接手后）
-- 三分支修复已推送（main=82a7d83、gs=3c55b20、native=b22bda8），**尚未重新 dispatch**：先手动 `workflow_dispatch` 触发 main + 两个 wip 分支 build，然后后台监控。
+- 三分支修复已推送（main=`7b2412dedd`、gs=`82dc1ecbe4`、native=`d28c678f7c`），**已 dispatch**：后台监控三分支 build；遇错按 §6 取真实日志→查官方→修→再 dispatch，循环至绿。
 - 若三分支均 STAGE2 过 zlib 校验 + STAGE3 picoarch 编译过 + STAGE6 FrogUI 编译过 + STAGE7 核心产出 .so → 全绿 → 二选一或合并入 main（不污染），打 v0.1（测试版）。
 - 若仍失败：拉 build-output 真实日志（§6）按真实证据定位 → 查对应开源官方文档 → 修 → 重新 dispatch → 再监控，循环至绿。
 - 9 分类 .DAT 平台映射已锁定并记于 `docs/00x_dat_platform_mapping.md`（000=Arcade、001/005=NES、002=SFC、003=MD、004=GBA、006=GB/GBC、007=PS1、008=Atari2600），资源包不含 ROM。
