@@ -1,17 +1,42 @@
 diff --git a/plat_sdl.c b/plat_sdl.c
+index e32a38c..6ad8916 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
-@@ -171,6 +171,7 @@
+@@ -168,8 +168,29 @@ static void sf3000_text_native(int px, int py, const char *text, uint32_t color,
+ 
+ #endif
+ 
++// RK3036G: when the miyoo MStar HW-scaling block below is excluded
++// (RK3036G_NO_MIYOO_SCALE defined), the unguarded software-SDL
++// buffer_init/quit/scale further down still need the framebuffer
++// 'buffer' global + its GFX_Buffer type, which the excluded block
++// used to provide. Declare them at file scope here so the generic
++// RK3036G path compiles without the mi_sys/mi_gfx SDK.  The 'phyAddr'
++// field is intentionally omitted (MI_PHY comes from <mi_sys.h>, which
++// is excluded here) because the generic path never touches it.
++#if defined(RK3036G_NO_MIYOO_SCALE)
++struct GFX_Buffer {
++	void*		virAddr;
++	int 		width;
++	int 		height;
++	int 		depth;
++	int 		pitch;
++	uint32_t 	size;
++};
++static struct GFX_Buffer buffer;
++#endif
++
  // begin miyoo hardware scaling support
  #ifndef PLATFORM_SF3000
 +#if !defined(RK3036G_NO_MIYOO_SCALE)
  // loosely based on eggs' picogpsp gfx.c
  #include <mi_sys.h>
  #include <mi_gfx.h>
- #define	pixelsPa	unused1
-@@ -487,4 +488,5 @@
+@@ -487,6 +508,7 @@ static void buffer_scale(unsigned w, unsigned h, size_t pitch, const void *src)
  	// }
  }
-+#endif // RK3036G_NO_MIYOO_SCALE
  
++#endif // RK3036G_NO_MIYOO_SCALE
  #endif // end miyoo hardware scaling support
+ 
+ 
