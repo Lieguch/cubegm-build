@@ -1,8 +1,8 @@
 diff --git a/frogos.c b/frogos.c
-index 93ff2a5..100d445 100644
+index 93ff2a5..3717ac2 100644
 --- a/frogos.c
 +++ b/frogos.c
-@@ -10,20 +10,45 @@
+@@ -10,23 +10,56 @@
  #include <sys/stat.h>
  #include <time.h>
  
@@ -61,7 +61,18 @@ index 93ff2a5..100d445 100644
  
  #include "libretro.h"
  #include "font.h"
-@@ -389,6 +414,9 @@ static void auto_launch_recent_game(void) {
++
++/* CubeGM: upstream FrogUI defines xlog as `printf` only locally inside
++   settings.c, so frogos.c's xlog() logging calls link as an unresolved
++   external (undefined reference to 'xlog'). Mirror the upstream intent so
++   the menu_libretro.so core links cleanly. */
++#ifndef xlog
++#define xlog printf
++#endif
+ #include "render.h"
+ #include "theme.h"
+ #include "recent_games.h"
+@@ -389,6 +422,9 @@ static void auto_launch_recent_game(void) {
          *dot_position = '\0';
      }
  
@@ -71,7 +82,7 @@ index 93ff2a5..100d445 100644
      game_queued = true;
  }
  
-@@ -1278,6 +1306,8 @@ static void pick_random_game(void) {
+@@ -1278,6 +1314,8 @@ static void pick_random_game(void) {
                      }
  
                      recent_games_add(core_name, filename, entries[i].path);
@@ -80,7 +91,7 @@ index 93ff2a5..100d445 100644
                      game_queued = true;
                      return;
                  }
-@@ -1639,6 +1669,9 @@ static void handle_input() {
+@@ -1639,6 +1677,9 @@ static void handle_input() {
                      *dot_position = '\0';
                  }
  
@@ -90,7 +101,7 @@ index 93ff2a5..100d445 100644
                  game_queued = true; // Pass to retro_run, can only load the core from there
                  return;
              }
-@@ -1667,6 +1700,8 @@ static void handle_input() {
+@@ -1667,6 +1708,8 @@ static void handle_input() {
  
                      // Add to recent history (moves to top) - use actual full path
                      recent_games_add(core_name, filename, full_path);
@@ -99,7 +110,7 @@ index 93ff2a5..100d445 100644
                  } else {
                      return; // Invalid format
                  }
-@@ -1693,6 +1728,8 @@ static void handle_input() {
+@@ -1693,6 +1736,8 @@ static void handle_input() {
  
                      // Add to recent history when launching from favorites
                      recent_games_add(core_name, filename, full_path);
@@ -108,7 +119,7 @@ index 93ff2a5..100d445 100644
                  } else {
                      return; // Invalid format
                  }
-@@ -1704,6 +1741,8 @@ static void handle_input() {
+@@ -1704,6 +1749,8 @@ static void handle_input() {
  
                  // Add to recent history - use full entry path
                  recent_games_add(core_name, filename, entry->path);
@@ -117,7 +128,7 @@ index 93ff2a5..100d445 100644
              }
  
              sprintf((char *)ptr_gs_run_game_file, "%s;%s;%s.gba", core_name, core_name, filename); // TODO: Replace second core_name with full directory (besides /mnt/sda1) and seperate core_name from directory
-@@ -1937,15 +1976,10 @@ void retro_run(void) {
+@@ -1937,15 +1984,10 @@ void retro_run(void) {
          video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
      }
      if (game_queued) {
