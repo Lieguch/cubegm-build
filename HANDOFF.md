@@ -300,3 +300,40 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
   桩头 gcc -Wall -Wextra 模拟通过。待 push 自动触发的 run 真实日志核验真绿。
 - **状态**：main 已通过 push 自动触发新 run（build.yml 监听 push main）；wip 两分支仍
   sf3000 路径，未受影响、未改动、不重触发。三分支 HANDOFF 保持 §17 一致。
+
+## §18 — main 构建仍红（#104–#118 连续失败）的真实根因与正确修复（纠正 §17 误判）
+
+**现象**：§15–§17 的修复（stub 头文件 + 还原 build 脚本）解决了 `<mi_sys.h>` 缺失，
+但 run #118 仍 `completed+failure`。真实错误变为：
+- `plat_sdl.c:520/540/558` 与 `plat_sdl.c:354/368/436` 对 `buffer_init/buffer_quit/buffer_scale`
+  的 **重定义冲突**（conflicting types / redefinition）；
+- `scale3x_n16 / scale4x_n16 / scale5x_n16 / scale6x_n16` undeclared；
+- `plat_sdl.c:473 scaler.upscale(...)` called object is not a function。
+
+**根因（读上游 tzubertowski/TreeFrogUI_picoarch@r36sx plat_sdl.c 实际结构，2759 行）**：
+上游把 Miyoo/mini 硬件缩放块放在 `#ifndef PLATFORM_SF3000`（行 172–490），内含
+`static void buffer_init/quit/scale` 与 `scale3x_n16` 等引用；而**通用软件-SDL 的
+`buffer_init/quit/scale`（行 518–556）是 UNGUARDED、始终编译**的（用 `SDL_BlitSurface`
+做软件缩放，正是 generic 调用点 plat_sdl.c:910 所用的实现）。
+- 构建 `platform=unix`（不定义 `PLATFORM_SF3000`）时，miyoo 块（`#ifndef` 为真）**和**
+  通用软件函数（unguarded）**同时编译** → 重定义 + `scaleNx_n16` 未声明。
+- `patch/picoarch_mstar_guard.patch` 已把 miyoo 块包进
+  `#if !defined(RK3036G_NO_MIYOO_SCALE)`，但 §17 还原脚本时**把 `-DRK3036G_NO_MIYOO_SCALE`
+  从 CFLAGS 删掉了** → 宏未定义 → guard 是 no-op → miyoo 块仍激活 → 冲突依旧。
+
+**§17 的误判纠正**：§17 称 "mstar_guard 方案会 undefined-reference（buffer_scale 缺失）"
+是**错误的**。通用软件 `buffer_scale`（行 556）是 unguarded 的，始终存在；排除 miyoo 块后
+`buffer_scale` 仍由软件版提供，**不会** undefined reference。之前真正失败的原因只是 CFLAGS
+里的宏被删掉、guard 失效——并非 "gating miyoo 块导致缺失"。
+
+**正确修复（commit 4527d7a，仅改 main `deploy/build_sf3000_armhf.sh`）**：
+- 在 `unix` 构建 CFLAGS 加回 `-DRK3036G_NO_MIYOO_SCALE`。guard patch 据此**排除整个
+  miyoo 硬件缩放块**；保留 unguarded 的 sf3000 软件-SDL `buffer_*` 函数（SDL_BlitSurface
+  驱动显示）。
+- 仍走 generic `unix` 后端（**不**定义 `PLATFORM_SF3000`），避免 ~16 条 SF3000 专属硬件路径
+  （cubevol /tmp/joy_key、dlopen driver.so、手动 /dev/fb0 mmap）在 RK3036G 上运行时无输入/无音频。
+- `deploy/mi_sys_stub.h` / `mi_gfx_stub.h` 保留为 belt-and-suspenders（宏生效时不再被 include，无害）。
+
+**验证**：`bash -n` 通过；Contents API PUT 成功（build 脚本新 blob 5d291bf1，commit 4527d7a）。
+push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两分支本轮不推送代码（其最新 run
+仍绿；build.yml 仅 `push main/master` 触发，HANDOFF 同步不会触发其构建）。
