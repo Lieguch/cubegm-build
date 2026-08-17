@@ -299,3 +299,17 @@ and does NOT override `CFLAGS=` so each core's own include paths survive).
 **验证**：`bash -n` 通过；Contents API PUT 成功（build 脚本新 blob 5d291bf1，commit 4527d7a）。
 push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两分支本轮不推送代码（其最新 run
 仍绿；build.yml 仅 `push main/master` 触发，HANDOFF 同步不会触发其构建）。
+
+### S20 picoarch rewind subsystem link failure (rewind_apply undefined reference)
+
+**Symptom**: main failed continuously from #104 (2026-08-17 13:48Z); last green was #93. Real log (build-output/bootstrap.log, #132 failure) reported `undefined reference to 'rewind_apply'`; compile-time `main.c:529: warning: 'rewind_apply' used but never defined`.
+
+**Root cause (verified against upstream r36sx)**: upstream `picoarch/main.c` recently wrapped the whole rewind subsystem (rewind_init/apply/capture/back/held, def at main.c:838) in `#ifdef PLATFORM_SF3000` (main.c:804-871), but its forward decl (529) and call (639) are outside the macro and referenced unconditionally. `deploy/build_sf3000_armhf.sh` calls `make platform=sf3000 CFLAGS="$CFLAGS"`; the command-line CFLAGS= OVERRIDES the Makefile `platform=sf3000` branch internal `CFLAGS += -DPLATFORM_SF3000`, so main.c was built WITHOUT that macro -> rewind block excluded -> dangling call. wip branches' build file already carries the macro (sha 8e9ac79a) so unaffected; main lacked it (reverted by a concurrent session) and is restored at commit 32e84bbd.
+
+**Fix (commit 32e84bbd, only main `deploy/build_sf3000_armhf.sh`)**: re-add `-DPLATFORM_SF3000` to the CFLAGS line (keep ARM flags, no MIPS flags), matching Makefile sf3000 branch intent. `sf3000_keys_ptr` is defined UNCONDITIONALLY in `plat_sdl.c:58/63` (compiled into plat_sf3000.o), so `rewind_held()` extern resolves; `-DPLATFORM_SF3000` also excludes the miyoo HW-scaling block, compatible with the existing MStar guard (`RK3036G_NO_MIYOO_SCALE`).
+
+**Verification**: `bash -n` passed; CRLF preserved; new CFLAGS contains `-DPLATFORM_SF3000` once. push to main triggers a new run; verify `completed+success` next cycle. wip build file already has the macro; their latest run stays green.
+
+### Red-line self-check
+- Only ADD/minimal-edit `deploy/build_sf3000_armhf.sh` and `HANDOFF.md`; no non-agent/milestone files deleted.
+- Fix based on real #132 `bootstrap.log` + upstream Makefile/main.c/plat_sdl.c, not guesswork.
