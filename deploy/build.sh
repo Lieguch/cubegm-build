@@ -231,6 +231,13 @@ if [ ! -f frogui_libretro.so ]; then
     [ -f Makefile.libretro ] && make -f Makefile.libretro CC="$CC" CXX="$CXX"
 fi
 popd >/dev/null
+# Upstream FrogUI Makefile sets TARGET_NAME=menu so make produces
+# menu_libretro.so. Our ABI gate + deploy step expect frogui_libretro.so.
+# Normalize the produced artifact name so the rest of the pipeline is unchanged.
+if [ -f FrogUI/menu_libretro.so ] && [ ! -f FrogUI/frogui_libretro.so ]; then
+    cp FrogUI/menu_libretro.so FrogUI/frogui_libretro.so
+    log "  normalized menu_libretro.so -> frogui_libretro.so"
+fi
 if [ -f FrogUI/frogui_libretro.so ]; then
     log "FrogUI built."
 else
