@@ -76,6 +76,17 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
 8. FrogUI 启动桥接补丁必须放**根目录** `patch/frogui_gs_bridge.patch`（build.sh 引用 `$HERE/../patch/`），int 版 SHA 382a38b1；`deploy/patch/` 下同内容不会被引用。
 9. **CRLF 致命坑（2026-08-17 实证）**：`git apply`/`--check` 在 CI（ubuntu，工作树 LF）拒绝 **CRLF** 补丁（`patch does not apply` @line10）→ 补丁被 `--check` 跳过 → `ptr_gs_run_game_*`/`xlog` 未定义 → FrogUI 编译失败 → ABI 门禁 FAIL。本地 `git apply --check` 用 LF 副本会通过，掩盖此问题。**铁律：所有 `.patch` 必须经 Contents API 以 LF 落地**（推送前 `replace("\r\n","\n")`）；build.sh 同样必须 LF。
 
+10. **STAGE7 RK3036G 适配真相（2026-08-17 实证，推翻此前 classic_armv7_a7 假设）**：
+   - TreeFrogUI/FrogUI 体系**原本是 MIPS 掌机（SF2000/GB300/SF3000-Hichip）前端**，并非 ARM；但 libretro 各核心是跨架构的。RK3036G = 双核 Cortex-A7 armhf（NEON+VFPv4，glibc≤2.17）。
+   - **正确适配 = libretro 官方 ARM-Linux 共享库 recipe**（libretro-super `recipes/linux/cores-linux-armhf-generic.conf`）：`platform=unix` + 交叉工具链 `arm-linux-gnueabihf`（本项目即 crosstool-NG 构建的 sysroot 工具链），并保留 `ARCH_FLAGS=-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2`（A7+NEON 优化）。这比通用 `linux` 分支更贴 A7，且是 libretro 标准共享库构建路径。
+   - **此前误用 `classic_armv7_a7` 的真实坑**（已逐一查各核心 Makefile 真源确认）：
+     1. snes9x：该分支带 `-fwhole-program`（LTO 整程序优化）→ 编 .so 时 `ld returned 1`（retro_* 导出符号被整程序优化吞掉）。改 `platform=unix`（标准 -fPIC 共享库，无 whole-program）。
+     2. fceumm：其 Makefile **仅 PS2 分支**定义 `FCEU_VERSION_NUMERIC`，unix/classic 分支均无 → 编译报 `FCEU_VERSION_NUMERIC undeclared`。改 `platform=unix` + make 传 `FCEU_VERSION_NUMERIC=9900`（即 `-DFCEU_VERSION_NUMERIC=9900`）。
+     3. nestopia：Makefile 任何分支都没把内嵌的 `libretro-common/include` 加入 include 路径（libretro.h 实际在 `libretro/libretro-common/include/`）→ `libretro.h: No such file`。改 `platform=unix` + CFLAGS 追加 `-Ilibretro-common/include`。
+     4. picodrive：`libretro-common` 是**真 git submodule**（路径 `platform/libretro/libretro-common/`）；`git clone --depth 1`（git_clone 原无 --recursive）不拉子模块 → `streams/trans_stream.h`/`compat/strcasestr.h` 找不到。改：clone 用 `git clone --recursive`（新增 `git_clone_recursive` 函数）；`platform=unix`（picodrive 不认识 classic_armv7_a7，静默回退 unix）。
+   - **“绿”≠核心编出**：build.sh 把核心失败当 WARN 吞（`|| log "WARN: core $c build had issues."`）。真实产出须看 build-output 分支 STAGE7 日志，或 STAGE8 ABI 门禁是否拿到全部 5 个 .so。STAGE8 全过才算真绿。
+   - 验证原则：每次修复前读对应开源官方 Makefile/recipe 真源，不凭经验拍 flags（见铁律 §9）。
+
 ## 6. 沙箱操作铁律（CI 之外不能编译，只能靠 API 改仓库）
 - git push 被墙（MITM 拦截上传）→ 用 GitHub Git Data API / Contents API 落地提交（见本地 MEMORY.md §5）。
 - API 出口：--resolve api.github.com:443:20.201.28.148 + token（见本地 MEMORY.md，不入库）。
