@@ -251,6 +251,10 @@ for c in $CORES; do
     repo="$c"
     [ "$c" = "fceumm" ] && repo="libretro-fceumm"
     [ -d "$d" ] || git_clone "https://github.com/libretro/$repo.git" "$d"
+    # picodrive bundles libretro-common as a git submodule; without it the
+    # libretro-common headers (e.g. streams/trans_stream.h) are missing and
+    # the core fails to build. Other cores have no submodule, so guard it.
+    [ "$c" = "picodrive" ] && ( cd "$d" && git submodule update --init --recursive ) || true
     pushd "$d" >/dev/null
     case "$c" in
         mgba)
@@ -273,7 +277,7 @@ for c in $CORES; do
             # these cores keep their libretro Makefile under libretro/
             make -C libretro clean >/dev/null 2>&1 || true
             make -C libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=armv7-neon-hardfloat \
+                 platform=classic_armv7_a7 \
                  CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
                  -j"$(nproc)" || log "WARN: core $c build had issues."
             so=$(find libretro -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
@@ -282,7 +286,7 @@ for c in $CORES; do
             # root Makefile.libretro is the libretro entry point
             make clean >/dev/null 2>&1 || true
             make -f Makefile.libretro CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=armv7-neon-hardfloat \
+                 platform=classic_armv7_a7 \
                  CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
                  -j"$(nproc)" || log "WARN: core $c build had issues."
             so=$(find . -maxdepth 1 -name "${c}_libretro.so" 2>/dev/null | head -1)
@@ -290,7 +294,7 @@ for c in $CORES; do
         *)
             make clean >/dev/null 2>&1 || true
             make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-                 platform=armv7-neon-hardfloat \
+                 platform=classic_armv7_a7 \
                  CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
                  -j"$(nproc)" || log "WARN: core $c build had issues."
             so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
