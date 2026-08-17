@@ -169,3 +169,15 @@ The wrapper then `exec`s the absolute real compiler -> no PATH re-resolution -> 
 All other v3 behaviour unchanged (still `platform=armv-neon-hardfloat`, still injects
 `-fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -I<alsa> -Ilibretro-common/include`
 and does NOT override `CFLAGS=` so each core's own include paths survive).
+
+
+## N. STAGE7 v5 真绿门禁同步至本 wip 分支（2026-08-17）
+
+> 本分支原 `deploy/build.sh` 停在 v4（无 v5 修复），状态灯虽绿但属**假绿**：nestopia/picodrive 失败被 `|| log WARN` 吞掉、无 fail-fast。
+
+- 已通过 Git Data API 将 main 当前 v5 的三处 STAGE7 修复镜像到本分支 `deploy/build.sh`（commit `3ba0624df791`）：
+  1. 编译器 wrapper `exec` 追加 `-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS`（nestopia `SIZE_MAX` 修复，官方核对 retro_miscellaneous.h @ fc21888）。
+  2. `fceumm|picodrive` 分支 make 加 `use_libchdr=0`（picodrive `AT_HWCAP2` 修复，官方核对 Makefile:89/350）。
+  3. `CORE_FAIL` fail-fast 门禁（循环前 `CORE_FAIL=""`、缺失核心累积、循环后 `exit 1`）。
+- **保留本分支专属内容**：FrogUI STAGE6 launch-bridge（方案1 gs / 方案2 native）与 clone 的 `--filter=blob:none` + 600s/8 次健壮性（未改动）。
+- 完整根因 + 官方源核对见 **main 分支 HANDOFF §13**。本分支已与 main v5 在 STAGE7 达成对等；对应 workflow_dispatch 已触发，待真实日志核验真绿。
