@@ -146,3 +146,26 @@ main HEAD=82a7d83（STAGE7 per-core + zlib 加固，2026-08-17）。
   - 四个核心统一 `platform=armv-neon-hardfloat`，**不再覆盖 `CFLAGS=`**，各 Makefile 保留自身 include。
   - mgba 仍走 CMake（已可用，不变）。
 - 门禁（STAGE8）：须拿满 5 个核心 `.so`（mgba/snes9x/fceumm/picodrive/nestopia）+ picoarch + frogui_libretro.so；任一缺失即未真绿，须回真实日志定位。
+
+## 12. STAGE7/STAGE4 v4 -- wrapper recursion bug fix (root cause found)
+
+v3 shipped a **compiler wrapper** but set `REAL_CC="$CC"` where `$CC` is a **bare
+triplet** (`arm-linux-gnueabihf-gcc`). Root cause chain (verified in source):
+- `bootstrap_linux.sh:120` `PREFIX=/opt/cubegm-toolchain`; `:164` `export PATH="$PREFIX/bin:$PATH"`
+  -> the cross gcc lives **on PATH**.
+- `deploy/build.sh` STAGE1 `:106` `if command -v ${TARGET}-gcc` is true -> `CC="${TARGET}-gcc"` (bare).
+- The wrapper wrote `$CROSS_BIN/arm-linux-gnueabihf-gcc` and then `export PATH="$CROSS_BIN:$PATH"`.
+- Every compiler call re-resolved `arm-linux-gnueabihf-gcc` through PATH -> found the wrapper
+  again -> **infinite recursion (fork-bomb)**. The whole `deploy/build.sh` (STAGE4 picoarch,
+  mgba via cmake, STAGE7 cores) would fail at the first compile.
+
+v4 fix: at wrapper-creation time (before `CROSS_BIN` is prepended) resolve the real binary to an
+**absolute path** with `command -v`:
+```
+REAL_CC="$(command -v "$CC" 2>/dev/null || echo "$CC")"
+REAL_CXX="$(command -v "$CXX" 2>/dev/null || echo "$CXX")"
+```
+The wrapper then `exec`s the absolute real compiler -> no PATH re-resolution -> no recursion.
+All other v3 behaviour unchanged (still `platform=armv-neon-hardfloat`, still injects
+`-fPIC -marm -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -I<alsa> -Ilibretro-common/include`
+and does NOT override `CFLAGS=` so each core's own include paths survive).
