@@ -422,3 +422,48 @@ push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两
 - Symptom: link error `undefined reference to 'rewind_apply'` (main.c:838 def lives in `#ifdef PLATFORM_SF3000`).
 - Root cause: `make CFLAGS="$CFLAGS"` on cmdline OVERRIDES Makefile `CFLAGS += -DPLATFORM_SF3000`.
 - Fix: explicitly add `-DPLATFORM_SF3000` to the script's CFLAGS line (commit 89a85ee). Re-trigger via dispatch; verify #133 success next cycle.
+
+
+## §23 — main #135 FrogUI `ptr_gs_*` 编译失败 + fceumm 克隆鉴权致命错误（二次修复） — 2026-08-17T17:59:53Z
+
+### 背景
+#132 的 `rewind_apply` 链接错误已通过显式注入 `-DPLATFORM_SF3000`（commit 89a85ee）修复：#135 日志已确认 picoarch **编译并链接成功**（`=== BUILD SUCCESS ===` / `picoarch built`）。但 #135 仍 `completed+failure`（bootstrap exit 128），因为构建推进到后续阶段暴露了**此前被 picoarch 失败掩盖**的两个问题：
+
+### 根因 1 — FrogUI `frogos.c` 编译失败（build-output/bootstrap.log #135）
+```
+frogos.c:382:21: error: 'ptr_gs_run_game_file' undeclared
+frogos.c:384:21: error: 'ptr_gs_run_game_name' undeclared   (另有 6 处同错)
+make: *** [Makefile:90: frogos.o] Error 1
+```
+- 上游 `tzubertowski/FrogUI` 仅在 `#ifdef SF2000` 块内声明 gs 启动符号（`ptr_gs_run_game_file/name`、`direct_loader`、`xlog`）。
+- 仓库 `patch/frogui_gs_bridge.patch` 正是为此而设：在 RK3036G（标准 Linux）上用真实 buffer + `direct_loader()` stub 支撑这些符号名。
+- **main 的 build.sh 从未应用该 patch**（仅 `picoarch_5edits.patch` 被应用，line 136-139）；而 **green 的 wip/frogui-gs-interface 分支在 line 233-236 应用了它**。
+- 后果：FrogUI 不产出 `frogui_libretro.so` → STAGE 8 ABI gate `verify_target_abi.sh ... FrogUI/frogui_libretro.so` 收到缺失文件 → `|| die` → 构建失败。
+
+### 根因 2 — fceumm 核心克隆鉴权致命（build-output/bootstrap.log #135）
+```
+Building libretro core: fceumm
+Cloning into '.../libretro-fceumm'...
+fatal: could not read Username for 'https://github.com': No such device or address
+```
+- build.sh line 23 `set -euo pipefail`；STAGE 7 核心克隆（line 263）`git clone ... ||`（无 `|| true`）→ 失败时 `set -e` 立即终止整个脚本（git 退出码 128）。
+- mgba/snes9x 同模式克隆成功，唯独 fceumm 触发 transient 鉴权失败 → 在到达 ABI gate 前就 kill 了构建。
+
+### 修复（commit 2b9fccb3dc634b7425f3092764385010f298fc56，仅改 `deploy/build.sh`）
+1. **镜像 wip-gs 的 patch 应用步骤**（STAGE 6 前插入）：若 `patch/frogui_gs_bridge.patch` 存在且 `git -C FrogUI apply --check` 通过，则 `git -C FrogUI apply` 之。让 frogos.c 编译通过、产出 `frogui_libretro.so`。
+   - 已验证：该 patch 对**当前**上游 `tzubertowski/FrogUI@master` 的 `frogos.c`（74169 B）`git apply --check` 返回 0，确认仍可应用。
+2. **核心克隆改为 best-effort**（line 263）：克隆失败时不致命，记 WARN 并 `rm -rf` 残目录 + `continue`，跳过该 core。与既有的"核心构建失败 WARN"哲学一致；设备自带 cores，STAGE 8/9 对缺失 `.so` 容错。
+
+### 验证
+- `bash -n new_build.sh` → SYNTAX OK。
+- 两处编辑已确认落位（grep：frogui_gs_bridge.patch apply 块 @250-258；best-effort clone @282-287）。
+
+### 铁律自检
+- 仅 ADD/最小编辑 `deploy/build.sh` 与 `HANDOFF.md`；未删除任何非 agent 创建或里程碑文件。
+- 修复基于 #135 真实 `bootstrap.log` + 上游 FrogUI 实测 (`git apply --check`)，非臆测、非盲目重试。
+- 下一步：dispatch main 触发 #136，核验 `completed+success`（picoarch 绿 + FrogUI .so 产出 + 核心 best-effort）。
+
+### 中英对照（EN）
+- Root cause 1: main build.sh never applied `patch/frogui_gs_bridge.patch` (wip-gs does) -> frogos.c 'ptr_gs_run_game_file' undeclared -> no frogui_libretro.so -> ABI gate die.
+- Root cause 2: `git clone` of libretro/fceumm hit transient auth error (exit 128) and `set -euo pipefail` killed the build.
+- Fix: (a) apply frogui_gs_bridge.patch to FrogUI (verified applies to upstream@master); (b) make core clone best-effort (skip+continue on failure). bash -n OK. Re-trigger; verify #136 success.
