@@ -562,3 +562,30 @@ main 的 build.sh **缺少** wip/frogui-gs-interface 分支的 `menu_libretro.so
 ### 铁律自检
 - 仅改 `deploy/build.sh`（STAGE7 块）+ 追加本 §；未删除任何非 agent 创建或里程碑文件。
 - 修复基于 run #144 真实 bootstrap.log + §11–§13 已取证的上游 libretro Makefile，非臆测。
+
+## §27 首绿构建达成 + 补充要求 #12（2026-08-18）
+
+### 27.1 首绿构建（run #145，HEAD `05ee252dfe`）
+STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 个产物**全部 PASS** ABI gate（EM_ARM / 0x5000400 / glibc ≤ 2.17）：
+- 前端：`picoarch`、`frogui_libretro.so`
+- 5 核：`fceumm_libretro.so`、`mgba_libretro.so`、`nestopia_libretro.so`、`picodrive_libretro.so`、`snes9x_libretro.so`
+- 行 1672 `BOOTSTRAP COMPLETE`；全程无 `CORE_FAIL` / `fatal error` / `undefined reference` / `No such file`。
+**结论：main 首次实现「前端 + 5 核」全绿构建，fail-fast 设计诚实反映 5 核全编出。**
+
+### 27.2 补充要求 #12（用户 2026-08-18 授权）
+> 原话：「自动静默完成除铁律外所有检查、复盘、定位、修正、测试、上传、构建的行为，我默认允许；自动删除已完成、已取消、已失效的监控对话。」
+
+落地为治理规则：
+1. **静默自主**：检查 / 复盘 / 定位 / 修正 / 测试 / 上传 / 构建 一律静默自动执行，不弹窗、不询问；仅当触发 §0.5 三条红线（删他人文件 / 自豁免铁律 / 删里程碑文件）时才停下请示。
+2. **监控对话清理**：已完成、已取消、已失效的监控对话自动删除。跨会话对话级删除受平台能力限制；本地监控草稿（`R:/aa/*bootstrap*.log`、`R:/aa/*live_*.log`）由本 Agent 自管、按需清理。
+3. 本要求强化原「不弹窗打扰」铁律③，并与 §0.5「默认允许」清单一致（GitHub 推送修复、打测试版 tag、更新文档、跑本地门禁均无需请示）。
+
+### 27.3 本轮静默交付物
+- `deploy/build.sh`（commit `05ee252dfe`）：STAGE7 恢复编译器 wrapper + per-core recipe + fail-fast → 真绿。
+- HANDOFF.md §26（commit `db8f39ca8f`）：根因 + 修复 + 验证。
+- **打测试版 tag `v0.1` 于 `05ee252dfe`**（首个全绿构建，符合 §0.7）；同步 `v-build-good`、`stable` 锚点（§0.4）。
+- 本 §27：记录要求 #12 + 首绿确认。
+
+### 27.4 下一步（自主进行，无需打扰）
+- 固化该绿构建产物（picoarch + frogui_libretro.so + 5 核 .so）为可部署包；走 autorun 劫持（`cubegm/zhijack.sh`）在实体机验证启动（不改写 root.dat / 校验分区，红线安全）。
+- 推进 Stage2（20+ 核心 / UI / 输入映射 / 存档）与 Stage3（57 核心 / Quick Resume / 主题 / 缩略图 / 多语言）——按 SE 流程（要求 11）逐里程碑验收。
