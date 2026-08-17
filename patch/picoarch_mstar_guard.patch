@@ -1,0 +1,17 @@
+diff --git a/plat_sdl.c b/plat_sdl.c
+--- a/plat_sdl.c
++++ b/plat_sdl.c
+@@ -171,6 +171,7 @@
+ // begin miyoo hardware scaling support
+ #ifndef PLATFORM_SF3000
++#if !defined(RK3036G_NO_MIYOO_SCALE)
+ // loosely based on eggs' picogpsp gfx.c
+ #include <mi_sys.h>
+ #include <mi_gfx.h>
+ #define	pixelsPa	unused1
+@@ -487,4 +488,5 @@
+ 	// }
+ }
++#endif // RK3036G_NO_MIYOO_SCALE
+ 
+ #endif // end miyoo hardware scaling support
