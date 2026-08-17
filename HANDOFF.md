@@ -348,3 +348,10 @@ push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两
 - **验证**：本地以 post-5edits plat_sdl.c 为基线，`git apply --check` 通过；preprocessor `#if/#endif` 计数平衡（19/19）。
 - **推送**：patch blob 经 Contents API PUT（base `97a3459b…`，branch main），commit e0daf0f872。
 - **下一步**：dispatch 重触发 main 构建，核验 #121+ 是否转 `completed+success`。
+
+## §20 — build.sh 改用幂等 python 编辑应用 MStar guard（修复 CI 静默跳过 patch → miyoo 块未排除 → redefinition）
+- **现象**：#123（head a3dd823，含 §19 patch + HANDOFF）仍 completed+failure；实际日志（run 32045721383 的 build/5 步骤）显示 `[build] MStar guard patch already applied or not applicable -- skipping.`，miyoo 块未被排除 → `plat_sdl.c:420/421/422 scaleNx_n16 undeclared` + `518/540/556 conflicting/redefinition of buffer_init/quit/scale`。§19 的 patch 改动根本未被应用。
+- **根因**：`deploy/build.sh` 用 `git -C picoarch apply --check` 决定是否应用 mstar_guard patch；picoarch 仓库被 checkout 为 CRLF（git 提示 'LF will be replaced by CRLF'），而 patch 上下文是 LF → `git apply --check` 在 CI 中失败（被 `2>/dev/null` 静默）→ 走 else skip。本地复现 `git apply` 同样有该 warning；5edits patch 因上下文较短侥幸 apply 成功，但 mstar_guard 失败。
+- **修复（deploy/build.sh，commit 09f0647）**：把 mstar_guard 应用从脆弱的 `git apply` 改为**直接的、幂等、行尾无关**的 python 编辑——`grep` 是否已含 `RK3036G_NO_MIYOO_SCALE`（幂等），否则用 python 在 `// begin miyoo hardware scaling support` 前插入文件作用域 `buffer` 全局守卫块（`#if defined(RK3036G_NO_MIYOO_SCALE)`），并把 miyoo 块包裹进 `#if !defined(RK3036G_NO_MIYOO_SCALE)`；按文件实际行尾（CRLF/LF）插入，绝不会被静默跳过。patch 文件 `patch/picoarch_mstar_guard.patch` 保留作文档（build.sh 不再依赖它，符合"只加不减"）。
+- **验证（本地）**：对 post-5edits plat_sdl.c 应用该 python 编辑 → `RK3036G_NO_MIYOO_SCALE` 出现 4 次、buffer 在 188 行被 hoist、preprocessor `#if/#endif` 平衡(21/21)；inner python 独立运行通过。
+- **下一步**：dispatch 重触发 main 构建，核验 #124+ 是否转 completed+success。
