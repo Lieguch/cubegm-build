@@ -286,7 +286,8 @@ rm -rf "$CROSS_BIN"; mkdir -p "$CROSS_BIN"
 # (`gcc`/`g++`/`cc`) and the full triplet (`arm-linux-gnueabihf-gcc` etc.) so it
 # catches every rule. The real compiler is invoked by absolute path (no PATH
 # lookup) to avoid infinite recursion.
-REAL_CC="$CC"; REAL_CXX="$CXX"
+REAL_CC="$(command -v "$CC" 2>/dev/null || echo "$CC")"
+REAL_CXX="$(command -v "$CXX" 2>/dev/null || echo "$CXX")"
 TRIPLET="${CC##*/}"        # e.g. arm-linux-gnueabihf-gcc
 TRIPLET_GXX="${CXX##*/}"   # e.g. arm-linux-gnueabihf-g++
 make_wrapper () {
