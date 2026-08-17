@@ -4,5 +4,6 @@
 # 整构建首绿且真机功能验收通过 -> 打 v1.0 tag + 维护 stable 分支。
 
 当前：0.1.0-dev
-状态：STAGE1/STAGE2 已验证通过（run34 日志证据）；STAGE3-7 修复（STAGE7 per-core + 根目录 int 补丁 + zlib 加固）2026-08-17 已推送（main=82a7d83），待重新 dispatch 验证。
-尚未打 v0.1 tag（等首个全绿构建）。
+状态：v0.1 已打 tag（首个全绿构建，run #145 HEAD 05ee252，前端+5核 ABI 全 PASS）；v0.2 进行中。
+2026-08-18 修复：STAGE9 打包 SDL/libpng12/zlib 运行时库进 cubegm/lib（此前 lib/ 为空，真机启动会缺 libSDL-1.2.so.0），commit 64c5722，待 run 验证。
+里程碑 tag：core/stage1-sysroot、core/stage2-perms-fixed、core/stage2-libs、v-sysroot-writable、v-platsf3000-syntax、v0.1、v-build-good、stable。

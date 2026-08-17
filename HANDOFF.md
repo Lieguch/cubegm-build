@@ -563,6 +563,32 @@ main 的 build.sh **缺少** wip/frogui-gs-interface 分支的 `menu_libretro.so
 - 仅改 `deploy/build.sh`（STAGE7 块）+ 追加本 §；未删除任何非 agent 创建或里程碑文件。
 - 修复基于 run #144 真实 bootstrap.log + §11–§13 已取证的上游 libretro Makefile，非臆测。
 
+## §28 — 接手：立项体系建立 + STAGE9 交付缺口修复（2026-08-18）
+
+### 28.1 立项与交付体系（用户要求 #10/#11）
+- 新增 `docs/PROJECT_CHARTER.md`：立项初始需求（8 条铁律级）、硬件约束、v1.0 交付要求、版本/里程碑/验收清单、Agent 交接流程（接手 6 步 + 结束 5 步）、协作纪律。**任何 Agent 接手必须先读本文件 + HANDOFF.md**。
+- 重建 `docs/00x_dat_platform_mapping.md`：HANDOFF §9 引用但文件从未入库，已依据 HANDOFF 记录重建（000=Arcade、001/005=NES、002=SFC、003=MD、004=GBA、006=GB/GBC、007=PS1、008=Atari2600）；标注"待核"项须等用户上传真实 dat 文件后逐字节核验。
+- commit 8b73ca4（rebase 到 §27 之上）。
+
+### 28.2 接手状态确认
+- main=0f3385e 时 run #145 已确认**首个真绿**（前端+5核，ABI 全 PASS）；v0.1/v-build-good/stable tag 已打。
+- 重新核验最新 payload：`cubegm-device-payload` artifact（4MB）含 autorun/zhijack.sh/picoarch/frogui_libretro.so/cores/{fceumm,mgba,nestopia,picodrive,snes9x}_libretro.so/config.xml。
+
+### 28.3 新发现的交付缺口（真机必崩，已修复）
+- **现象**：payload 的 `cubegm/lib/` 目录为空（zip 不打包空目录），但 `zhijack.sh` 设置 `LD_LIBRARY_PATH=$CUBEGM_DIR/lib`；picoarch NEEDED（readelf 实测）= `libSDL-1.2.so.0`/`libpng12.so.0`/`libz.so.1`/`libasound.so.2`。
+- **根因**：设备 rootfs **不提供** SDL/libpng12（`docs/sysroot_strategy.md` §二 明确设备自带仅 libdrm/libkms/libasound）；STAGE2 把 SDL/libpng/zlib 编进 sysroot，但 STAGE9 只 `mkdir -p "$DST/lib"` 未把库复制进 payload → 真机上 `error while loading shared libraries: libSDL-1.2.so.0`。
+- **修复（commit 64c5722，仅改 deploy/build.sh STAGE9）**：遍历 `libSDL-1.2.so.0`/`libpng12.so.0`/`libz.so.1`，`cp -a` 从 `$SYSROOT/usr/lib/` 复制（含 symlink 链）到 `$DST/lib/`；best-effort（缺失 WARN 不 die）。`libasound.so.2` 设备自带，不打包。`bash -n` 通过。
+- **验证中**：已 push main，CI run 32082201460 构建中；预期 artifact 的 cubegm/lib/ 含三个库。
+
+### 28.4 待办（下一步）
+1. run 32082201460 出结果后核验 `lib/` 是否已打包（取 build-output 日志 grep "packaged runtime lib"）。
+2. **等待用户上传缺失附件**：`RK3036G datasheet V1.1.pdf`（确认 HDMI 1080P vs 1280×720）、`11.png`（原系统工作目录截图，v1.0 目录交付基准）、`000.dat–008.dat`（9 个 dat，映射核验）。
+3. datasheet 确认后定渲染目标（SCREEN_WIDTH/HEIGHT），可能需要 UI 资源重建 + picoarch 分辨率参数调整。
+4. 全绿 + 附件齐备后：真机验收（SRAM 存档 / 全手柄 / 启动无 sdcard is damaged）→ 打 v1.0。
+5. 同步定稿代码到 `Lieguch/cubegm-build-monkey` 仓库 + 交付 release。
+6. 其余 tools/ 目录缺 `verify_build_scripts.py`（HANDOFF §6 引用但未入库），可后续重建或忽略。
+
+
 ## §27 首绿构建达成 + 补充要求 #12（2026-08-18）
 
 ### 27.1 首绿构建（run #145，HEAD `05ee252dfe`）
