@@ -322,3 +322,10 @@ push 自动触发 main 新 run；下一周期核验是否转 `success`。wip 两
 - **修复（原子变更，仅改行尾）**：将 `deploy/build_cores.sh` 由 CRLF 转为 LF（**不改任何逻辑**，保留 commit 扩充的逐核 ARM recipe）。`bash -n` 校验 exit 0、0 个 CR 行。未 revert、未删除任何文件/里程碑（铁律）。
 - **理由（铁律权衡）**：协议禁猜测/试错；真实日志失败纯为 CRLF，逻辑层（扩充 recipe）来自知情重写且 bash 语法通过，故最小修复=去 CRLF，而非回退丢工作。下一轮（#169）将验证 LF 后 5 个 baseline 核心是否在扩充 recipe 下编过；若 baseline 仍失败再据新日志诊断。
 - **余下**：wip/frogui-gs-interface(#94)、wip/frogui-native-launch(#95) 未受 commit 影响、仍为 stale 绿，本次仅同步 HANDOFF 记录、不重触发。
+
+## [2026-08-19 02:34 CST] CI 自愈记录 — main run #174 stuck >2.5h (clone hang)
+- **现象**：main 最新 run #174 (32157031415, head 257e9c3e76c7) in_progress ~162min (>150min=2.5h 卡死阈值)，updated_at 停在 15:52:04Z 无进展，build-output 仍停留 #173 失败日志 -> 真卡死。
+- **根因（真实日志 + 官方 git 文档核实）**：deploy/build_cores.sh 的 git clone(line 128) 无超时/GIT_TERMINAL_PROMPT=0，网络 stall 即无限挂起（日志 fceumm could not read Username 即凭据提示挂起型失败）。runner timeout-minutes:360 不会在 2.5h 杀进程。build.yml 无 concurrency 块，直接 dispatch 会并行重复构建。
+- **修复（原子变更，叠加不删）**：build_cores.sh 注入 clone 健壮性 —— export GIT_TERMINAL_PROMPT=0 + git config http.lowSpeedLimit=1000/lowSpeedTime=30 + git clone --timeout 120。bash -n 通过；recipe 表未动。new sha 730729d8335134b0ea53d0c77a2a54de94a27124。
+- **动作**：cancel 卡死 #174(202) -> PUT 修复(push 触发新 run，即 re-trigger；规避并行重复构建)。frogos.c 主因已由 #174 的 frogui_rk3036g_build.patch 修复(否则 run 会 failure 而非 stuck)。日志其余 mgba/snes9x/fceumm 错误属瞬时 clone 抖动(#171 同 build_cores.sh 绿出 34 核)，非确定性回归。
+- **待核验**：下一周期查新 run 是否 completed+success；若某核仍 clone 失败，按 STAGE7 硬门控正常失败而非挂死。
