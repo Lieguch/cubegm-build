@@ -719,3 +719,13 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
   失败=SD 只读 或 MD 核心未导出 `RETRO_MEMORY_SAVE_RAM`。下一步=防御性 save_dir 补丁
   （不可写则回退 `$HOME`/tmp）+ 真机验证（存一次档后查 `/mnt/sdcard/picoarch/MD/*.sav` 是否生成）。
 - **版本/里程碑**：#159 = v0.2 候选（34 核全绿）；#160 绿后打 `v0.2` 收口。
+
+## CubeGM CI 自愈记录 — main #160 回归修复（2026-08-18T14:27Z）
+
+- **回归**：main run #160（head `b56cdf5cbf`，`build(cores): rewrite build_cores.sh as upstream platform=unix ARM port`）`completed+failure`。三分支中唯一失败（wip 两分支仍为 stale 绿 #94/#95）。
+- **根因（读 build-output/bootstrap.log 真实日志，非猜测）**：该提交将 `deploy/build_cores.sh` 整体重写为上游 `build_all.sh` 的 `platform=unix` 通用 ARM 移植（大改 +311/-158），对全部 73 核套用统一 recipe，破坏了需特定平台名的核心：
+  - STAGE7 硬门控的 4 个 baseline 核心全部失败 → `STAGE7 FAILED -- baseline cores missing: mgba snes9x picodrive nestopia` → 整轮判红。
+  - 其余 45 核 WARN-only 失败（24 OK / 49 FAIL）：atari800 误用 x86 `-mmmx`/`-fmove-all-movables`、prboom 缺 `-lpthread`、cannonball/reminiscence/jumpnbump/gme `undefined reference to main`（glibc-2.17/csu/start.S）、xrick 缺 `CONTROL_*` 宏、vitaquake `cxx17compat.h` 冲突、arduous/simavr 子模块未初始化（`No such file`）、dcastaway `xlog` 未声明、nestopia `No makefile found` 等。
+- **修复（原子变更，仅 revert `deploy/build_cores.sh`）**：回退至 #159（head `33ad9a04e9`，run #159 已验证 34 核全绿）的逐核 recipe 表版本——每核设正确平台（mgba→cmake、snes9x→`armv-neon-hardfloat` 等），per-core WARN-only、仅 baseline 5 核由 STAGE7 硬门控。`bash -n` 校验 0 语法错误。`#160` 重写内容完整保留于 git 历史（commit `b56cdf5cbf`），未删除任何文件/里程碑。
+- **理由（铁律权衡）**：首要目标为三分支 CI 全绿；`#160` 重写未经验证即红，且 49 核失败无法在不猜测前提下逐个修复（铁律禁猜测式调试）。回退至已验证绿基线为最小可靠修复；`#160` 的"榨干核数"目标建议后续按核逐个联网核对官方文档后增量重新落地。
+- **余下**：wip/frogui-gs-interface(#94)、wip/frogui-native-launch(#95) 仍为 stale 绿，未改动、未重触发。
