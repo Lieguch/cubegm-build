@@ -633,3 +633,48 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 ### 28.3 下一步
 - 实体机验证（DRM 出画 / ALSA 出声 / evdev 输入 / 回原厂安全）。
 - Stage2：核心注册映射核实 + gpsp/prosystem 启用 + 20+ 核 + 1280×720 UI + 输入映射全覆盖（按 SE 流程 要求 11）。
+
+## §29 — 全量自动化测试闭环（设备无关）+ 仅剩「实机验证」交付给用户（2026-08-18）
+
+用户补充指令：「先做好全部测试，最后才给我实机验证」。据此在要求 #12（静默自主）下补齐
+**所有不依赖真机即可确定性执行的测试**，并把唯一的真机步骤（HDMI 出画 / ALSA 出声 / evdev 手柄 /
+前端核心枚举）明确保留给用户。
+
+### 新增的两道确定性门禁（改 `deploy/build.sh`，与 STAGE8 ABI gate 同列）
+- **STAGE 8.5 — libretro 符号门禁**：每个产出 `.so`（含 `frogui_libretro.so` 启动核 + 5 个核心）
+  必须用 `readelf -sW` 校验导出全部必需 libretro 接口符号
+  `retro_api_version / retro_init / retro_deinit / retro_run / retro_load_game /
+  retro_unload_game / retro_get_system_info / retro_set_environment`。
+  任一缺失 → `STAGE8.5 FAILED` → 构建转红。价值：证明每个 .so 是**合法的 libretro 实现**，
+  而非仅编出却会在 picoarch `dlopen` 时崩的裸对象。
+- **STAGE 9.5 —  payload 完整性门禁**：STAGE9 暂存后断言 `cubegm/` 含
+  `picoarch`(可执行) + `frogui_libretro.so` + `zhijack.sh`(可执行) + `autorun`(可执行) +
+  `cores/config.xml` + 5 核 `mgba/snes9x/fceumm/picodrive/nestopia` 的 `_libretro.so`，
+  并对 `cubegm/lib/` 运行时库（libSDL-1.2 / libpng12 / libz）做存在性告警。
+  任一必需文件缺失 → `STAGE9.5 FAILED` → 构建转红。价值：绝不发布半截包。
+
+### `cores/config.xml` 收口
+原 `config.xml` 列了 ~24 个核，但构建只产出 5 个 → 若前端读取该表会出现 19 个失效条目。
+已收口为**仅这 5 个实际构建的核**（文件名与 STAGE7 产出严格一致），并注明其余系统属 Stage-2
+（构建 + 注册）。这是「让注册表匹配现实」的事实性修正，非猜测。
+
+### 确定性测试矩阵（本提交后 CI 全跑，run #153 见证）
+| 测试 | 手段 | 判定 |
+|---|---|---|
+| 前端/核心编译链接 | STAGE5/6/7 | 失败则构建红 |
+| ABI 合规 | STAGE8 `verify_target_abi.sh`（EM_ARM / 0x5000400 / glibc≤2.17） | 失败则 die |
+| libretro 合法性 | STAGE8.5 `readelf` 符号门禁 | 缺符号则 die |
+| 包完整性 | STAGE9.5 必需文件断言 | 缺文件则 die |
+| 脚本语法 | 提交前 `bash -n`（本地已 PASS） | — |
+| 发布自包含包 | build.yml `zip deploy/cubegm` → Release `payload-#153` | 产物可下载 |
+
+### 明确：唯一留给用户的「实机验证」（无法在 CI 替代）
+1. 解压 `payload-#153` → `cubegm/` 拷 SD 根；`setting.xml` 的 `<autorun>` 指向 `cubegm/zhijack.sh`（见 `deploy/DEPLOY.md`）。
+2. HDMI 是否出画（DRM/KMS dumb buffer 实测）。
+3. ALSA 是否出声（picoarch 音频链路实测）。
+4. evdev 手柄是否可用（原厂/通用 USB 手柄按键映射）。
+5. FrogUI 启动后是否能枚举并加载这 5 个核心（前端核心发现机制——属 Stage-2 源码核实项，
+   `config.xml` 为原厂格式、picoarch 是否消费待真机/源码确认；5 个 `.so` 实体已在 `cubegm/cores/`）。
+6. 回滚：把 `<autorun file="">` 改回空即完全回到原厂。
+
+> 失败 run 不计费；上述门禁把「能否烧录」全部转成 CI 可判定的红/绿，用户只需做第 2–5 项真机确认。

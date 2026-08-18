@@ -392,6 +392,41 @@ bash "$HERE/toolchain/verify_target_abi.sh" \
     || die "ABI gate FAILED -- do not deploy. Fix sysroot/toolchain and rebuild."
 
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# STAGE 8.5 -- libretro API symbol gate (deterministic; no device needed)
+#   A libretro core MUST export the required frontend interface symbols or
+#   picoarch cannot dlopen/run it. frogui_libretro.so is the launcher core and
+#   also must export them. This proves every produced .so is a VALID libretro
+#   implementation, not merely a compiled object that would crash on load.
+#   readelf reads ARM ELF symbol tables fine on the x86_64 runner.
+# -----------------------------------------------------------------------------
+LIBRETRO_SYMS="retro_api_version retro_init retro_deinit retro_run retro_load_game retro_unload_game retro_get_system_info retro_set_environment"
+sym_gate () {
+    local f="$1"; local missing=""
+    for s in $LIBRETRO_SYMS; do
+        if ! readelf -sW "$f" 2>/dev/null | grep -qw "$s"; then
+            missing="$missing $s"
+        fi
+    done
+    if [ -n "$missing" ]; then
+        log "LIBRETRO SYMBOL GATE FAIL: $(basename "$f") missing:$missing"
+        return 1
+    fi
+    log "  libretro symbols OK: $(basename "$f")"
+    return 0
+}
+SYM_FAIL=""
+[ -f FrogUI/frogui_libretro.so ] && sym_gate FrogUI/frogui_libretro.so || SYM_FAIL="${SYM_FAIL} frogui"
+for so in "$CORE_OUT"/*.so; do
+    [ -e "$so" ] || continue
+    sym_gate "$so" || SYM_FAIL="${SYM_FAIL} $(basename "$so")"
+done
+if [ -n "$SYM_FAIL" ]; then
+    log "STAGE8.5 FAILED -- cores missing libretro symbols:${SYM_FAIL}"
+    exit 1
+fi
+log "libretro symbol gate passed for launcher + all built cores."
+
 # STAGE 9 -- stage into deploy/cubegm/
 # -----------------------------------------------------------------------------
 DST="$HERE/cubegm"
@@ -426,3 +461,39 @@ log "Staged into $DST"
 log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
 log "overwriting the existing cubegm/ (stock rkgame/icube/driver.so/root.dat stay)."
 log "On next boot the device launches picoarch + FrogUI directly."
+
+# -----------------------------------------------------------------------------
+# STAGE 9.5 -- payload completeness gate (deterministic; no device needed)
+#   Assert the staged cubegm/ payload contains everything the device needs to
+#   boot the open-source front-end and run the 5 built cores. If anything is
+#   missing the build is RED -- we never ship a half-built package. Real-device
+#   validation (HDMI render / ALSA audio / evdev gamepad / frontend core
+#   enumeration) remains the only step that requires the hardware.
+# -----------------------------------------------------------------------------
+REQUIRED_BINS="picoarch frogui_libretro.so zhijack.sh autorun"
+PKG_FAIL=""
+for f in $REQUIRED_BINS; do
+    if [ ! -e "$DST/$f" ]; then PKG_FAIL="$PKG_FAIL $f"; fi
+    case "$f" in picoarch|zhijack.sh|autorun)
+        [ -x "$DST/$f" ] || PKG_FAIL="$PKG_FAIL (not-exec:$f)";; esac
+done
+[ -f "$DST/cores/config.xml" ] || PKG_FAIL="$PKG_FAIL cores/config.xml"
+for c in mgba snes9x fceumm picodrive nestopia; do
+    [ -f "$DST/cores/${c}_libretro.so" ] || PKG_FAIL="$PKG_FAIL $c"
+done
+# runtime libs the DEVICE rootfs does NOT provide (SDL/libpng12/z). Best-effort:
+# warn loudly but do not hard-fail (location can vary by sysroot build).
+LIBS_OK=0
+for l in libSDL-1.2.so.0 libpng12.so.0 libz.so.1; do
+    compgen -G "$DST/lib/${l}*" >/dev/null && LIBS_OK=$((LIBS_OK+1))
+done
+if [ "$LIBS_OK" -lt 3 ]; then
+    log "WARN: only $LIBS_OK/3 runtime libs in cubegm/lib -- picoarch may fail on device if a lib is absent."
+fi
+if [ -n "$PKG_FAIL" ]; then
+    log "STAGE9.5 FAILED -- payload missing:${PKG_FAIL}"
+    ls -lR "$DST" 2>/dev/null | head -50
+    exit 1
+fi
+log "Payload completeness OK: picoarch + frogui + 5 cores + zhijack + autorun + config.xml present."
+
