@@ -27,6 +27,17 @@
 # =============================================================================
 set -uo pipefail
 
+# CubeGM CI hardening: prevent indefinite hangs on flaky GitHub clones.
+# A stalled clone would hang the whole build (runner timeout 360m) and leave
+# the run stuck for hours with no failure signal. These settings make any
+# clone fail fast so the run can complete (skip the core / fail STAGE7) instead
+# of hanging. Verified against git docs: http.lowSpeedLimit/Time abort a
+# transfer that drops below 1 KB/s for >30s; GIT_TERMINAL_PROMPT=0 avoids
+# blocking on a credential prompt (the `could not read Username` failure mode).
+export GIT_TERMINAL_PROMPT=0
+git config --global http.lowSpeedLimit 1000
+git config --global http.lowSpeedTime 30
+
 : "${CC:=arm-linux-gnueabihf-gcc}"
 : "${CXX:=arm-linux-gnueabihf-g++}"
 : "${WORKDIR:?WORKDIR must be set}"
@@ -120,7 +131,7 @@ CORE_RECIPES=(
 for entry in "${CORE_RECIPES[@]}"; do
   IFS='|' read -r name repo build_path makefile output flags submods ldadd <<< "$entry"
   d="$WORKDIR/libretro-$name"
-  clone_args="--depth 1"
+  clone_args="--depth 1 --timeout 120"
   [ "$submods" = "1" ] && clone_args="$clone_args --recursive"
 
   if [ ! -d "$d" ]; then
