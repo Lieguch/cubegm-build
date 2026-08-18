@@ -195,6 +195,58 @@ PYEOF
     fi
 fi
 
+# -----------------------------------------------------------------------------
+# RK3036G save-hardening (MD / battery-save fix, user-reported #1).
+# picoarch writes battery SRAM (.sav) and save states (.stN) to
+# /mnt/sdcard/picoarch/<tag>/. If that path is NOT writable on the device
+# (SD mounted read-only / odd firmware), sram_write()/sram_autosave() silently
+# no-op and in-game saves are lost. Fall back to a path we ship writable
+# (cubegm/saves) and log the chosen location so the opt-in SD diagnostics
+# (log.txt) can confirm saves are landing. Mirrors the MStar-guard pattern:
+# idempotent, anchor-checked, line-ending-agnostic; skips cleanly if the
+# upstream core.c anchor ever moves.
+# -----------------------------------------------------------------------------
+SD_FILE="picoarch/core.c"
+if [ -f "$SD_FILE" ]; then
+    if grep -q 'RK3036G_SAVE_FALLBACK' "$SD_FILE"; then
+        log "save-hardening already present in $SD_FILE -- skipping."
+    else
+        python3 - "$SD_FILE" <<'PYEOF'
+import sys
+p = sys.argv[1]
+with open(p, 'r', encoding='utf-8', errors='replace', newline='') as f:
+    s = f.read()
+nl = '\r\n' if '\r\n' in s else '\n'
+anchor = ('\tconst char *sd = "/mnt/sdcard/picoarch";\n'
+          '\tsnprintf(config_dir, MAX_PATH, "%s/%s/", sd, tag_name);\n'
+          '\tmkdir("/mnt/sdcard/picoarch", 0755);\n'
+          '\tmkdir(config_dir, 0755);')
+assert anchor in s, "save-hardening anchor not found in core.c"
+repl = anchor + nl + (
+    '\t/* RK3036G_SAVE_FALLBACK: if default save dir is not writable, fall back. */' + nl +
+    '\t{' + nl +
+    '\t\tFILE *wt = fopen("/mnt/sdcard/picoarch/.writetest", "w");' + nl +
+    '\t\tif (!wt) {' + nl +
+    '\t\t\tsd = "/mnt/sdcard/cubegm/saves";' + nl +
+    '\t\t\tmkdir(sd, 0755);' + nl +
+    '\t\t} else {' + nl +
+    '\t\t\tfclose(wt);' + nl +
+    '\t\t\tremove("/mnt/sdcard/picoarch/.writetest");' + nl +
+    '\t\t}' + nl +
+    '\t}' + nl +
+    '\tsnprintf(config_dir, MAX_PATH, "%s/%s/", sd, tag_name);' + nl +
+    '\tmkdir(config_dir, 0755);' + nl +
+    '\tsnprintf(save_dir, MAX_PATH, "%s/%s/", sd, tag_name);' + nl +
+    '\tfprintf(stderr, "picoarch: save_dir=%s (tag=%s)\n", save_dir, tag_name);'
+)
+s = s.replace(anchor, repl, 1)
+with open(p, 'w', encoding='utf-8', newline='') as f:
+    f.write(s)
+PYEOF
+        log "Applied RK3036G save-hardening (writable fallback + diagnostics) to $SD_FILE"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # RK3036G = ARM (armhf, glibc-2.17). picoarch upstream targets x86/MIPS, so its
 # crash signal handler reads uc_mcontext.pc -- but on ARM glibc-2.17 mcontext_t
