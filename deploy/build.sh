@@ -237,7 +237,7 @@ repl = anchor + nl + (
     '\tsnprintf(config_dir, MAX_PATH, "%s/%s/", sd, tag_name);' + nl +
     '\tmkdir(config_dir, 0755);' + nl +
     '\tsnprintf(save_dir, MAX_PATH, "%s/%s/", sd, tag_name);' + nl +
-    '\tfprintf(stderr, "picoarch: save_dir=%s (tag=%s)\n", save_dir, tag_name);'
+    '\tfprintf(stderr, "picoarch: save_dir=%s (tag=%s)\\n", save_dir, tag_name);'
 )
 s = s.replace(anchor, repl, 1)
 with open(p, 'w', encoding='utf-8', newline='') as f:
