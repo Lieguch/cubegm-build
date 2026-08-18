@@ -776,3 +776,17 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 - **修复（原子变更，叠加不删）**：build_cores.sh 注入 clone 健壮性 —— export GIT_TERMINAL_PROMPT=0 + git config http.lowSpeedLimit=1000/lowSpeedTime=30 + git clone --timeout 120。bash -n 通过；recipe 表未动。new sha 730729d8335134b0ea53d0c77a2a54de94a27124。
 - **动作**：cancel 卡死 #174(202) -> PUT 修复(push 触发新 run，即 re-trigger；规避并行重复构建)。frogos.c 主因已由 #174 的 frogui_rk3036g_build.patch 修复(否则 run 会 failure 而非 stuck)。日志其余 mgba/snes9x/fceumm 错误属瞬时 clone 抖动(#171 同 build_cores.sh 绿出 34 核)，非确定性回归。
 - **待核验**：下一周期查新 run 是否 completed+success；若某核仍 clone 失败，按 STAGE7 硬门控正常失败而非挂死。
+
+
+## [2026-08-19 03:34 CST] CI 自愈记录 — main #175 failure: FrogUI 产物名不匹配 + 核 clone 限流（纠正 02:34 误判）
+- **现象**：main 最新 run #175 (32173791009, head 3fd4b254e1cf「clone 加固」) completed+failure。02:34 轮误判 #174 为 clone 卡死并加 clone 超时加固，但 #175 仍红，说明根因非 clone 卡死。wip 两分支 #94/#95 仍 stale 绿。
+- **真实根因（读 build-output/bootstrap.log 真实日志，纠正 02:34 轮误判）**：
+  1. **致命（STAGE 8 门禁 die）**：deploy/build.sh STAGE 6 调 FrogUI 的 libretro Makefile，其产出物为 `menu_libretro.so`（日志 `LD menu_libretro.so` 成功），但脚本其后检查 `frogui_libretro.so`（从不产出）→ 判「WARN: not produced」。STAGE 8 ABI 门禁硬性要求 `FrogUI/frogui_libretro.so` → `die` → 整轮红。57-core 重写（3df9f067）丢失了早期「menu_libretro.so → frogui_libretro.so」归一化步骤（#143 曾靠它 PASS）。
+  2. **次要（核缺失，WARN-only）**：STAGE 3/4/7 对 github.com 全部匿名 clone，GitHub-hosted runner 共享 NAT IP 触发 60 次/小时二级限流 → 403 → `could not read Username`（fceumm）/ 空克隆目录 → `make: no makefile`（mgba/snes9x）。核缺失导致烧录包不完整（STAGE 8 门禁仅校验已存在的 .so，故不直接判红，但固件功能残缺）。
+- **修复（原子变更，main 单提交：build.sh + build.yml + HANDOFF）**：
+  - build.sh STAGE 6：FrogUI 编完后若 `frogui_libretro.so` 缺失而 `menu_libretro.so` 存在，则 `cp menu_libretro.so frogui_libretro.so`（归一化；libretro 菜单核即 FrogUI 烧录产物）。bash -n 通过。
+  - build.sh：新增 `clone_repo`（github.com 浅克隆 ×3 重试，失败即清目录，避免 `[ -d ]` 守卫跳过重试）；STAGE 3/4/7 改用 `clone_repo`；STAGE 4 FrogUI 守卫改 `[ -d FrogUI/.git ]`。
+  - build.sh：若 `GITHUB_TOKEN` 存在，`git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"` 提限额 60→5000/hr 并消除凭据提示；无 token 退化为匿名（本地开发）。
+  - build.yml「Run bootstrap」步骤 env 增加 `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`，使 token 在构建期可见（权限 `contents: write` 已可匿名读公仓，鉴权仅用于提限额）。
+- **铁律**：02:34 轮的 clone 加固（3fd4b254 / build_cores.sh）属误判方向的叠加修复，保留不删（且 build_cores.sh 当前未被 build.sh 调用，属遗留脚本，无害）；未删任何创建者文件/里程碑。
+- **动作**：单提交 push main（仅触发 1 个 run，规避 push+dispatch 双触发并行重复构建）；下一周期核验新 run 是否 completed+success；若 FrogUI ABI 门禁仍失败，查 menu_libretro.so 是否真为 ARM(glibc≤2.17)。

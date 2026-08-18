@@ -54,6 +54,38 @@ mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 
 # -----------------------------------------------------------------------------
+# CI clone robustness -- authenticate github.com with the job token
+# -----------------------------------------------------------------------------
+# GitHub-hosted runners share NAT IPs; unauthenticated github.com clones hit
+# the 60-request/hr secondary rate limit -> 403 -> git prompts for a username
+# -> with GIT_TERMINAL_PROMPT=0 this fails as
+# "could not read Username ... No such device or address" (or leaves an empty
+# clone dir -> "make: No targets specified and no makefile found"). That breaks
+# FrogUI + the libretro cores, which then fails the STAGE 8 ABI gate. Embed the
+# job token in the github.com URL to raise the limit to 5000/hr and avoid the
+# prompt; falls back to anonymous if no token is present (local dev). See
+# HANDOFF.md self-heal note.
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" || true
+fi
+
+# clone_repo <repo> <dest> [extra-args...]
+# Retry a shallow clone up to 3 times; on failure remove the (possibly partial)
+# destination so a later retry is not skipped by a stale [ -d "$dest" ] guard.
+clone_repo(){
+    local repo="$1" dest="$2"; shift 2
+    local i tries=3
+    for ((i=1;i<=tries;i++)); do
+        if git clone --depth 1 "$@" "$repo" "$dest" >/dev/null 2>&1; then
+            return 0
+        fi
+        rm -rf "$dest"
+        [ "$i" -lt "$tries" ] && sleep 5
+    done
+    return 1
+}
+
+# -----------------------------------------------------------------------------
 # STAGE 1 -- locate / install the ARM cross compiler
 # -----------------------------------------------------------------------------
 if command -v ${TARGET}-gcc >/dev/null 2>&1; then
@@ -99,7 +131,7 @@ ALSA_INC="$WORKDIR/alsa-lib/include"
 if [ ! -d "$ALSA_INC/alsa" ]; then
     log "Fetching alsa-lib headers (include/ only)..."
     rm -rf "$WORKDIR/alsa-lib"
-    git clone --depth 1 "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
+    clone_repo "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
 fi
 ALSA_CFLAGS="-I$ALSA_INC"
 
@@ -121,7 +153,7 @@ if [ -n "${PICOARCH_LOCAL:-}" ] && [ -d "$PICOARCH_LOCAL" ]; then
     rm -rf picoarch && cp -a "$PICOARCH_LOCAL" picoarch
 elif [ ! -d picoarch ]; then
     log "Cloning picoarch (r36sx branch)..."
-    git clone --depth 1 -b r36sx "$PICOARCH_REPO" picoarch
+    clone_repo "$PICOARCH_REPO" picoarch -b r36sx
 else
     log "Reusing existing picoarch/ (ensure it is on r36sx AND patched)."
 fi
@@ -154,7 +186,7 @@ if [ -f "$HERE/../patch/picoarch_rk3036g_display.patch" ]; then
         die "RK3036G display patch NOT applicable and NOT already applied -- would ship black-screen binary. Abort."
     fi
 fi
-[ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
+[ -d FrogUI/.git ] || clone_repo "$FROGUI_REPO" FrogUI
 
 # -----------------------------------------------------------------------------
 # STAGE 5 -- build picoarch for RK3036G (ARM, NOT MIPS!)
@@ -207,10 +239,18 @@ if [ -f "$HERE/../patch/frogui_rk3036g_build.patch" ]; then
 fi
 log "Building FrogUI (frogui_libretro.so)..."
 pushd FrogUI >/dev/null
-make CC="$CC" CXX="$CXX" || true   # some FrogUI builds use a wrapper; fall back below
-if [ ! -f frogui_libretro.so ]; then
-    # Fallback: build as a libretro core directly if a Makefile.libretro exists
-    [ -f Makefile.libretro ] && make -f Makefile.libretro CC="$CC" CXX="$CXX" || true
+make CC="$CC" CXX="$CXX" || true   # builds menu_libretro.so (the libretro menu core)
+# The FrogUI libretro Makefile emits menu_libretro.so, but the rest of the
+# pipeline (zhijack.sh, STAGE 8 ABI gate, STAGE 9 staging) expects
+# frogui_libretro.so. Normalize the artifact name -- the libretro menu core IS
+# FrogUI's payload for the autorun hijack (see HANDOFF.md self-heal note).
+if [ ! -f frogui_libretro.so ] && [ -f menu_libretro.so ]; then
+    cp menu_libretro.so frogui_libretro.so
+    log "Normalized menu_libretro.so -> frogui_libretro.so"
+fi
+if [ ! -f frogui_libretro.so ] && [ -f Makefile.libretro ]; then
+    make -f Makefile.libretro CC="$CC" CXX="$CXX" || true
+    [ ! -f frogui_libretro.so ] && [ -f menu_libretro.so ] && cp menu_libretro.so frogui_libretro.so
 fi
 popd >/dev/null
 if [ -f FrogUI/frogui_libretro.so ]; then
@@ -227,8 +267,12 @@ mkdir -p "$CORE_OUT"
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
-    [ -d "$d" ] || git clone --depth 1 "https://github.com/libretro/$c.git" "$d"
-    pushd "$d" >/dev/null
+    if [ ! -d "$d/.git" ]; then
+        clone_repo "https://github.com/libretro/$c.git" "$d" \
+            || log "WARN: core $c clone failed after retries (rate-limited or offline)."
+    fi
+    if [ -d "$d" ]; then
+        pushd "$d" >/dev/null
     make clean >/dev/null 2>&1 || true
     make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
          platform=armv7-neon-hardfloat \
@@ -237,7 +281,8 @@ for c in $CORES; do
     # locate the produced .so
     so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
-    popd >/dev/null
+        popd >/dev/null
+    fi
 done
 
 # -----------------------------------------------------------------------------
