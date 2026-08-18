@@ -2,7 +2,7 @@
 <!--
   CubeGM open-source replacement core registry (deploy/cubegm/cores/config.xml)
   Registry for the OPEN-SOURCE front-end (picoarch + FrogUI). build.sh compiles
-  EVERY core in deploy/build_cores.sh (WARN-only per-core; ~35-50 of 66 build on
+  EVERY core in deploy/build_cores.sh (WARN-only per-core; ~35-50 of 67 build on
   armhf). This file is GENERATED from that recipe table and lists all intended
   cores so the launcher never presents a core whose .so is absent.
 
@@ -32,6 +32,14 @@
 </core>
 <core>
   <emucore name="SNES (Snes9x 2005)" file="snes9x2005_plus_libretro.so" />
+  <supported_extensions>SMC</supported_extensions>
+  <supported_extensions>SFC</supported_extensions>
+  <supported_extensions>SWC</supported_extensions>
+  <supported_extensions>FIG</supported_extensions>
+  <supported_extensions>SNES</supported_extensions>
+</core>
+<core>
+  <emucore name="SNES (Snes9x)" file="snes9x_libretro.so" />
   <supported_extensions>SMC</supported_extensions>
   <supported_extensions>SFC</supported_extensions>
   <supported_extensions>SWC</supported_extensions>

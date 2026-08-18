@@ -46,6 +46,7 @@ CORES=(
   "snes9x2005|https://github.com/tzubertowski/snes9x2005|.|Makefile.libretro|snes9x2005_plus_libretro.so|USE_BLARGG_APU=1|0"
   "snes9x2002|https://github.com/tzubertowski/snes9x2002|.|Makefile.libretro|snes9x2002_libretro.so||0"
   "snes9x2010|https://github.com/libretro/snes9x2010|.|Makefile.libretro|snes9x2010_libretro.so||0"
+  "snes9x|https://github.com/libretro/snes9x|libretro|Makefile|snes9x_libretro.so||0"
   "gambatte|https://github.com/tzubertowski/libretro-gambatte|.|Makefile.libretro|gambatte_libretro.so||0"
   "gearboy|https://github.com/drhelius/Gearboy|platform/libretro|Makefile|gearboy_libretro.so||0"
   "tgbdual|https://github.com/libretro/libretro-tgbdual|.|Makefile|tgbdual_libretro.so||0"
@@ -57,7 +58,7 @@ CORES=(
   "gw|https://github.com/libretro/gw-libretro|.|Makefile|gw_libretro.so||0"
 
   # === Sega ===
-  "picodrive|https://github.com/libretro/picodrive|.|Makefile.libretro|picodrive_libretro.so||1"
+  "picodrive|https://github.com/libretro/picodrive|.|Makefile.libretro|picodrive_libretro.so|use_libchdr=0|1"
   "genesis_plus_gx|https://github.com/libretro/Genesis-Plus-GX|.|Makefile.libretro|genesis_plus_gx_libretro.so||0"
   "gearsystem|https://github.com/drhelius/Gearsystem|.|Makefile|gearsystem_libretro.so||0"
 
@@ -170,10 +171,17 @@ for entry in "${CORES[@]}"; do
     *)
       make_args=(CC="$CC" CXX="$CXX")
       [ -n "$makefile" ] && make_args+=(-f "$makefile")
-      make_args+=(platform=armv7-neon-hardfloat
-                  CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS"
+      # NOTE: platform MUST be "armv-neon-hardfloat" -- that is libretro's real
+      # target name. "armv7-neon-hardfloat" matches NO platform block, so the
+      # core's Makefile falls back to a broken/host config and the build dies.
+      # We do NOT override CFLAGS/CXXFLAGS/LDFLAGS here: each core's Makefile
+      # platform block sets its own correct flags, and the PATH compiler wrapper
+      # (built by build.sh) injects -fPIC -marm -march/-mfpu/-mfloat-abi for us.
+      make_args+=(platform=armv-neon-hardfloat
                   $flags -j"$(nproc)")
-      make "${make_args[@]}" >/dev/null 2>&1
+      mklog="$WORKDIR/_mk_${name}.log"
+      make "${make_args[@]}" >"$mklog" 2>&1
+      rc=$?
       so=$(find . -name "$output" 2>/dev/null | head -1)
       ;;
   esac
@@ -181,9 +189,11 @@ for entry in "${CORES[@]}"; do
   if [ -n "$so" ] && [ -f "$so" ]; then
     cp "$so" "$CORES_OUT/" && echo "[core] OK: $name -> $(basename "$so")"; SUCC=$((SUCC+1))
   elif [ -n "$so" ]; then
-    echo "[core] FAIL: $name (build ok but $output missing)"; FAIL=$((FAIL+1)); FAILED_CORES+=("$name (no .so)")
+    echo "[core] FAIL: $name (built but $output missing)"; FAIL=$((FAIL+1)); FAILED_CORES+=("$name (no .so)")
   else
-    echo "[core] FAIL: $name (build error)"; FAIL=$((FAIL+1)); FAILED_CORES+=("$name (build)")
+    echo "[core] FAIL: $name (build error rc=${rc:-?}) -- tail of $mklog:"
+    tail -n 25 "$mklog" 2>/dev/null | sed 's/^/    | /'
+    FAIL=$((FAIL+1)); FAILED_CORES+=("$name (build)")
   fi
   popd >/dev/null 2>&1
 done
