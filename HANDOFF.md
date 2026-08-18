@@ -615,3 +615,21 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 ### 27.4 下一步（自主进行，无需打扰）
 - 固化该绿构建产物（picoarch + frogui_libretro.so + 5 核 .so）为可部署包；走 autorun 劫持（`cubegm/zhijack.sh`）在实体机验证启动（不改写 root.dat / 校验分区，红线安全）。
 - 推进 Stage2（20+ 核心 / UI / 输入映射 / 存档）与 Stage3（57 核心 / Quick Resume / 主题 / 缩略图 / 多语言）——按 SE 流程（要求 11）逐里程碑验收。
+
+
+## §28 部署层（autorun 劫持 + 打包 + 部署文档）— 2026-08-18
+> 依据：cubegm_replacement_feasibility.md（启动链路/autorun 劫持）、architecture.md（§四 启动链路、§七 Stage1 MVP）、cubegm_input_and_ui.md（§四 config.xml 模式）。全部来自已核实文档，非猜测。
+
+### 28.1 交付物（新增 4 文件，build.sh 未改）
+- `deploy/zhijack.sh`：autorun 入口。`setting.xml` 的 `<autorun file="cubegm/zhijack.sh"/>` 触发；`exec ./picoarch ./cores/frogui_libretro.so` 拉起前端菜单。**不替换/不修改任何原厂二进制**（规避 "sdcard is damaged"）。
+- `deploy/package.sh`：构建后把 `deploy/buildroot/` 产物（picoarch + cores/*.so）组装成 SD 卡布局 `cubegm/`，打包 `cubegm-deploy.tar.gz`（含 zhijack.sh / setting.xml 模板 / DEPLOY.md / Roms/ 占位）。
+- `deploy/setting.xml.cubegm`：autorun 配置**模板**（仅 `<autorun>` 一行），明确标注"合并进设备原 setting.xml，勿整文件覆盖"。
+- `deploy/DEPLOY.md`：SD 布局、部署步骤、启动链路、实体机验证清单、回滚、已知边界。
+
+### 28.2 关键边界（诚实声明，非猜测）
+- **核心注册（扩展名→核心映射）未臆造**：原厂 `cores/config.xml` 是给原厂 `rkgame` 用的；本栈是 FrogUI/picoarch，其选核映射表**尚未对照 treefrog 源码核实**。故本包只放 `.so` + 文档，不生成声称"已接线"的 config.xml。下一步（Stage2）先读 `TreeFrogUI_picoarch`/`FrogUI` 源码确认映射逻辑再补。
+- **未实体机验证**：本环境无设备，仅 CI 构建绿（run #145，tag v0.1）。部署/启动需在 RK3036G 实体机按 DEPLOY.md §四 验证。
+
+### 28.3 下一步
+- 实体机验证（DRM 出画 / ALSA 出声 / evdev 输入 / 回原厂安全）。
+- Stage2：核心注册映射核实 + gpsp/prosystem 启用 + 20+ 核 + 1280×720 UI + 输入映射全覆盖（按 SE 流程 要求 11）。
