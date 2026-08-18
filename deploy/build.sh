@@ -134,9 +134,9 @@ if [ ! -f picoarch/libretro-common/include/libretro.h ] \
 fi
 # Apply the 5-edit patch (RTC + evdev gamepad) if a clean checkout and patch present.
 if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
-    if git -C picoarch apply --check "$HERE/../patch/picoarch_5edits.patch" 2>/dev/null; then
+    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_5edits.patch" 2>/dev/null; then
         log "Applying 5-edit patch (RTC + evdev gamepad)..."
-        git -C picoarch apply "$HERE/../patch/picoarch_5edits.patch"
+        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_5edits.patch"
     else
         log "5-edit patch already applied or not applicable -- skipping."
     fi
@@ -145,10 +145,10 @@ fi
 # RK3036G which has no /dev/dis + no stock driver.so). MUST run AFTER the
 # 5-edit patch above (both touch plat_sdl.c but in non-overlapping regions).
 if [ -f "$HERE/../patch/picoarch_rk3036g_display.patch" ]; then
-    if git -C picoarch apply --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
+    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
         log "Applying RK3036G display patch (fb0 direct-drive)..."
-        git -C picoarch apply "$HERE/../patch/picoarch_rk3036g_display.patch"
-    elif git -C picoarch apply -R --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
+        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_rk3036g_display.patch"
+    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
         log "RK3036G display patch already applied -- skipping."
     else
         die "RK3036G display patch NOT applicable and NOT already applied -- would ship black-screen binary. Abort."
