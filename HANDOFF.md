@@ -694,3 +694,28 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 - 文档：`DEPLOY.md` 之前在 main 中不存在，本次补齐烧录步骤 + 实机验证清单（以真实 autorun/zhijack.sh/build.yml 为据，未臆造）。
 - 版本：打 tag `v0.2` 于 `377ac862208a`（首个含完整门禁的绿构建）。`v0.1` / `v-build-good`（05ee252dfe）保留为"首个全绿"历史锚点。
 - 待用户：实机验证（HDMI / ALSA / evdev / 前端枚举 / 核心运行 / 存档 / 回滚），详见 DEPLOY.md 第 5 节。验证通过即可定 `v1.0`。
+
+## §31 官方构建配方研究 + #160（platform=unix 重写 build_cores.sh）
+
+- **run #159（`33ad9a04`）全绿**：34 个核心 + 启动器（frogui + libemu_tfhijack）编译通过，
+  STAGE 8.5 符号门禁 + STAGE 9.5 完整性门禁 PASS；payload 含
+  picoarch / frogui / boot-override(setting.xml+dummy.md+libemu_md.so) / 34 cores /
+  zhijack / autorun / config.xml。
+- **官方文档研究（2026-08-18）**：拉取 `tzubertowski/treefrog-ui` 的 `build_all.sh` /
+  `clone_cores.sh` / `install.md` / `cores.md` 存于 `docs/upstream_reference/`。结论：
+  上游对所有核心统一用 `platform=unix` + 编译器 wrapper（注入全部 arch flags）+
+  `LDFLAGS_S`/`LDFLAGS_SC`（`-shared -Wl,--no-undefined …`）。这正是「rc=0 但无 .so」
+  类失败的根因与解法。`install.md` 亦确认启动劫持机制（rkgame autorun →
+  `libemu_md.so` = tfhijack → `picoarch frogui_libretro.so`）。
+- **#160 修复（证据驱动，用户 #3）**：将 `deploy/build_cores.sh` 整体重写为上游
+  `build_all.sh` 的忠实 ARM 移植——`platform=unix` + wrapper + `LDFLAGS_S/SC` 分类、
+  fba wrapper（`-fsigned-char -fno-strict-aliasing`）、vecx `HAS_GPU=0`、子模块 init、
+  gpsp / pcsx_rearmed / o2em / uae / frodo / arduous 特殊块、tgbdual 修正 URL
+  （`libretro/tgbdual-libretro`）。目标：在 34 核基础上榨干硬件、逼近 cores.md 全集（用户 #8）。
+- **config.xml 真相**：它是 stock rkgame 格式、作为 fallback 保留；开源栈实际按
+  `cubegm/cores/*.so` + `cores.md` 文件夹扫描枚举核心。故 config.xml 漂移不阻断枚举。
+- **MD 策略存档诊断（用户 #1）**：picoarch `core.c` 已实现电池 SRAM 持久化
+  （`sram_write` / `sram_autosave` → `/mnt/sdcard/picoarch/<tag>/<rom>.sav`，每帧节流落盘）。
+  失败=SD 只读 或 MD 核心未导出 `RETRO_MEMORY_SAVE_RAM`。下一步=防御性 save_dir 补丁
+  （不可写则回退 `$HOME`/tmp）+ 真机验证（存一次档后查 `/mnt/sdcard/picoarch/MD/*.sav` 是否生成）。
+- **版本/里程碑**：#159 = v0.2 候选（34 核全绿）；#160 绿后打 `v0.2` 收口。
