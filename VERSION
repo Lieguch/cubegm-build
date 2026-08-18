@@ -3,8 +3,9 @@
 # 1.0 之前全为测试版；首个完整绿构建 = v0.1，之后 v0.2、v0.3...（每次实质进展递增）
 # 整构建首绿且真机功能验收通过 -> 打 v1.0 tag + 维护 stable 分支。
 
-当前：0.1.0-dev
-状态：v0.1 已打 tag（首个全绿构建，run #145 HEAD 05ee252，前端+5核 ABI 全 PASS）；v0.2 进行中。
+当前：0.3.0-dev
+状态：v0.1 已打 tag（首个全绿构建，run #145 HEAD 05ee252，前端+5核 ABI 全 PASS）；v0.2 已打 tag（run #153 HEAD 377ac862208a，含全量测试门禁：STAGE8 ABI + STAGE8.5 符号 + STAGE9.5 完整性，34 核全绿）；v0.3 进行中（MD 策略存档写权限加固 #162/#166，run #166 HEAD cb065b23）。
 2026-08-18 修复+验证：STAGE9 打包 SDL/libpng12/zlib 运行时库进 cubegm/lib（run #150 全绿，lib/ 三个库 symlink 链完整，6 产物 ABI 全 PASS，release payload-150 已发布）。
 2026-08-18 datasheet：RK3036G SoC Max output 1920x1080（HDMI 1.4a），1280x720 维持。
-里程碑 tag：core/stage1-sysroot、core/stage2-perms-fixed、core/stage2-libs、v-sysroot-writable、v-platsf3000-syntax、v0.1、v-build-good、stable。
+里程碑 tag：core/stage1-sysroot、core/stage2-perms-fixed、core/stage2-libs、v-sysroot-writable、v-platsf3000-syntax、v0.1、v-build-good、v0.2、stable。
+2026-08-18 MD 策略存档：#162 注入 save_dir 可写性回退+诊断（cubegm/saves）；run #165 因 fprintf 字符串内 Python \n 误转真实换行编译失败（core.c:359 missing terminating "）；#166 转义修复（cb065b23），待 run #166 绿后打 v0.3。

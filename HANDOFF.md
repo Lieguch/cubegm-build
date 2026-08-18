@@ -2,7 +2,7 @@
 
 > 用途：供接手的 Agent / 大模型快速接手，读完即可继续，无需从头探索。
 > 维护：每次达到版本里程碑（v0.x / v1.0）或重大变更后更新本文件与 VERSION。
-> 最近更新：2026-08-18（STAGE9 lib 打包已验证 run #150 全绿 + release payload-150；datasheet 已解析确认 SoC 支持 1080P，1280x720 维持）
+> 最近更新：2026-08-18（§32 MD 策略存档根因 + #162 存档加固 + run #165/#166 编译回归修复；main HEAD cb065b23 待 run #166 绿）
 
 ## 1. 项目目标
 为 RK3036G 掌机（R36SX / DataFrog SF3000 / SF3500 / GB350 等）做 CubeGM 固件开源替代。
@@ -729,3 +729,29 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 - **修复（原子变更，仅 revert `deploy/build_cores.sh`）**：回退至 #159（head `33ad9a04e9`，run #159 已验证 34 核全绿）的逐核 recipe 表版本——每核设正确平台（mgba→cmake、snes9x→`armv-neon-hardfloat` 等），per-core WARN-only、仅 baseline 5 核由 STAGE7 硬门控。`bash -n` 校验 0 语法错误。`#160` 重写内容完整保留于 git 历史（commit `b56cdf5cbf`），未删除任何文件/里程碑。
 - **理由（铁律权衡）**：首要目标为三分支 CI 全绿；`#160` 重写未经验证即红，且 49 核失败无法在不猜测前提下逐个修复（铁律禁猜测式调试）。回退至已验证绿基线为最小可靠修复；`#160` 的"榨干核数"目标建议后续按核逐个联网核对官方文档后增量重新落地。
 - **余下**：wip/frogui-gs-interface(#94)、wip/frogui-native-launch(#95) 仍为 stale 绿，未改动、未重触发。
+
+## §32 MD 策略存档根因 + #162 存档加固 + #165/#166 回归修复（2026-08-18）
+
+### MD 策略存档根因（证据驱动，非猜测）
+- 用户 #1 报告：实体机玩世嘉 MD 策略游戏时「存储功能没有成功」。
+- 经 API 拉取上游 `tzubertowski/TreeFrogUI_picoarch` r36sx 实证的 `core.c`(909 行)/`main.c`(1185 行)：
+  - 上游 r36sx **已自带 `sram_autosave()`**（core.c 约 L100 + main.c:1084 每帧调用，约 10s 节流，仅 SRAM 变化且 `sram_size!=0` 时写 `.sav`）。
+  - `set_directories()`(core.c:333) 硬编码 `sd="/mnt/sdcard/picoarch"`，`save_dir="/mnt/sdcard/picoarch/<tag_name>/"`。
+- 结论：**代码路径正确，MD 存档失败为环境性** —— 设备固件下 `/mnt/sdcard/picoarch` 不可写 → `sram_write()` 中 `fopen(save_dir/xxx.sav)` 失败、静默 no-op。次要怀疑：个别核心未导出 `RETRO_MEMORY_SAVE_RAM`（sram_size==0 也静默返回），但 MD(picodrive) 支持电池 RAM，主因为写权限（见 §31 MD 诊断）。
+
+### #162 存档加固（防御性回退 + 诊断）
+- 在 `deploy/build.sh` 的 picoarch 克隆后、构建前，对 `picoarch/core.c` 的 `set_directories()` 注入（幂等、锚点校验，仿既有 MStar 守卫）：
+  - 若 `/mnt/sdcard/picoarch` 不可写 → 回退 `sd="/mnt/sdcard/cubegm/saves"`（部署目录，必可写）并 `mkdir`。
+  - 重新 `snprintf(config_dir/save_dir)`，并打印 `stderr: "picoarch: save_dir=..."` 供真机 `log.txt` 诊断。
+- 提交 `bebf64d7b316`（parent `b5d79b47`，即 #161 revert 后的绿基线），触发 run #165。
+
+### run #165 回归（编译错误）
+- run #165（head `bebf64d7`）`completed+failure`。读 build-output/bootstrap.log 真实日志：`core.c:359 error: missing terminating " character` —— 注入的 `fprintf` 诊断字符串里 Python `'\n'` 被误当作**真实换行**写进 `core.c`，破坏了 C 字符串字面量（连锁报 `expected ')'`、`missing terminating "`）。
+- 修复（铁律：先日志后归因，不猜测）：将该 `\n` 转义为 `\\n`，让 build 时 Python 写出字面 `\n` 给 C 源。
+- 提交 `cb065b2330ae`（parent `bebf64d7`），触发 run #166 验证（进行中）。
+- 验证：full inline-edit 已在本地对**实时 upstream r36sx core.c** 模拟——锚点命中、花括号平衡(6==6)、`fprintf` 合法、`save_dir` 回退 present。`const char *sd` 重赋值合法（指针可重绑，仅指向内容 const）。
+
+### 当前状态（2026-08-18）
+- main HEAD = `cb065b2330ae`（run #166 构建中）。
+- 防御性 save_dir 回退 + 诊断已就位；待 run #166 绿后 → 本回合治理文件（HANDOFF 本 § + `docs/DELIVERY_REQUIREMENTS.md` + VERSION）→ 打 `v0.3` → 交付 payload（含 MD 策略存档真机回归清单，见 `docs/DELIVERY_REQUIREMENTS.md` §四）。
+- CI 经济：本回合仅 3 次 main 推送（#161 revert / #162 加固 / #166 修复），每次均为必要原子变更；#162 的编译回归在 #166 单轮内闭环修复，未触发多余构建。

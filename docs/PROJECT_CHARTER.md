@@ -2,7 +2,7 @@
 
 > 本文件是项目**总纲**：记录立项初始需求、最终交付要求、版本/里程碑/验收清单、Agent 交接流程。
 > 任何 Agent 接手工作前必须先读本文件 + `HANDOFF.md`。
-> 最近更新：2026-08-17
+> 最近更新：2026-08-18
 
 ---
 
@@ -90,8 +90,11 @@
 - 只改一个明确问题、最小文件集；已验证修复只叠加不删除（§9 铁律 2、3）。
 - CI 日志取真实内容（build-output 分支），先日志后归因（§6）。
 
-## 七、当前活跃任务（2026-08-17 交接点）
+## 七、当前活跃任务（2026-08-18 交接点）
 
-- main=db8f39c：§26 STAGE7 编译器 wrapper 核心构建修复已推送，**待 CI 验证 5 核全部产出 .so + STAGE8 ABI 门禁 PASS**。
-- wip/frogui-gs-interface、wip/frogui-native-launch：旧 sf3000 路径，待同步 v5/v6 修复。
-- 待办：datasheet 确认 HDMI 分辨率；000–008.dat 平台映射绑定核心；全绿后真机验收 → v1.0。
+- main=cb065b23：§32 MD 策略存档加固（#162 注入 save_dir 可写性回退+诊断；#165 编译回归；#166 转义修复），**run #166 构建中，待 PASS**。
+- run #164 已验证 34 核基线全绿（#161 revert 回到 33ad9a04 per-core recipe）；run #153 起含全量测试门禁（STAGE8 ABI + STAGE8.5 符号 + STAGE9.5 完整性）。
+- 待办：run #166 绿后打 v0.3 + 推送治理文件（HANDOFF §32 / DELIVERY_REQUIREMENTS.md / VERSION）+ 交付 payload（含 MD 策略存档真机回归清单）；真机验收（HDMI/ALSA/evdev/前端枚举/核心运行/存档/全手柄）→ v1.0。
+- datasheet HDMI 分辨率已确认：1280×720 维持（SoC 支持 1080P）。
+- wip/frogui-gs-interface、wip/frogui-native-launch：旧 sf3000 路径，stale 绿，未改动。
+
