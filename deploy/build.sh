@@ -438,8 +438,15 @@ else
 fi
 mkdir -p "$DST/MD"
 if [ -f "$HERE/cubegm/MD/dummy.md" ]; then
-    cp -f "$HERE/cubegm/MD/dummy.md" "$DST/MD/dummy.md"
+    # dummy.md is committed source AND the payload target (DST == $HERE/cubegm
+    # here), so a plain cp would hit "are the same file" and abort under set -e.
+    # Only copy when the paths truly differ; otherwise it is already in place.
+    if [ "$HERE/cubegm/MD/dummy.md" != "$DST/MD/dummy.md" ]; then
+        cp -f "$HERE/cubegm/MD/dummy.md" "$DST/MD/dummy.md" 2>/dev/null || true
+    fi
     log "  staged dummy.md -> cubegm/MD/dummy.md"
+else
+    log "WARN: MD/dummy.md missing from source -- autorun ROM absent."
 fi
 if [ -f "$TFHIJACK_SO" ]; then
     mkdir -p "$DST/cores"

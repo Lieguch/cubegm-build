@@ -43,12 +43,12 @@ CORES=(
   "fceumm|https://github.com/tzubertowski/libretro-fceumm|.|Makefile.libretro|fceumm_libretro.so||0"
   "quicknes|https://github.com/libretro/QuickNES_Core|.|Makefile|quicknes_libretro.so||0"
   "nestopia|https://github.com/libretro/nestopia|libretro|Makefile|nestopia_libretro.so||0"
-  "snes9x2005|https://github.com/tzubertowski/snes9x2005|.|Makefile.libretro|snes9x2005_plus_libretro.so|USE_BLARGG_APU=1|0"
-  "snes9x2002|https://github.com/tzubertowski/snes9x2002|.|Makefile.libretro|snes9x2002_libretro.so||0"
+  "snes9x2005|https://github.com/tzubertowski/snes9x2005|.|Makefile|snes9x2005_plus_libretro.so|USE_BLARGG_APU=1|0"
+  "snes9x2002|https://github.com/tzubertowski/snes9x2002|.|Makefile|snes9x2002_libretro.so||0"
   "snes9x2010|https://github.com/libretro/snes9x2010|.|Makefile.libretro|snes9x2010_libretro.so||0"
   "snes9x|https://github.com/libretro/snes9x|libretro|Makefile|snes9x_libretro.so||0"
   "gambatte|https://github.com/tzubertowski/libretro-gambatte|.|Makefile.libretro|gambatte_libretro.so||0"
-  "gearboy|https://github.com/drhelius/Gearboy|platform/libretro|Makefile|gearboy_libretro.so||0"
+  "gearboy|https://github.com/drhelius/Gearboy|platforms/libretro|Makefile|gearboy_libretro.so||0"
   "tgbdual|https://github.com/libretro/libretro-tgbdual|.|Makefile|tgbdual_libretro.so||0"
   "doublecherrygb|https://github.com/DoubleCherry/doublecherryGB-libretro|.|Makefile|doublecherrygb_libretro.so||0"
   "gpsp|https://github.com/tzubertowski/gpsp_multicore|.|Makefile|gpsp_libretro.so||0"
@@ -60,7 +60,7 @@ CORES=(
   # === Sega ===
   "picodrive|https://github.com/libretro/picodrive|.|Makefile.libretro|picodrive_libretro.so|use_libchdr=0|1"
   "genesis_plus_gx|https://github.com/libretro/Genesis-Plus-GX|.|Makefile.libretro|genesis_plus_gx_libretro.so||0"
-  "gearsystem|https://github.com/drhelius/Gearsystem|.|Makefile|gearsystem_libretro.so||0"
+  "gearsystem|https://github.com/drhelius/Gearsystem|platforms/libretro|Makefile|gearsystem_libretro.so||0"
 
   # === Atari ===
   "stella2014|https://github.com/libretro/stella2014-libretro|.|Makefile|stella2014_libretro.so||0"
@@ -68,12 +68,12 @@ CORES=(
   "prosystem|https://github.com/libretro/prosystem-libretro|.|Makefile|prosystem_libretro.so||0"
   "atari800|https://github.com/libretro/libretro-atari800|.|Makefile|atari800_libretro.so||0"
   "handy|https://github.com/libretro/libretro-handy|.|Makefile|handy_libretro.so||0"
-  "beetle_lynx|https://github.com/libretro/beetle-lynx-libretro|.|Makefile.libretro|mednafen_lynx_libretro.so||0"
+  "beetle_lynx|https://github.com/libretro/beetle-lynx-libretro|.|Makefile|mednafen_lynx_libretro.so||0"
 
   # === NEC / PC Engine ===
-  "beetle_pce_fast|https://github.com/libretro/beetle-pce-fast-libretro|.|Makefile.libretro|mednafen_pce_fast_libretro.so||0"
-  "beetle_supergrafx|https://github.com/libretro/beetle-supergrafx-libretro|.|Makefile.libretro|mednafen_supergrafx_libretro.so||0"
-  "beetle_pcfx|https://github.com/libretro/beetle-pcfx-libretro|.|Makefile.libretro|mednafen_pcfx_libretro.so||0"
+  "beetle_pce_fast|https://github.com/libretro/beetle-pce-fast-libretro|.|Makefile|mednafen_pce_fast_libretro.so||0"
+  "beetle_supergrafx|https://github.com/libretro/beetle-supergrafx-libretro|.|Makefile|mednafen_supergrafx_libretro.so||0"
+  "beetle_pcfx|https://github.com/libretro/beetle-pcfx-libretro|.|Makefile|mednafen_pcfx_libretro.so||0"
   "quasi88|https://github.com/libretro/quasi88-libretro|.|Makefile|quasi88_libretro.so||0"
 
   # === SNK ===
@@ -81,31 +81,31 @@ CORES=(
   "geolith|https://github.com/libretro/geolith-libretro|.|Makefile|geolith_libretro.so||0"
 
   # === Bandai ===
-  "beetle_wswan|https://github.com/libretro/beetle-wswan-libretro|.|Makefile.libretro|mednafen_wswan_libretro.so||0"
-  "potator|https://github.com/libretro/potator|.|Makefile|potator_libretro.so||0"
+  "beetle_wswan|https://github.com/libretro/beetle-wswan-libretro|.|Makefile|mednafen_wswan_libretro.so||0"
+  "potator|https://github.com/libretro/potator|platform/libretro|Makefile|potator_libretro.so||0"
 
   # === Home computers ===
   "fuse|https://github.com/libretro/fuse-libretro|.|Makefile|fuse_libretro.so||0"
   "libretro_81|https://github.com/libretro/81-libretro|.|Makefile|81_libretro.so||0"
   "crocods|https://github.com/libretro/crocods-core|.|Makefile|crocods_libretro.so||0"
   "cap32|https://github.com/libretro/libretro-cap32|.|Makefile|cap32_libretro.so||0"
-  "gearcoleco|https://github.com/drhelius/Gearcoleco|.|Makefile|gearcoleco_libretro.so||0"
+  "gearcoleco|https://github.com/drhelius/Gearcoleco|platforms/libretro|Makefile|gearcoleco_libretro.so||0"
   "theodore|https://github.com/Zlika/theodore|.|Makefile|theodore_libretro.so||0"
-  "xmil|https://github.com/libretro/xmil-libretro|.|Makefile|x68k_libretro.so||0"
+  "xmil|https://github.com/libretro/xmil-libretro|libretro|Makefile|x68k_libretro.so||0"
   "vice|https://github.com/libretro/vice-libretro|.|Makefile|vice_x64_libretro.so||0"
   "frodo|https://github.com/tzubertowski/libretro-frodo|.|Makefile|frodo_libretro.so||0"
 
   # === Arcade ===
   "mame2000|https://github.com/libretro/mame2000-libretro|.|Makefile|mame2000_libretro.so||0"
-  "fbalpha2012_cps1|https://github.com/libretro/fbalpha2012_cps1|.|Makefile.libretro|fbalpha2012_cps1_libretro.so||0"
-  "fbalpha2012_cps2|https://github.com/libretro/fbalpha2012_cps2|.|Makefile.libretro|fbalpha2012_cps2_libretro.so||0"
-  "fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|.|Makefile.libretro|fbalpha2012_cps3_libretro.so||0"
-  "fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|Makefile.libretro|fbalpha2012_neogeo_libretro.so||0"
+  "fbalpha2012_cps1|https://github.com/libretro/fbalpha2012_cps1|.|Makefile|fbalpha2012_cps1_libretro.so||0"
+  "fbalpha2012_cps2|https://github.com/libretro/fbalpha2012_cps2|.|Makefile|fbalpha2012_cps2_libretro.so||0"
+  "fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|svn-current/trunk|makefile.libretro|fbalpha2012_cps3_libretro.so||0"
+  "fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|Makefile|fbalpha2012_neogeo_libretro.so||0"
 
   # === PC / DOS games ===
   "tyrquake|https://github.com/libretro/tyrquake|.|Makefile|tyrquake_libretro.so||0"
   "prboom|https://github.com/libretro/libretro-prboom|.|Makefile|prboom_libretro.so||0"
-  "ecwolf|https://github.com/libretro/ecwolf|.|Makefile|ecwolf_libretro.so||0"
+  "ecwolf|https://github.com/libretro/ecwolf|src/libretro|Makefile|ecwolf_libretro.so||0"
   "cannonball|https://github.com/libretro/cannonball|.|Makefile|cannonball_libretro.so||0"
 
   # === Open-source / homebrew ===
@@ -114,10 +114,10 @@ CORES=(
   "xrick|https://github.com/libretro/xrick-libretro|.|Makefile|xrick_libretro.so||0"
   "jumpnbump|https://github.com/libretro/jumpnbump-libretro|.|Makefile|jumpnbump_libretro.so||0"
   "gong|https://github.com/libretro/gong|.|Makefile|gong_libretro.so||0"
-  "fake08|https://github.com/tzubertowski/fake-08|platform/libretro|Makefile|fake08_libretro.so||0"
+  "fake08|https://github.com/tzubertowski/fake-08|platform/libretro|Makefile|fake08_libretro.so||1"
   "pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|Makefile.libretro|pcsx_rearmed_libretro.so|HAVE_LIGHTREC=1|0"
   "retro8|https://github.com/libretro/retro8|.|Makefile|retro8_libretro.so||0"
-  "lowres_nx|https://github.com/timoinutilis/lowres-nx|.|Makefile|lowresnx_libretro.so||0"
+  "lowres_nx|https://github.com/timoinutilis/lowres-nx|platform/LibRetro|Makefile|lowresnx_libretro.so||0"
   "ardens|https://github.com/tiberiusbrown/Ardens|.|Makefile|ardens_libretro.so||0"
   "arduous|https://github.com/libretro/arduous|.|Makefile|arduous_libretro.so||0"
 
