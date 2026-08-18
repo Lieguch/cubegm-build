@@ -24,6 +24,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORKDIR="${WORKDIR:-$HERE/buildroot}"
+# build_cores.sh runs as a child process and needs WORKDIR (clone dirs + CORES_OUT
+# default). Export it so the delegation does not silently dump cores into /cores.
+export WORKDIR
 SYSROOT="${SYSROOT:-}"                 # if empty -> built by crosstool-NG below
 ARM_GNU="${ARM_GNU:-}"                 # optional: extracted ARM GNU 13.2 dir
 SKIP_SYSROOT="${SKIP_SYSROOT:-0}"
@@ -279,15 +282,39 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# STAGE 7 -- build standard libretro cores (RK3036G armhf)
+# STAGE 6.5 -- build tfhijack boot-override core (libemu_tfhijack.so)
 # -----------------------------------------------------------------------------
-# Several libretro core Makefiles hardcode `gcc`/`g++` when building their
-# bundled libretro-common sub-tree, so `CC=` on the make cmdline does NOT reach
-# those objects (they get compiled for the host). The buildroot-style fix is a
-# PATH compiler wrapper that injects -fPIC -marm + ALSA + bundled
-# libretro-common include for EVERY compiler invocation (bare + triplet names).
-# Verified against upstream libretro Makefiles (HANDOFF §11-§13), not guessed.
+# This is the libretro core that REPLACES the stock libemu_md.so. The stock
+# rkgame autoboots via setting.xml <autorun file="/mnt/sdcard/MD/dummy.md"
+# driver=""/>, resolves the core by the .md extension, and dlopens
+# cubegm/cores/libemu_md.so = THIS. retro_load_game() forks zhijack.sh ->
+# picoarch + FrogUI. Without it the device boots the STOCK menu (verified on
+# real hardware). Built with the same ARM toolchain/sysroot as the rest.
+TFHIJACK_SO="$WORKDIR/libemu_tfhijack.so"
+if [ -f "$HERE/hijack/build_tfhijack_armhf.sh" ]; then
+    log "Building tfhijack boot-override core (libemu_tfhijack.so)..."
+    SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+    CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+    TFHIJACK_OUT="$TFHIJACK_SO" \
+        bash "$HERE/hijack/build_tfhijack_armhf.sh"
+else
+    log "WARN: hijack/build_tfhijack_armhf.sh missing -- boot override not built."
+fi
+[ -f "$TFHIJACK_SO" ] || log "WARN: libemu_tfhijack.so not produced."
+
+# -----------------------------------------------------------------------------
+# STAGE 7 -- build standard libretro cores (RK3036G armhf) -- ALL supported
+# -----------------------------------------------------------------------------
+# build_cores.sh drives the full per-core recipe table (treefrog-ui/cores.md):
+# every core the open-source stack supports is attempted. Several upstream
+# libretro Makefiles hardcode `gcc`/`g++` for their bundled libretro-common
+# sub-tree, so the PATH compiler wrapper (below) injects -fPIC -marm + ALSA +
+# bundled libretro-common include for EVERY compiler invocation. Per-core
+# failures are WARN-only inside build_cores.sh; this stage hard-gates only the
+# 5 baseline cores proven on this toolchain.
 CORE_OUT="$WORKDIR/cores"
+# Export so build_cores.sh writes to the SAME dir build.sh gates/stages from.
+export CORE_OUT
 mkdir -p "$CORE_OUT"
 
 CROSS_BIN="$WORKDIR/cross-bin"
@@ -308,87 +335,37 @@ ln -sf "$CROSS_BIN/$TRIPLET_GXX" "$CROSS_BIN/g++"
 ln -sf "$CROSS_BIN/$TRIPLET"     "$CROSS_BIN/cc"
 OLDPATH="$PATH"
 export PATH="$CROSS_BIN:$PATH"
+
+# Delegate the full core build to build_cores.sh (WARN-only per-core; builds
+# every entry in treefrog-ui/cores.md, writes $CORE_OUT/_BUILD_SUMMARY.txt).
+# build_cores.sh inherits CC/CXX/CFLAGS/... from the environment and resolves
+# through the PATH compiler wrapper above (so hardcoded-gcc cores build armhf).
+bash "$HERE/build_cores.sh"
+
+# Hard gate: the 5 baseline cores MUST build (proven on this toolchain). The
+# remaining ~60 are best-effort and tolerated as WARN by build_cores.sh.
+BASELINE="mgba snes9x fceumm picodrive nestopia"
 CORE_FAIL=""
-for c in $CORES; do
-    log "Building libretro core: $c"
-    d="$WORKDIR/libretro-$c"
-    repo="$c"
-    [ "$c" = "fceumm" ] && repo="libretro-fceumm"
-    # Best-effort clone with retry (transient network/auth must not abort the
-    # whole build). Skip the core if it still cannot be fetched; the device
-    # ships its own cores and STAGE 8/9 tolerate a missing core .so.
-    cloned=0
-    for n in 1 2 3; do
-        if [ "$c" = "picodrive" ]; then
-            git clone --depth 1 --recursive "https://github.com/libretro/$repo.git" "$d" >/dev/null 2>&1 && { cloned=1; break; }
-        else
-            git clone --depth 1 "https://github.com/libretro/$repo.git" "$d" >/dev/null 2>&1 && { cloned=1; break; }
-        fi
-        log "  clone attempt $n failed; retrying..."
-        rm -rf "$d"
-    done
-    if [ "$cloned" != "1" ]; then
-        log "WARN: core $c clone failed (network/auth) -- skipping (best-effort)."
-        continue
-    fi
-    [ "$c" = "picodrive" ] && ( cd "$d" && git submodule update --init --recursive ) >/dev/null 2>&1 || true
-    pushd "$d" >/dev/null
-    case "$c" in
-        mgba)
-            rm -rf build-cubegm
-            cmake -B build-cubegm -DCMAKE_BUILD_TYPE=Release \
-                  -DLIBMGBA_ONLY=ON -DBUILD_LIBRETRO=ON \
-                  -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=arm \
-                  -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" \
-                  -DCMAKE_C_FLAGS="$CFLAGS" -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
-                  -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS" \
-                  -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS" \
-                  . || log "WARN: mgba cmake configure had issues."
-            cmake --build build-cubegm --target mgba_libretro -- -j"$(nproc)" \
-                || log "WARN: mgba build had issues."
-            so=$(find build-cubegm -name "mgba_libretro.so" 2>/dev/null | head -1)
-            ;;
-        snes9x|nestopia)
-            make -C libretro clean >/dev/null 2>&1 || true
-            make -C libretro platform=armv-neon-hardfloat -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
-            ;;
-        fceumm|picodrive)
-            make -f Makefile.libretro clean >/dev/null 2>&1 || true
-            make -f Makefile.libretro platform=armv-neon-hardfloat use_libchdr=0 -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
-            ;;
-        *)
-            make clean >/dev/null 2>&1 || true
-            make platform=armv-neon-hardfloat -j"$(nproc)" \
-                || log "WARN: core $c build had issues."
-            so=$(find . -name "${c}_libretro.so" 2>/dev/null | head -1)
-            ;;
-    esac
-    if [ -n "$so" ]; then
-        cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
-    else
-        log "ERROR: core $c did not produce a .so"
-        CORE_FAIL="${CORE_FAIL} $c"
-    fi
-    popd >/dev/null
+for c in $BASELINE; do
+    [ -f "$CORE_OUT/${c}_libretro.so" ] || CORE_FAIL="${CORE_FAIL} $c"
 done
 if [ -n "$CORE_FAIL" ]; then
-    log "STAGE7 FAILED -- missing cores:${CORE_FAIL}"
+    log "STAGE7 FAILED -- baseline cores missing:${CORE_FAIL}"
     exit 1
 fi
+log "Core build complete: $(ls "$CORE_OUT" 2>/dev/null | grep -c '_libretro.so') cores built (baseline OK)."
 export PATH="$OLDPATH"
 
 # -----------------------------------------------------------------------------
 # STAGE 8 -- ABI gate
 # -----------------------------------------------------------------------------
 log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.17)..."
-bash "$HERE/toolchain/verify_target_abi.sh" \
-    picoarch/picoarch \
-    FrogUI/frogui_libretro.so \
-    $(ls "$CORE_OUT"/*.so 2>/dev/null) \
+ABI_TARGETS="picoarch/picoarch FrogUI/frogui_libretro.so"
+ABI_TARGETS="$ABI_TARGETS $(ls "$CORE_OUT"/*.so 2>/dev/null)"
+# Boot-override core (libemu_tfhijack.so) replaces the stock libemu_md.so -- it
+# MUST also be armhf / glibc<=2.17 or the device will refuse to dlopen it.
+[ -f "$TFHIJACK_SO" ] && ABI_TARGETS="$ABI_TARGETS $TFHIJACK_SO"
+bash "$HERE/toolchain/verify_target_abi.sh" $ABI_TARGETS \
     || die "ABI gate FAILED -- do not deploy. Fix sysroot/toolchain and rebuild."
 
 # -----------------------------------------------------------------------------
@@ -417,6 +394,12 @@ sym_gate () {
 }
 SYM_FAIL=""
 [ -f FrogUI/frogui_libretro.so ] && sym_gate FrogUI/frogui_libretro.so || SYM_FAIL="${SYM_FAIL} frogui"
+# Boot-override core is itself a libretro core (retro_load_game forks zhijack.sh);
+# it must export the required frontend interface or rkgame cannot dlopen it as
+# libemu_md.so. Gate only if it was actually produced (else WARN, not fatal here).
+if [ -f "$TFHIJACK_SO" ]; then
+    sym_gate "$TFHIJACK_SO" || SYM_FAIL="${SYM_FAIL} tfhijack"
+fi
 for so in "$CORE_OUT"/*.so; do
     [ -e "$so" ] || continue
     sym_gate "$so" || SYM_FAIL="${SYM_FAIL} $(basename "$so")"
@@ -438,6 +421,33 @@ cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
 chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
+
+# --- RK3036G boot-override hijack staging ---------------------------------
+# The stock rkgame autoboots via cubegm/setting.xml <autorun file="..."/> and
+# resolves the core by ROM extension (.md -> libemu_md.so) then dlopens it. We
+# (1) replace setting.xml with our autorun overlay, (2) ship the dummy MD ROM
+# the autorun points at, and (3) ship our tfhijack core under the EXACT name
+# libemu_md.so so it is loaded in place of the stock Mega Drive core. This is
+# the verified boot path: the generic cubegm/autorun script is NOT invoked by
+# stock rkgame and is kept only as a documented fallback.
+if [ -f "$HERE/cubegm/install_first/rk3036g/setting.xml" ]; then
+    cp -f "$HERE/cubegm/install_first/rk3036g/setting.xml" "$DST/setting.xml"
+    log "  staged boot-override setting.xml -> cubegm/setting.xml"
+else
+    log "WARN: install_first/rk3036g/setting.xml missing -- device will boot STOCK menu."
+fi
+mkdir -p "$DST/MD"
+if [ -f "$HERE/cubegm/MD/dummy.md" ]; then
+    cp -f "$HERE/cubegm/MD/dummy.md" "$DST/MD/dummy.md"
+    log "  staged dummy.md -> cubegm/MD/dummy.md"
+fi
+if [ -f "$TFHIJACK_SO" ]; then
+    mkdir -p "$DST/cores"
+    cp -f "$TFHIJACK_SO" "$DST/cores/libemu_md.so"
+    log "  staged libemu_tfhijack.so -> cubegm/cores/libemu_md.so (boot override)"
+else
+    log "WARN: libemu_tfhijack.so not built -- device will boot STOCK menu."
+fi
 
 # Ship the cross-built runtime libs that the DEVICE ROOTFS does NOT provide.
 # picoarch's NEEDED (verified via readelf) is libSDL-1.2.so.0 / libpng12.so.0 /
@@ -465,10 +475,11 @@ log "On next boot the device launches picoarch + FrogUI directly."
 # -----------------------------------------------------------------------------
 # STAGE 9.5 -- payload completeness gate (deterministic; no device needed)
 #   Assert the staged cubegm/ payload contains everything the device needs to
-#   boot the open-source front-end and run the 5 built cores. If anything is
-#   missing the build is RED -- we never ship a half-built package. Real-device
-#   validation (HDMI render / ALSA audio / evdev gamepad / frontend core
-#   enumeration) remains the only step that requires the hardware.
+#   boot the open-source front-end (incl. the RK3036G boot-override hijack:
+#   setting.xml + MD/dummy.md + cores/libemu_md.so) and run the built cores.
+#   If anything is missing the build is RED -- we never ship a half-built package.
+#   Real-device validation (HDMI render / ALSA audio / evdev gamepad / frontend
+#   core enumeration) remains the only step that requires the hardware.
 # -----------------------------------------------------------------------------
 REQUIRED_BINS="picoarch frogui_libretro.so zhijack.sh autorun"
 PKG_FAIL=""
@@ -478,6 +489,18 @@ for f in $REQUIRED_BINS; do
         [ -x "$DST/$f" ] || PKG_FAIL="$PKG_FAIL (not-exec:$f)";; esac
 done
 [ -f "$DST/cores/config.xml" ] || PKG_FAIL="$PKG_FAIL cores/config.xml"
+# --- RK3036G boot-override artifacts (without these the device boots STOCK) ---
+[ -f "$DST/setting.xml" ]       || PKG_FAIL="$PKG_FAIL setting.xml"
+[ -f "$DST/MD/dummy.md" ]        || PKG_FAIL="$PKG_FAIL MD/dummy.md"
+[ -f "$DST/cores/libemu_md.so" ] || PKG_FAIL="$PKG_FAIL cores/libemu_md.so"
+# Every core that was built MUST be staged into cubegm/cores/ (none silently dropped).
+for so in "$CORE_OUT"/*.so; do
+    [ -e "$so" ] || continue
+    b="$(basename "$so")"
+    [ -f "$DST/cores/$b" ] || PKG_FAIL="$PKG_FAIL (unstaged:$b)"
+done
+# Baseline 5 cores (proven on this toolchain) MUST be present even though the
+# full ~60-core build above is best-effort WARN-only.
 for c in mgba snes9x fceumm picodrive nestopia; do
     [ -f "$DST/cores/${c}_libretro.so" ] || PKG_FAIL="$PKG_FAIL $c"
 done
@@ -495,5 +518,5 @@ if [ -n "$PKG_FAIL" ]; then
     ls -lR "$DST" 2>/dev/null | head -50
     exit 1
 fi
-log "Payload completeness OK: picoarch + frogui + 5 cores + zhijack + autorun + config.xml present."
+log "Payload completeness OK: picoarch + frogui + boot-override (setting.xml/dummy.md/libemu_md.so) + $(ls "$DST/cores" 2>/dev/null | grep -c '_libretro.so') cores + zhijack + autorun + config.xml present."
 

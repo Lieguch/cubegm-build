@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CubeGM open-source frontend — RK3036G autorun overlay.
+
+  The stock device stores its settings in cubegm/setting.xml and boots via the
+  <autorun> field. The stock value ships EMPTY: <autorun file="" driver="" />.
+  This overlay sets it so the device hands control to our frontend instead of
+  (or before) the stock menu — WITHOUT touching any stock binary or root.dat,
+  so the boot checksum ("sdcard is damaged") is never triggered.
+
+  Mechanism (verified against treefrog-ui/hijack/tfhijack.c):
+    driver=""  -> rkgame resolves the core by the ROM's extension.
+    dummy.md   -> .md  -> rkgame dlopens cubegm/cores/libemu_md.so
+                  (which we install as our libemu_tfhijack.so, renamed).
+    tfhijack forks zhijack.sh -> picoarch + FrogUI.
+
+  Place this file at cubegm/setting.xml (it REPLACES the stock setting.xml;
+  the open-source frontend only needs the <autorun> field to boot). If you want
+  to keep the device's existing language/volume/sound settings, instead MERGE
+  only the <autorun .../> line below into the device's existing
+  cubegm/setting.xml.
+-->
+<setting>
+  <autorun file="/mnt/sdcard/MD/dummy.md" driver="" />
+</setting>

@@ -1,51 +1,488 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
   CubeGM open-source replacement core registry (deploy/cubegm/cores/config.xml)
-  ----------------------------------------------------------------------------
-  Registry for the OPEN-SOURCE front-end (picoarch + FrogUI). The build
-  (deploy/build.sh) compiles exactly these 5 standard libretro cores; this file
-  is trimmed to MATCH what is actually shipped in cubegm/cores/ so the launcher
-  never presents a core whose .so is absent.
+  Registry for the OPEN-SOURCE front-end (picoarch + FrogUI). build.sh compiles
+  EVERY core in deploy/build_cores.sh (WARN-only per-core; ~35-50 of 66 build on
+  armhf). This file is GENERATED from that recipe table and lists all intended
+  cores so the launcher never presents a core whose .so is absent.
 
-  <emucore file="..."/> values are the canonical libretro .so filenames that
-  build.sh produces (see STAGE 7 per-core recipes).
-
-  To ADD more systems (gpsp/GBA-lite, prosystem/Atari7800, PC Engine, Neo Geo,
-  ScummVM, etc.) build the corresponding libretro core in STAGE 7 and register
-  it here. Tracked as Stage-2 work (see HANDOFF.md).
+  NOTE: the open-source stack discovers cores by SCANNING cubegm/cores/*.so and
+  mapping ROMs by FOLDER name (see treefrog-ui/cores.md + DEPLOY.md table). This
+  config.xml is the STOCK rkgame <emucore> format, kept as documentation / fallback.
+  Only cores whose .so is actually produced by the build will run on-device.
 -->
 <core>
-<emucore name="SNES" file="snes9x_libretro.so" />
-<supported_extensions>SMC</supported_extensions>
-<supported_extensions>SFC</supported_extensions>
-<supported_extensions>SWC</supported_extensions>
-<supported_extensions>FIG</supported_extensions>
+  <emucore name="NES (FCEUmm)" file="fceumm_libretro.so" />
+  <supported_extensions>NES</supported_extensions>
+  <supported_extensions>FDS</supported_extensions>
+  <supported_extensions>UNIF</supported_extensions>
+  <supported_extensions>UNF</supported_extensions>
+  <supported_extensions>FC</supported_extensions>
 </core>
-
 <core>
-<emucore name="GBA (mGBA)" file="mgba_libretro.so" />
-<supported_extensions>GBA</supported_extensions>
-<supported_extensions>GB</supported_extensions>
-<supported_extensions>GBC</supported_extensions>
+  <emucore name="NES (QuickNES)" file="quicknes_libretro.so" />
+  <supported_extensions>NES</supported_extensions>
+  <supported_extensions>FC</supported_extensions>
 </core>
-
 <core>
-<emucore name="Genesis/MD (PicoDrive)" file="picodrive_libretro.so" />
-<supported_extensions>BIN</supported_extensions>
-<supported_extensions>GEN</supported_extensions>
-<supported_extensions>SMD</supported_extensions>
-<supported_extensions>MD</supported_extensions>
+  <emucore name="NES (Nestopia)" file="nestopia_libretro.so" />
+  <supported_extensions>NES</supported_extensions>
+  <supported_extensions>FC</supported_extensions>
+  <supported_extensions>NST</supported_extensions>
 </core>
-
 <core>
-<emucore name="NES (FCEUmm)" file="fceumm_libretro.so" />
-<supported_extensions>NES</supported_extensions>
-<supported_extensions>FDS</supported_extensions>
-<supported_extensions>UNIF</supported_extensions>
-<supported_extensions>UNF</supported_extensions>
+  <emucore name="SNES (Snes9x 2005)" file="snes9x2005_plus_libretro.so" />
+  <supported_extensions>SMC</supported_extensions>
+  <supported_extensions>SFC</supported_extensions>
+  <supported_extensions>SWC</supported_extensions>
+  <supported_extensions>FIG</supported_extensions>
+  <supported_extensions>SNES</supported_extensions>
 </core>
-
 <core>
-<emucore name="NES (Nestopia)" file="nestopia_libretro.so" />
-<supported_extensions>NES</supported_extensions>
+  <emucore name="SNES (Snes9x 2002)" file="snes9x2002_libretro.so" />
+  <supported_extensions>SMC</supported_extensions>
+  <supported_extensions>SFC</supported_extensions>
+  <supported_extensions>SWC</supported_extensions>
+</core>
+<core>
+  <emucore name="SNES (Snes9x 2010)" file="snes9x2010_libretro.so" />
+  <supported_extensions>SMC</supported_extensions>
+  <supported_extensions>SFC</supported_extensions>
+  <supported_extensions>SWC</supported_extensions>
+  <supported_extensions>SNES</supported_extensions>
+</core>
+<core>
+  <emucore name="Game Boy (Gambatte)" file="gambatte_libretro.so" />
+  <supported_extensions>GB</supported_extensions>
+  <supported_extensions>GBC</supported_extensions>
+  <supported_extensions>GBA</supported_extensions>
+</core>
+<core>
+  <emucore name="Game Boy (Gearboy)" file="gearboy_libretro.so" />
+  <supported_extensions>GB</supported_extensions>
+  <supported_extensions>GBC</supported_extensions>
+</core>
+<core>
+  <emucore name="Game Boy (TGB Dual)" file="tgbdual_libretro.so" />
+  <supported_extensions>GB</supported_extensions>
+  <supported_extensions>GBC</supported_extensions>
+</core>
+<core>
+  <emucore name="Game Boy (DoubleCherryGB)" file="doublecherrygb_libretro.so" />
+  <supported_extensions>GB</supported_extensions>
+  <supported_extensions>GBC</supported_extensions>
+</core>
+<core>
+  <emucore name="GBA (GPSP)" file="gpsp_libretro.so" />
+  <supported_extensions>GBA</supported_extensions>
+</core>
+<core>
+  <emucore name="GBA (VBA Next)" file="vba_next_libretro.so" />
+  <supported_extensions>GBA</supported_extensions>
+  <supported_extensions>GB</supported_extensions>
+  <supported_extensions>GBC</supported_extensions>
+</core>
+<core>
+  <emucore name="GBA (mGBA)" file="mgba_libretro.so" />
+  <supported_extensions>GBA</supported_extensions>
+  <supported_extensions>GB</supported_extensions>
+  <supported_extensions>GBC</supported_extensions>
+</core>
+<core>
+  <emucore name="Pokemon Mini" file="pokemini_libretro.so" />
+  <supported_extensions>POKEM</supported_extensions>
+  <supported_extensions>MIN</supported_extensions>
+</core>
+<core>
+  <emucore name="Game & Watch" file="gw_libretro.so" />
+  <supported_extensions>GW</supported_extensions>
+</core>
+<core>
+  <emucore name="Mega Drive/Genesis (PicoDrive)" file="picodrive_libretro.so" />
+  <supported_extensions>MD</supported_extensions>
+  <supported_extensions>GEN</supported_extensions>
+  <supported_extensions>SMD</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>SMS</supported_extensions>
+  <supported_extensions>GG</supported_extensions>
+  <supported_extensions>32X</supported_extensions>
+</core>
+<core>
+  <emucore name="Mega Drive (Genesis Plus GX)" file="genesis_plus_gx_libretro.so" />
+  <supported_extensions>MD</supported_extensions>
+  <supported_extensions>GEN</supported_extensions>
+  <supported_extensions>SMD</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>SMS</supported_extensions>
+  <supported_extensions>GG</supported_extensions>
+  <supported_extensions>CUE</supported_extensions>
+  <supported_extensions>ISO</supported_extensions>
+</core>
+<core>
+  <emucore name="Game Gear (Gearsystem)" file="gearsystem_libretro.so" />
+  <supported_extensions>GG</supported_extensions>
+  <supported_extensions>SMS</supported_extensions>
+</core>
+<core>
+  <emucore name="Atari 2600" file="stella2014_libretro.so" />
+  <supported_extensions>A26</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+</core>
+<core>
+  <emucore name="Atari 5200" file="a5200_libretro.so" />
+  <supported_extensions>A52</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+</core>
+<core>
+  <emucore name="Atari 7800" file="prosystem_libretro.so" />
+  <supported_extensions>A78</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+</core>
+<core>
+  <emucore name="Atari 800" file="atari800_libretro.so" />
+  <supported_extensions>A8</supported_extensions>
+  <supported_extensions>XFD</supported_extensions>
+  <supported_extensions>DSK</supported_extensions>
+  <supported_extensions>ATR</supported_extensions>
+  <supported_extensions>BAS</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>XEX</supported_extensions>
+</core>
+<core>
+  <emucore name="Atari Lynx" file="handy_libretro.so" />
+  <supported_extensions>LNX</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+</core>
+<core>
+  <emucore name="Atari Lynx (Beetle)" file="mednafen_lynx_libretro.so" />
+  <supported_extensions>LNX</supported_extensions>
+  <supported_extensions>O</supported_extensions>
+</core>
+<core>
+  <emucore name="PC Engine (Beetle PCE Fast)" file="mednafen_pce_fast_libretro.so" />
+  <supported_extensions>PCE</supported_extensions>
+  <supported_extensions>SGX</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CCD</supported_extensions>
+  <supported_extensions>CUE</supported_extensions>
+  <supported_extensions>ISO</supported_extensions>
+</core>
+<core>
+  <emucore name="PC Engine SuperGrafx" file="mednafen_supergrafx_libretro.so" />
+  <supported_extensions>SGX</supported_extensions>
+  <supported_extensions>PCE</supported_extensions>
+  <supported_extensions>CUE</supported_extensions>
+  <supported_extensions>ISO</supported_extensions>
+</core>
+<core>
+  <emucore name="PC-FX" file="mednafen_pcfx_libretro.so" />
+  <supported_extensions>PCFX</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CUE</supported_extensions>
+  <supported_extensions>ISO</supported_extensions>
+</core>
+<core>
+  <emucore name="NEC PC-88" file="quasi88_libretro.so" />
+  <supported_extensions>D88</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>IPL</supported_extensions>
+  <supported_extensions>T88</supported_extensions>
+</core>
+<core>
+  <emucore name="Neo Geo Pocket" file="race_libretro.so" />
+  <supported_extensions>NGP</supported_extensions>
+  <supported_extensions>NGC</supported_extensions>
+  <supported_extensions>NBZ</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>NFG</supported_extensions>
+</core>
+<core>
+  <emucore name="Neo Geo (Geolith)" file="geolith_libretro.so" />
+  <supported_extensions>NEO</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>ISO</supported_extensions>
+  <supported_extensions>CUE</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+</core>
+<core>
+  <emucore name="WonderSwan" file="mednafen_wswan_libretro.so" />
+  <supported_extensions>WS</supported_extensions>
+  <supported_extensions>WSC</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+</core>
+<core>
+  <emucore name="Watara Supervision" file="potator_libretro.so" />
+  <supported_extensions>SV</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>COL</supported_extensions>
+  <supported_extensions>CVM</supported_extensions>
+  <supported_extensions>WSV</supported_extensions>
+</core>
+<core>
+  <emucore name="ZX Spectrum" file="fuse_libretro.so" />
+  <supported_extensions>TAP</supported_extensions>
+  <supported_extensions>TZX</supported_extensions>
+  <supported_extensions>Z80</supported_extensions>
+  <supported_extensions>SNA</supported_extensions>
+  <supported_extensions>SCL</supported_extensions>
+  <supported_extensions>TRD</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>DSK</supported_extensions>
+</core>
+<core>
+  <emucore name="ZX81" file="81_libretro.so" />
+  <supported_extensions>P</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>81</supported_extensions>
+  <supported_extensions>T81</supported_extensions>
+</core>
+<core>
+  <emucore name="Amstrad CPC" file="crocods_libretro.so" />
+  <supported_extensions>DSK</supported_extensions>
+  <supported_extensions>SNA</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CDT</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>TAP</supported_extensions>
+</core>
+<core>
+  <emucore name="Amstrad CPC+" file="cap32_libretro.so" />
+  <supported_extensions>DSK</supported_extensions>
+  <supported_extensions>SNA</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CDT</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>TAP</supported_extensions>
+  <supported_extensions>M3U</supported_extensions>
+</core>
+<core>
+  <emucore name="ColecoVision" file="gearcoleco_libretro.so" />
+  <supported_extensions>COL</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CFG</supported_extensions>
+  <supported_extensions>ROM</supported_extensions>
+  <supported_extensions>SCC</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>CV</supported_extensions>
+</core>
+<core>
+  <emucore name="Thomson MO/TO" file="theodore_libretro.so" />
+  <supported_extensions>FD</supported_extensions>
+  <supported_extensions>SAP</supported_extensions>
+  <supported_extensions>K7</supported_extensions>
+  <supported_extensions>M5</supported_extensions>
+  <supported_extensions>M7</supported_extensions>
+  <supported_extensions>ROM</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CAS</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>TAP</supported_extensions>
+</core>
+<core>
+  <emucore name="Sharp X68000" file="x68k_libretro.so" />
+  <supported_extensions>X68</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>D88</supported_extensions>
+  <supported_extensions>D98</supported_extensions>
+  <supported_extensions>DUP</supported_extensions>
+  <supported_extensions>IMA</supported_extensions>
+  <supported_extensions>ISO</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>2HD</supported_extensions>
+  <supported_extensions>DSK</supported_extensions>
+  <supported_extensions>GIM</supported_extensions>
+  <supported_extensions>DIM</supported_extensions>
+  <supported_extensions>NRD</supported_extensions>
+  <supported_extensions>MOS</supported_extensions>
+  <supported_extensions>XDF</supported_extensions>
+  <supported_extensions>CUP</supported_extensions>
+</core>
+<core>
+  <emucore name="Commodore 64 (VICE)" file="vice_x64_libretro.so" />
+  <supported_extensions>D64</supported_extensions>
+  <supported_extensions>D71</supported_extensions>
+  <supported_extensions>D80</supported_extensions>
+  <supported_extensions>D81</supported_extensions>
+  <supported_extensions>D82</supported_extensions>
+  <supported_extensions>G64</supported_extensions>
+  <supported_extensions>X64</supported_extensions>
+  <supported_extensions>T64</supported_extensions>
+  <supported_extensions>PRG</supported_extensions>
+  <supported_extensions>P00</supported_extensions>
+  <supported_extensions>CRT</supported_extensions>
+  <supported_extensions>TAP</supported_extensions>
+  <supported_extensions>D67</supported_extensions>
+  <supported_extensions>D88</supported_extensions>
+  <supported_extensions>D89</supported_extensions>
+  <supported_extensions>D9C</supported_extensions>
+  <supported_extensions>G41</supported_extensions>
+  <supported_extensions>NIB</supported_extensions>
+  <supported_extensions>NBZ</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+</core>
+<core>
+  <emucore name="Commodore 64 (Frodo)" file="frodo_libretro.so" />
+  <supported_extensions>D64</supported_extensions>
+  <supported_extensions>T64</supported_extensions>
+  <supported_extensions>PRG</supported_extensions>
+  <supported_extensions>P00</supported_extensions>
+  <supported_extensions>TAP</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>G64</supported_extensions>
+  <supported_extensions>CRT</supported_extensions>
+</core>
+<core>
+  <emucore name="MAME 2000" file="mame2000_libretro.so" />
+  <supported_extensions>zip</supported_extensions>
+  <supported_extensions>ZIM</supported_extensions>
+  <supported_extensions>7z</supported_extensions>
+</core>
+<core>
+  <emucore name="Capcom CPS-1" file="fbalpha2012_cps1_libretro.so" />
+  <supported_extensions>zip</supported_extensions>
+  <supported_extensions>ZIM</supported_extensions>
+</core>
+<core>
+  <emucore name="Capcom CPS-2" file="fbalpha2012_cps2_libretro.so" />
+  <supported_extensions>zip</supported_extensions>
+  <supported_extensions>ZIM</supported_extensions>
+</core>
+<core>
+  <emucore name="Capcom CPS-3" file="fbalpha2012_cps3_libretro.so" />
+  <supported_extensions>zip</supported_extensions>
+  <supported_extensions>ZIM</supported_extensions>
+</core>
+<core>
+  <emucore name="Neo Geo (FB Alpha 2012)" file="fbalpha2012_neogeo_libretro.so" />
+  <supported_extensions>zip</supported_extensions>
+  <supported_extensions>ZIM</supported_extensions>
+</core>
+<core>
+  <emucore name="Quake" file="tyrquake_libretro.so" />
+  <supported_extensions>pak</supported_extensions>
+  <supported_extensions>PAK</supported_extensions>
+</core>
+<core>
+  <emucore name="Doom" file="prboom_libretro.so" />
+  <supported_extensions>WAD</supported_extensions>
+</core>
+<core>
+  <emucore name="Wolfenstein 3D" file="ecwolf_libretro.so" />
+  <supported_extensions>WL6</supported_extensions>
+  <supported_extensions>WLF</supported_extensions>
+  <supported_extensions>WG6</supported_extensions>
+  <supported_extensions>MPK</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+</core>
+<core>
+  <emucore name="Out Run" file="cannonball_libretro.so" />
+  <supported_extensions>cfg</supported_extensions>
+  <supported_extensions>OUT</supported_extensions>
+</core>
+<core>
+  <emucore name="Cave Story" file="nxengine_libretro.so" />
+  <supported_extensions>exe</supported_extensions>
+  <supported_extensions>EXE</supported_extensions>
+</core>
+<core>
+  <emucore name="Flashback" file="reminiscence_libretro.so" />
+  <supported_extensions>MEM</supported_extensions>
+  <supported_extensions>MAP</supported_extensions>
+  <supported_extensions>ITK</supported_extensions>
+  <supported_extensions>ITA</supported_extensions>
+</core>
+<core>
+  <emucore name="Rick Dangerous" file="xrick_libretro.so" />
+  <supported_extensions>data</supported_extensions>
+  <supported_extensions>DAT</supported_extensions>
+</core>
+<core>
+  <emucore name="Jump 'n' Bump" file="jumpnbump_libretro.so" />
+  <supported_extensions>DAT</supported_extensions>
+</core>
+<core>
+  <emucore name="Pong" file="gong_libretro.so" />
+  <supported_extensions>data</supported_extensions>
+</core>
+<core>
+  <emucore name="PICO-8 (FAKE08)" file="fake08_libretro.so" />
+  <supported_extensions>p8</supported_extensions>
+  <supported_extensions>P8</supported_extensions>
+  <supported_extensions>PNG</supported_extensions>
+</core>
+<core>
+  <emucore name="PlayStation (PCSX Rearmed)" file="pcsx_rearmed_libretro.so" />
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CUE</supported_extensions>
+  <supported_extensions>ISO</supported_extensions>
+  <supported_extensions>IMG</supported_extensions>
+  <supported_extensions>M3U</supported_extensions>
+  <supported_extensions>CCD</supported_extensions>
+  <supported_extensions>CHD</supported_extensions>
+  <supported_extensions>EXE</supported_extensions>
+  <supported_extensions>Z</supported_extensions>
+  <supported_extensions>ZNX</supported_extensions>
+  <supported_extensions>PBP</supported_extensions>
+</core>
+<core>
+  <emucore name="PICO-8 (Retro8)" file="retro8_libretro.so" />
+  <supported_extensions>p8</supported_extensions>
+  <supported_extensions>P8</supported_extensions>
+</core>
+<core>
+  <emucore name="LowRes NX" file="lowresnx_libretro.so" />
+  <supported_extensions>nx</supported_extensions>
+  <supported_extensions>NX</supported_extensions>
+</core>
+<core>
+  <emucore name="Arduboy (Ardens)" file="ardens_libretro.so" />
+  <supported_extensions>hex</supported_extensions>
+  <supported_extensions>HEX</supported_extensions>
+</core>
+<core>
+  <emucore name="Arduboy (Arduous)" file="arduous_libretro.so" />
+  <supported_extensions>hex</supported_extensions>
+  <supported_extensions>HEX</supported_extensions>
+</core>
+<core>
+  <emucore name="Intellivision" file="freeintv_libretro.so" />
+  <supported_extensions>ROM</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>INT</supported_extensions>
+  <supported_extensions>ITV</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+</core>
+<core>
+  <emucore name="Fairchild Channel F" file="freechaf_libretro.so" />
+  <supported_extensions>ROM</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+  <supported_extensions>CHF</supported_extensions>
+</core>
+<core>
+  <emucore name="Vectrex" file="vecx_libretro.so" />
+  <supported_extensions>VEC</supported_extensions>
+  <supported_extensions>BIN</supported_extensions>
+</core>
+<core>
+  <emucore name="CD+G Karaoke" file="pocketcdg_libretro.so" />
+  <supported_extensions>CDG</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
+  <supported_extensions>MP3</supported_extensions>
+  <supported_extensions>OGG</supported_extensions>
+  <supported_extensions>WAV</supported_extensions>
+</core>
+<core>
+  <emucore name="Game Music Emu" file="gme_libretro.so" />
+  <supported_extensions>AY</supported_extensions>
+  <supported_extensions>GBS</supported_extensions>
+  <supported_extensions>GYM</supported_extensions>
+  <supported_extensions>HES</supported_extensions>
+  <supported_extensions>KSS</supported_extensions>
+  <supported_extensions>NSF</supported_extensions>
+  <supported_extensions>NSFE</supported_extensions>
+  <supported_extensions>SAP</supported_extensions>
+  <supported_extensions>SPC</supported_extensions>
+  <supported_extensions>VGM</supported_extensions>
+  <supported_extensions>VGZ</supported_extensions>
+  <supported_extensions>ZIP</supported_extensions>
 </core>
