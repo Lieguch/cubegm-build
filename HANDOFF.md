@@ -2,7 +2,7 @@
 
 > 用途：供接手的 Agent / 大模型快速接手，读完即可继续，无需从头探索。
 > 维护：每次达到版本里程碑（v0.x / v1.0）或重大变更后更新本文件与 VERSION。
-> 最近更新：2026-08-17（三分支 FrogUI 修复已全绿；STAGE7 四核心经三轮修复——v2 用 gcc/g++ 软链前置 PATH + snes9x LTO= + nestopia -I. + fceumm 宏 + picodrive 递归子模块——已推送并第四轮 dispatch，验证中；根因均以 build-output 分支真实日志 + 上游 Makefile 真源取证）
+> 最近更新：2026-08-18（STAGE9 lib 打包已验证 run #150 全绿 + release payload-150；datasheet 已解析确认 SoC 支持 1080P，1280x720 维持）
 
 ## 1. 项目目标
 为 RK3036G 掌机（R36SX / DataFrog SF3000 / SF3500 / GB350 等）做 CubeGM 固件开源替代。
@@ -578,12 +578,12 @@ main 的 build.sh **缺少** wip/frogui-gs-interface 分支的 `menu_libretro.so
 - **现象**：payload 的 `cubegm/lib/` 目录为空（zip 不打包空目录），但 `zhijack.sh` 设置 `LD_LIBRARY_PATH=$CUBEGM_DIR/lib`；picoarch NEEDED（readelf 实测）= `libSDL-1.2.so.0`/`libpng12.so.0`/`libz.so.1`/`libasound.so.2`。
 - **根因**：设备 rootfs **不提供** SDL/libpng12（`docs/sysroot_strategy.md` §二 明确设备自带仅 libdrm/libkms/libasound）；STAGE2 把 SDL/libpng/zlib 编进 sysroot，但 STAGE9 只 `mkdir -p "$DST/lib"` 未把库复制进 payload → 真机上 `error while loading shared libraries: libSDL-1.2.so.0`。
 - **修复（commit 64c5722，仅改 deploy/build.sh STAGE9）**：遍历 `libSDL-1.2.so.0`/`libpng12.so.0`/`libz.so.1`，`cp -a` 从 `$SYSROOT/usr/lib/` 复制（含 symlink 链）到 `$DST/lib/`；best-effort（缺失 WARN 不 die）。`libasound.so.2` 设备自带，不打包。`bash -n` 通过。
-- **验证中**：已 push main，CI run 32082201460 构建中；预期 artifact 的 cubegm/lib/ 含三个库。
+- **已验证（run #150 / workflow_run 32082201460，commit 64c5722）**：build-output `bootstrap.log` 实测 3 条 `packaged runtime lib: libSDL-1.2.so.0 / libpng12.so.0 / libz.so.1 -> cubegm/lib/`；`ls -l` 显示完整 symlink 链（`libSDL-1.2.so.0 -> libSDL-1.2.so.0.11.4` 等）；6 个产物（picoarch / frogui / 5 核）ABI gate 全 PASS。Release **payload-150** 已发布（`cubegm-payload.zip` 4.48MB，较 run #145 增大 = 新增 lib）。**交付缺口已关闭。**
 
 ### 28.4 待办（下一步）
-1. run 32082201460 出结果后核验 `lib/` 是否已打包（取 build-output 日志 grep "packaged runtime lib"）。
-2. **等待用户上传缺失附件**：`RK3036G datasheet V1.1.pdf`（确认 HDMI 1080P vs 1280×720）、`11.png`（原系统工作目录截图，v1.0 目录交付基准）、`000.dat–008.dat`（9 个 dat，映射核验）。
-3. datasheet 确认后定渲染目标（SCREEN_WIDTH/HEIGHT），可能需要 UI 资源重建 + picoarch 分辨率参数调整。
+1. ~~run 32082201460 出结果后核验 `lib/` 是否已打包~~ **完成**：见上。
+2. **datasheet 已解析（44 页 PDF → pypdf）**：RK3036G HDMI TX = HDMI 1.4a / HDCP 1.2，支持 DTV 480i→1080i/p，Max output resolution **1920x1080** → 当前 1280x720 在 SoC 能力内，为已知全绿配置，**维持不调整**。~~需 UI 资源重建~~ 取消。
+3. **待用户上传缺失附件**：`000.dat–006.dat`（9 个 dat，映射核验；007/008 已解密确认 PS1/Atari2600）。
 4. 全绿 + 附件齐备后：真机验收（SRAM 存档 / 全手柄 / 启动无 sdcard is damaged）→ 打 v1.0。
 5. 同步定稿代码到 `Lieguch/cubegm-build-monkey` 仓库 + 交付 release。
 6. 其余 tools/ 目录缺 `verify_build_scripts.py`（HANDOFF §6 引用但未入库），可后续重建或忽略。
