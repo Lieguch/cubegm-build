@@ -678,3 +678,19 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 6. 回滚：把 `<autorun file="">` 改回空即完全回到原厂。
 
 > 失败 run 不计费；上述门禁把「能否烧录」全部转成 CI 可判定的红/绿，用户只需做第 2–5 项真机确认。
+
+
+## 30. run #153 -- 全量自动化测试闭环通过（首个含完整门禁的绿构建）
+
+- 触发：用户要求 #12（静默自主）+ "先做好全部测试最后才给我实机验证"。
+- 构建：run #153，commit `377ac862208a`（main HEAD），`completed success`。
+- 门禁全绿：
+  - STAGE 8 ABI gate：picoarch + FrogUI + 5 核 共 7 对象全部 PASS（EM_ARM / 0x5000400 / glibc<=2.17）。
+  - STAGE 8.5 libretro 符号门禁：6 个 .so（frogui + 5 核）均导出
+    retro_api_version/init/deinit/run/load_game/unload_game/get_system_info/set_environment。
+  - STAGE 9.5 payload 完整性门禁：picoarch + frogui + 5 cores + zhijack + autorun + config.xml 全部存在，否则 PKG_FAIL 转红。
+  - `BOOTSTRAP COMPLETE`；VERDICT: ALL_TESTS_PASS。
+- 交付：`payload-153` Release（asset `cubegm-payload.zip`，4.48 MB）已发布，含完整 `deploy/cubegm/` 烧录包。
+- 文档：`DEPLOY.md` 之前在 main 中不存在，本次补齐烧录步骤 + 实机验证清单（以真实 autorun/zhijack.sh/build.yml 为据，未臆造）。
+- 版本：打 tag `v0.2` 于 `377ac862208a`（首个含完整门禁的绿构建）。`v0.1` / `v-build-good`（05ee252dfe）保留为"首个全绿"历史锚点。
+- 待用户：实机验证（HDMI / ALSA / evdev / 前端枚举 / 核心运行 / 存档 / 回滚），详见 DEPLOY.md 第 5 节。验证通过即可定 `v1.0`。
