@@ -189,12 +189,28 @@ log "picoarch built."
 # -----------------------------------------------------------------------------
 # STAGE 6 -- build FrogUI launcher core
 # -----------------------------------------------------------------------------
+# Apply the RK3036G build fix BEFORE compiling. The upstream FrogUI tip
+# (commit 2f41ace) was developed for SF2000 (MIPS); the unix/ARM Makefile
+# target references three symbols it never declares, so frogui_libretro.so
+# fails to compile/link and the payload cannot boot (zhijack.sh requires it).
+# This patch declares the game-launch buffers and stubs direct_loader/xlog.
+# A failed/already-applied check is fatal: shipping without it = no menu.
+if [ -f "$HERE/../patch/frogui_rk3036g_build.patch" ]; then
+    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_rk3036g_build.patch" 2>/dev/null; then
+        log "Applying RK3036G FrogUI build fix (declare buffers + stub direct_loader/xlog)..."
+        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_rk3036g_build.patch"
+    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_rk3036g_build.patch" 2>/dev/null; then
+        log "RK3036G FrogUI build fix already applied -- skipping."
+    else
+        die "RK3036G FrogUI build fix NOT applicable and NOT already applied -- FrogUI would fail to build. Abort."
+    fi
+fi
 log "Building FrogUI (frogui_libretro.so)..."
 pushd FrogUI >/dev/null
 make CC="$CC" CXX="$CXX" || true   # some FrogUI builds use a wrapper; fall back below
 if [ ! -f frogui_libretro.so ]; then
     # Fallback: build as a libretro core directly if a Makefile.libretro exists
-    [ -f Makefile.libretro ] && make -f Makefile.libretro CC="$CC" CXX="$CXX"
+    [ -f Makefile.libretro ] && make -f Makefile.libretro CC="$CC" CXX="$CXX" || true
 fi
 popd >/dev/null
 if [ -f FrogUI/frogui_libretro.so ]; then
