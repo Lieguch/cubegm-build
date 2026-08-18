@@ -760,3 +760,12 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 - [ ] **下一步（自主）**：推送 `v0.0` 完整测试版（含 57 核全表 _build_57.sh + 11.png 目录 + 启动/ABI/存档/手柄）——经 Git Data API 走 Contents API 流程
 - [ ] **下一步（自主）**：在用户上传原设备 9 个 `.dat` 文件后完成字节级核验，更新 `docs/00x_dat_platform_mapping.md` 的"待核"项
 - [ ] **闸门（用户）**：收到用户"19 条全部真机验证通过"确认 → 打 `v1.0` + stable
+
+## CubeGM CI 自愈记录 — main #168 CRLF 回归修复（2026-08-18T18:34Z）
+
+- **回归**：main 最新 run #168（id 32125894186，head `3df9f067e04c2d053e380f2f6462cc671399d47e`，18:15 CST）`completed+failure`。wip 两分支仍为 stale 绿（#94/#95，未受该 commit 影响）。
+- **根因（读 build-output/bootstrap.log 真实日志，非猜测）**：commit `3df9f067e04c` 重写了 `deploy/build_cores.sh`（扩充逐核 recipe 表，写入"基于证据、不猜测"的 ARM 移植规则，注释明确引用 #160 revert 教训），但**文件以 CRLF 行尾保存**。仓库无 `.gitattributes`（已 404 核实），故 CRLF 原样到达 Linux runner 的 bash，立即报错：`set: pipefail: invalid option name`（line 28，因 `pipefail` 含回车）、`$'': command not found`（lines 29/38/42/118）、`syntax error near unexpected token $'do'`（line 120）→ `build_cores.sh` 在编译任何核心前即 abort → STAGE7 永不完成 → 整轮判红。日志显示其前的 FrogUI 构建成功（`menu_libretro.so -> frogui_libretro.so` 归一化通过），失败纯属脚本解析，与核心编译无关。
+- **证据对比**：#167(head `0aec3ba1cae5`) 的 build_cores.sh sha `b2de3a8ec799…` 为 LF（0 个 CRLF 行）→ 绿；#168(head `3df9f067e04c`) 的 build_cores.sh sha `7bfecb3306e425…` 全部 231 行 CRLF → 红。`commit 3df9f067e04c` 仅改动 4 文件：`DELIVERY_REQUIREMENTS.md`/`HANDOFF.md`/`PROJECT_CHARTER.md`/`deploy/build_cores.sh`，唯一 .sh 即本文件。
+- **修复（原子变更，仅改行尾）**：将 `deploy/build_cores.sh` 由 CRLF 转为 LF（**不改任何逻辑**，保留 commit 扩充的逐核 ARM recipe）。`bash -n` 校验 exit 0、0 个 CR 行。未 revert、未删除任何文件/里程碑（铁律）。
+- **理由（铁律权衡）**：协议禁猜测/试错；真实日志失败纯为 CRLF，逻辑层（扩充 recipe）来自知情重写且 bash 语法通过，故最小修复=去 CRLF，而非回退丢工作。下一轮（#169）将验证 LF 后 5 个 baseline 核心是否在扩充 recipe 下编过；若 baseline 仍失败再据新日志诊断。
+- **余下**：wip/frogui-gs-interface(#94)、wip/frogui-native-launch(#95) 未受 commit 影响、仍为 stale 绿，本次仅同步 HANDOFF 记录、不重触发。
