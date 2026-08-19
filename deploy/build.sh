@@ -342,7 +342,7 @@ if [ ${#_queue[@]} -eq 0 ]; then
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
     _lib="${_queue[0]}"; _queue=("${_queue[@]:1}")
-    [ -n "${_seen[$_lib]}" ] && continue
+    [ -n "${_seen[$_lib]:-}" ] && continue
     _seen[$_lib]=1
     is_base "$_lib" && continue
     _found=""
