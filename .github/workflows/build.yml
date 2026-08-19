@@ -1,0 +1,120 @@
+name: Build CubeGM firmware (RK3036G)
+
+# =====================================================================
+#  任意推送 / 手动触发，都会在 GitHub 免费 x86_64 Linux runner 上自动完成：
+#    crosstool 自举 glibc-2.17 sysroot -> 交叉编 SDL/libpng/alsa
+#    -> 克隆 r36sx + 子模块 + 打 5 处补丁 -> 编 picoarch/FrogUI/cores
+#    -> ABI 门禁 -> 产出 deploy/cubegm/ 设备烧录包
+#  产物交付：
+#    - Actions Artifact: cubegm-device-payload / build-report
+#    - GitHub Release: payload-<run#> 附带可烧录 zip（稳定下载）
+#    - build-output 分支: BUILD_REPORT.txt（供 Agent 自动诊断）
+#  全程无人值守。
+# =====================================================================
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write      # 允许推送 build-output 分支 + 创建 Release
+  actions: read        # 允许 cache 恢复/上传 + upload-artifact（列出 permissions 后，未列的 scope 会降级为 none）
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /opt/hostedtoolcache /usr/share/dotnet /usr/local/lib/android /usr/lib/firefox 2>/dev/null || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Cache crosstool sysroot + SDL/libpng
+        id: cache-tc
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/cubegm-tc
+          key: tc-glibc217-${{ hashFiles('build/toolchain/build_sysroot_ctng.sh', 'deploy/build_sdl_libpng.sh') }}
+          restore-keys: |
+            tc-glibc217-
+
+      - name: Run bootstrap (full build)
+        timeout-minutes: 120
+        working-directory: deploy
+        env:
+          PREFIX: /home/runner/cubegm-tc
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # defend against CRLF line endings (files authored on Windows)
+          sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
+          sed -i 's/\r$//' ../build/toolchain/build_sysroot_ctng.sh ../build/toolchain/verify_target_abi.sh
+          chmod +x bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
+          chmod +x ../build/toolchain/*.sh
+          ./bootstrap_linux.sh
+
+      - name: Upload device payload (deploy/cubegm)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cubegm-device-payload
+          path: deploy/cubegm/
+          if-no-files-found: ignore
+
+      - name: Upload build report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: |
+            deploy/BUILD_REPORT.txt
+            cubegm-build-logs/
+          if-no-files-found: warn
+
+      - name: Publish build report to build-output branch (agent diagnosis)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd deploy
+          R="$(mktemp -d)"
+          git init -q -b build-output "$R"
+          if [ -f BUILD_REPORT.txt ]; then
+            cp BUILD_REPORT.txt "$R/BUILD_REPORT.txt"
+          fi
+          # 附带 crosstool / bootstrap 完整日志（在仓库根的 cubegm-build-logs/）
+          for l in ../cubegm-build-logs/crosstool_build.log ../cubegm-build-logs/bootstrap.log; do
+            if [ -f "$l" ]; then cp "$l" "$R/$(basename "$l")"; fi
+          done
+          cd "$R"
+          git config user.email "agent@workbuddy.local"
+          git config user.name "WorkBuddy Agent"
+          git add -A
+          git commit -q -m "build report $(date -u +%Y-%m-%dT%H:%M:%SZ) run ${{ github.run_number }}" || echo "nothing to commit"
+          # build-output is a DIAGNOSTIC-ONLY branch. Concurrent runs (a push + a
+          # workflow_dispatch for the same commit) race on the force-push and hit
+          # "cannot lock ref" -> the step fails -> an otherwise-GREEN build is marked
+          # red. That must not happen, so make the publish best-effort: a rejected
+          # force-push is non-fatal here. A genuinely broken firmware build still
+          # fails EARLIER at the STAGE 8 ABI gate ("|| die").
+          if git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" build-output; then
+            echo "Published build-output branch (BUILD_REPORT.txt + logs)."
+          else
+            echo "WARN: build-output publish raced with a concurrent run (non-fatal; diagnostic branch only)."
+          fi
+
+      - name: Create release with device payload
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd deploy
+          zip -r /tmp/cubegm-payload.zip cubegm
+          gh release create "payload-${{ github.run_number }}" /tmp/cubegm-payload.zip \
+            --title "CubeGM device payload (run ${{ github.run_number }})" \
+            --notes "Flashable open-source firmware payload for RK3036G. Unzip and copy cubegm/ to the SD card root (stock rkgame/icube/driver.so/root.dat stay untouched)."
