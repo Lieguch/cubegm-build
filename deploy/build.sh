@@ -263,7 +263,7 @@ fi
 # STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
 CORE_TABLE="
 fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||arm
-nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS=-include stdint.h|arm
+nestopia|https://github.com/libretro/nestopia|libretro|||arm
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
@@ -285,7 +285,7 @@ gpsp|https://github.com/libretro/gpsp|.|-f Makefile.libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
-ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG"
+ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG -include stdint.h"
 printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
 printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
 printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
@@ -299,7 +299,7 @@ build_core() {
         clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
     fi
     [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
-    git -C "$d" submodule update --init --depth 1 >/dev/null 2>&1 || true
+    git -C "$d" submodule update --init --depth 1 --recursive >/dev/null 2>&1 || true
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
     local -a XTRA; read -r -a XTRA <<< "$extra"
