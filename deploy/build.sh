@@ -39,7 +39,7 @@ ALSA_LIB_REPO="https://github.com/alsa-project/alsa-lib.git"
 
 # Stage-1 default cores (proves the loop across GBA/SNES/NES/MD/Atari).
 # Each is built from github.com/libretro/<NAME> with the libretro common Makefile.
-DEFAULT_CORES="mgba snes9x fceumm picodrive nestopia"
+DEFAULT_CORES="fceumm nestopia snes9x2005_plus picodrive stella2014"
 CORES="${CORES:-$DEFAULT_CORES}"
 
 log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
@@ -52,6 +52,28 @@ command -v make >/dev/null || die "make not found."
 
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
+
+# -----------------------------------------------------------------------------
+# CI clone robustness -- authenticate github.com with the job token
+# -----------------------------------------------------------------------------
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" || true
+fi
+export GIT_TERMINAL_PROMPT=0
+
+# clone_repo <repo> <dest> [extra-args...] -- retry shallow clone 3x; remove partial dest
+clone_repo(){
+    local repo="$1" dest="$2"; shift 2
+    local i tries=3
+    for ((i=1;i<=tries;i++)); do
+        if git clone --depth 1 "$@" "$repo" "$dest" >/dev/null 2>&1; then
+            return 0
+        fi
+        rm -rf "$dest"
+        [ "$i" -lt "$tries" ] && sleep 5
+    done
+    return 1
+}
 
 # -----------------------------------------------------------------------------
 # STAGE 1 -- locate / install the ARM cross compiler
@@ -220,27 +242,67 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# STAGE 7 -- build standard libretro cores
-# -----------------------------------------------------------------------------
+# STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
+CORE_TABLE="
+fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||arm
+nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS=-include stdint.h|arm
+snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
+snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
+snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26|arm
+stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
+mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm
+vba_next|https://github.com/libretro/vba-next|.|-||arm
+tgbdual|https://github.com/libretro/tgbdual-libretro|.|-||arm
+prosystem|https://github.com/libretro/prosystem-libretro|.|-||arm
+mame2000|https://github.com/libretro/mame2000-libretro|.|-||arm
+mame2003_plus|https://github.com/libretro/mame2003-plus-libretro|.|-||arm
+fbalpha2012_cps1|https://github.com/libretro/fbalpha2012_cps1|.|-||fba
+fbalpha2012_cps2|https://github.com/libretro/fbalpha2012_cps2|.|-||fba
+fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|svn-current/trunk|-f makefile.libretro||fba
+fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-||fba
+fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-||fba
+pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=lightrec HAVE_NEON=1 BUILTIN_GPU=unai|arm
+gpsp|https://github.com/libretro/gpsp|.|-f Makefile.libretro||arm
+"
 CORE_OUT="$WORKDIR/cores"
-mkdir -p "$CORE_OUT"
-for c in $CORES; do
-    log "Building libretro core: $c"
-    d="$WORKDIR/libretro-$c"
-    [ -d "$d" ] || git clone --depth 1 "https://github.com/libretro/$c.git" "$d"
-    pushd "$d" >/dev/null
+mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
+ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG"
+printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
+printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
+printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
+printf '#!/bin/bash\nexec %sg++ %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-g++"
+chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.toolchain/fba-gcc" "$WORKDIR/.toolchain/fba-g++"
+LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++"
+build_core() {
+    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}"
+    local d="$WORKDIR/libretro-$name"
+    if [ ! -d "$d/.git" ]; then
+        clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
+    fi
+    [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
+    git -C "$d" submodule update --init --depth 1 >/dev/null 2>&1 || true
+    pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
-    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-         platform=armv7-neon-hardfloat \
-         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-         -j"$(nproc)" || log "WARN: core $c build had issues (may need per-core tweaks)."
-    # locate the produced .so
-    so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
+    local -a XTRA; read -r -a XTRA <<< "$extra"
+    timeout 1800 make $mk platform=unix "${XTRA[@]}" \
+        CC="$WORKDIR/.toolchain/$wrap-gcc" CXX="$WORKDIR/.toolchain/$wrap-g++" \
+        AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/$wrap-g++" \
+        LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
+        || { log "WARN: core $name build had issues (may need per-core tweaks)."; popd >/dev/null; return; }
+    local so
+    for so in "$d/$bdir/${name}_libretro.so" "$d/$bdir/$(basename "$bdir")_libretro.so"; do
+        [ -f "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")" && popd >/dev/null && return
+    done
+    so=$(find "$d/$bdir" -maxdepth 1 -name "*_libretro.so" 2>/dev/null | head -1)
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
     popd >/dev/null
-done
+}
+while IFS='|' read -r name repo bdir mk extra wrap; do
+    [ -z "$name" ] && continue
+    case " $CORES " in *" $name "*) log "Building libretro core: $name"; build_core "$name" "$repo" "$bdir" "$mk" "$extra" "$wrap";; esac
+done <<< "$CORE_TABLE"
 
-# -----------------------------------------------------------------------------
 # STAGE 8 -- ABI gate
 # -----------------------------------------------------------------------------
 log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.17)..."
