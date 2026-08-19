@@ -288,6 +288,16 @@ build_core() {
     fi
     [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
     git -C "$d" submodule update --init --recursive 2>&1 | tail -5 || log "WARN: submodule init incomplete for $name"
+    # Some cores (nestopia/picodrive) carry libretro-common as an UNCONFIGURED
+    # gitlink (no .gitmodules entry) -> submodule update silently skips it and
+    # the include/ headers are missing. Detect and backfill from the official
+    # repo (verified: headers exist upstream; API 200).
+    _lc="$(find "$d" -maxdepth 3 -type d -name libretro-common 2>/dev/null | head -1)"
+    if [ -n "$_lc" ] && [ ! -d "$_lc/include/compat" ]; then
+        log "WARN: $_lc headers missing -- backfilling libretro-common (official)"
+        rm -rf "$_lc"
+        git clone --depth 1 https://github.com/libretro/libretro-common.git "$_lc" 2>&1 | tail -2 || log "WARN: libretro-common backfill failed"
+    fi
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
     local -a EA=(); [ -n "$extra" ] && EA=("$extra")
