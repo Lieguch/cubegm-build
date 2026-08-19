@@ -290,7 +290,8 @@ build_core() {
     git -C "$d" submodule update --init --depth 1 --recursive 2>&1 | tail -3 || log "WARN: submodule init incomplete for $name"
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
-    timeout 1800 make $mk platform=unix "$extra" \
+    local -a EA=(); [ -n "$extra" ] && EA=("$extra")
+    timeout 1800 make $mk platform=unix "${EA[@]}" \
         CC="$WORKDIR/.toolchain/$wrap-gcc" CXX="$WORKDIR/.toolchain/$wrap-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/$wrap-g++" \
         LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
