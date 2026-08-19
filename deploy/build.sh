@@ -263,9 +263,9 @@ fi
 # STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
 CORE_TABLE="
 fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro|
-nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS="-include stdint.h"
+nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS=-include stdint.h
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-|
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS="-DAT_HWCAP2=26"
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26
 stella2014|https://github.com/libretro/stella2014-libretro|.|-|
 "
 CORE_OUT="$WORKDIR/cores"
@@ -285,7 +285,8 @@ build_core() {
     git -C "$d" submodule update --init --depth 1 >/dev/null 2>&1 || true
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
-    timeout 1800 make $mk platform=unix $extra \
+    local -a XTRA; read -r -a XTRA <<< "$extra"
+    timeout 1800 make $mk platform=unix "${XTRA[@]}" \
         CC="$WORKDIR/.toolchain/arm-gcc" CXX="$WORKDIR/.toolchain/arm-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/arm-g++" \
         LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
