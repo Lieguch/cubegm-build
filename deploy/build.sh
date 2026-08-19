@@ -262,11 +262,11 @@ fi
 # -----------------------------------------------------------------------------
 # STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
 CORE_TABLE="
-fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro
-nestopia|https://github.com/libretro/nestopia|libretro|
-snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro
-stella2014|https://github.com/libretro/stella2014-libretro|.|-
+fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro|
+nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS="-include stdint.h"
+snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-|
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS="-DAT_HWCAP2=26"
+stella2014|https://github.com/libretro/stella2014-libretro|.|-|
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
@@ -276,7 +276,7 @@ printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WOR
 chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++"
 LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++"
 build_core() {
-    local name="$1" repo="$2" bdir="$3" mk="$4"
+    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5"
     local d="$WORKDIR/libretro-$name"
     if [ ! -d "$d/.git" ]; then
         clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
@@ -285,7 +285,7 @@ build_core() {
     git -C "$d" submodule update --init --depth 1 >/dev/null 2>&1 || true
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
-    timeout 1800 make $mk platform=unix \
+    timeout 1800 make $mk platform=unix $extra \
         CC="$WORKDIR/.toolchain/arm-gcc" CXX="$WORKDIR/.toolchain/arm-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/arm-g++" \
         LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
@@ -298,9 +298,9 @@ build_core() {
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
     popd >/dev/null
 }
-while IFS='|' read -r name repo bdir mk; do
+while IFS='|' read -r name repo bdir mk extra; do
     [ -z "$name" ] && continue
-    case " $CORES " in *" $name "*) log "Building libretro core: $name"; build_core "$name" "$repo" "$bdir" "$mk";; esac
+    case " $CORES " in *" $name "*) log "Building libretro core: $name"; build_core "$name" "$repo" "$bdir" "$mk" "$extra";; esac
 done <<< "$CORE_TABLE"
 
 # STAGE 8 -- ABI gate
