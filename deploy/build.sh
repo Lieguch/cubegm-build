@@ -281,7 +281,7 @@ build_core() {
         clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
     fi
     [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
-    git -C "$d" submodule update --init --depth 1 >/dev/null 2>&1 || true
+    git -C "$d" submodule update --init --depth 1 --recursive >/dev/null 2>&1 || true
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
     local -a XTRA; read -r -a XTRA <<< "$extra"
