@@ -129,13 +129,25 @@ if command -v apt-get >/dev/null 2>&1; then
         log "STAGE 0: apt deps already installed (marker present) -- skip"
     else
         log "STAGE 0: installing build dependencies via apt ..."
-        sudo apt-get update
-        sudo apt-get install -y \
+        export DEBIAN_FRONTEND=noninteractive
+        # apt hangs without an http timeout (GitHub issue actions/runner-images#11382).
+        # Official remedy: Acquire::Retries + explicit http timeout + retry loop; a
+        # transient mirror blip must NOT kill the whole build (runner preinstalls
+        # most of these tools anyway).
+        for i in 1 2 3; do
+            sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=90 update \
+                && break
+            log "WARN: apt-get update attempt $i failed -- retrying in $((i*5))s"
+            sleep "$((i*5))"
+        done
+        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=90 install -y \
+            --no-install-recommends \
             build-essential gcc g++ make git curl wget xz-utils \
             flex bison texinfo gawk libgmp-dev libmpfr-dev libmpc-dev \
             pkg-config autoconf automake libtool libtool-bin libncurses-dev \
             gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip python3-dev \
-            help2man zip unzip file
+            help2man zip unzip file \
+            || log "WARN: apt-get install failed -- continuing with preinstalled tools"
         sudo touch /tmp/.cubegm_apt_done
         log "STAGE 0: apt deps installed."
     fi
