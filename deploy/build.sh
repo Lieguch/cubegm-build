@@ -235,6 +235,12 @@ if [ ! -f frogui_libretro.so ]; then
     [ -f Makefile.libretro ] && make -f Makefile.libretro CC="$CC" CXX="$CXX" || true
 fi
 popd >/dev/null
+# The FrogUI libretro Makefile emits menu_libretro.so; zhijack.sh expects
+# frogui_libretro.so. Normalize (regression: removed by b54a9810a6 rewrite).
+if [ ! -f FrogUI/frogui_libretro.so ] && [ -f FrogUI/menu_libretro.so ]; then
+    cp FrogUI/menu_libretro.so FrogUI/frogui_libretro.so
+    log "Normalized menu_libretro.so -> frogui_libretro.so"
+fi
 if [ -f FrogUI/frogui_libretro.so ]; then
     log "FrogUI built."
 else
@@ -281,7 +287,7 @@ build_core() {
         clone_repo "$repo" "$d" --recursive || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
     fi
     [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
-    git -C "$d" submodule update --init --depth 1 --recursive >/dev/null 2>&1 || true
+    git -C "$d" submodule update --init --depth 1 --recursive 2>&1 | tail -3 || log "WARN: submodule init incomplete for $name"
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
     local -a XTRA; read -r -a XTRA <<< "$extra"
