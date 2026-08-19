@@ -290,8 +290,7 @@ build_core() {
     git -C "$d" submodule update --init --depth 1 --recursive 2>&1 | tail -3 || log "WARN: submodule init incomplete for $name"
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
-    local -a XTRA; read -r -a XTRA <<< "$extra"
-    timeout 1800 make $mk platform=unix "${XTRA[@]}" \
+    timeout 1800 make $mk platform=unix "$extra" \
         CC="$WORKDIR/.toolchain/$wrap-gcc" CXX="$WORKDIR/.toolchain/$wrap-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/$wrap-g++" \
         LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
@@ -355,7 +354,7 @@ for _b in picoarch/picoarch FrogUI/frogui_libretro.so; do
     [ -f "$_b" ] || continue
     if command -v "$READELF" >/dev/null 2>&1; then
         while IFS= read -r _l; do [ -n "$_l" ] && _queue+=("$_l"); done \
-            < <("$READELF" -d "$_b" 2>/dev/null | awk -F'[()]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
+            < <("$READELF" -d "$_b" 2>/dev/null | awk -F'[][]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
     fi
 done
 # fallback: if readelf was unavailable, seed the known direct deps
@@ -379,7 +378,7 @@ while [ ${#_queue[@]} -gt 0 ]; do
     cp -L "$_found" "$DST/lib/" 2>/dev/null || log "WARN: copy failed for $_lib"
     if command -v "$READELF" >/dev/null 2>&1; then
         while IFS= read -r _dep; do [ -n "$_dep" ] && _queue+=("$_dep"); done \
-            < <("$READELF" -d "$_found" 2>/dev/null | awk -F'[()]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
+            < <("$READELF" -d "$_found" 2>/dev/null | awk -F'[][]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
     fi
 done
 log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
