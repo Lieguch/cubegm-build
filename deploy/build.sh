@@ -310,13 +310,13 @@ chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
 # STAGE 9b -- bundle runtime libs picoarch + frogui need into cubegm/lib
-#   The device rootfs does NOT ship SDL/libpng12/z/asound (see zhijack.sh:
-#   LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib). picoarch is linked against those,
-#   so without them it dies at load time ("cannot open shared object file")
-#   and the screen never lights. Copy every NEEDED .so (and transitive deps)
-#   from the sysroot into $DST/lib. Base libs (libc/libm/pthread/dl/gcc/ld)
-#   are provided by the device rootfs, so we exclude them to avoid shipping a
-#   second glibc that could mismatch the device's dynamic linker.
+#   picoarch is linked against SDL/libpng12/z/asound (see STAGE 5 link line).
+#   The device loader searches LD_LIBRARY_PATH (cubegm/lib) then the device
+#   rootfs default paths. To be self-contained we copy every NEEDED .so (and
+#   transitive deps) from the toolchain/sysroot into $DST/lib. Base libs
+#   (libc/libm/pthread/dl/gcc/ld) are provided by the device rootfs, so we
+#   exclude them to avoid shipping a second glibc that could mismatch the
+#   device's dynamic linker.
 # -----------------------------------------------------------------------------
 log "Bundling runtime libs into $DST/lib ..."
 mkdir -p "$DST/lib"
@@ -326,18 +326,38 @@ BASE_LIBS="libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 libgcc_s.so.1 \
            librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.17.so \
            libstdc++.so.6 libatomic.so.1"
 is_base() { for b in $BASE_LIBS; do [ "$1" = "$b" ] && return 0; done; return 1; }
+# authoritative sysroot: gcc's own default (where the linker found the libs)
+# plus the build.sh $SYSROOT (glibc-2.17 sysroot).
+GCC_SYSROOT="$(${CC} -print-sysroot 2>/dev/null)"
+SEARCH_ROOTS=""
+for _r in "$SYSROOT" "$GCC_SYSROOT"; do
+    [ -n "$_r" ] && [ -d "$_r" ] && SEARCH_ROOTS="$SEARCH_ROOTS $_r"
+done
+# locate a SONAME under any search root (handles multiarch subdirs)
+find_lib() {
+    for _r in $SEARCH_ROOTS; do
+        _p=$(find "$_r" -name "$1" -type f 2>/dev/null | head -1)
+        [ -n "$_p" ] && { echo "$_p"; return 0; }
+    done
+    return 1
+}
+# extract NEEDED SONAMEs from a binary -- readelf -d line looks like:
+#   0x00000001 (NEEDED) Shared library: [libc.so.6]
+# split on [ and ] -> field 2 is the library name inside the brackets.
+needed_of() {
+    if command -v "$READELF" >/dev/null 2>&1; then
+        "$READELF" -d "$1" 2>/dev/null | awk -F'[][]' '/NEEDED/ { gsub(/[ \t]/,"",$2); if($2!="") print $2 }'
+    fi
+}
 declare -A _seen=()
 _queue=()
 for _b in picoarch/picoarch FrogUI/frogui_libretro.so; do
     [ -f "$_b" ] || continue
-    if command -v "$READELF" >/dev/null 2>&1; then
-        while IFS= read -r _l; do [ -n "$_l" ] && _queue+=("$_l"); done \
-            < <("$READELF" -d "$_b" 2>/dev/null | awk -F'[()]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
-    fi
+    while IFS= read -r _l; do [ -n "$_l" ] && _queue+=("$_l"); done < <(needed_of "$_b")
 done
 # fallback: if readelf was unavailable, seed the known direct deps
 if [ ${#_queue[@]} -eq 0 ]; then
-    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2)
+    _queue=(libSDL-1.2.so.0 libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2)
     log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
@@ -345,21 +365,15 @@ while [ ${#_queue[@]} -gt 0 ]; do
     [ -n "${_seen[$_lib]:-}" ] && continue
     _seen[$_lib]=1
     is_base "$_lib" && continue
-    _found=""
-    for _d in "$SYSROOT/lib" "$SYSROOT/usr/lib" "$SYSROOT/usr/lib/arm-linux-gnueabihf" "$SYSROOT/lib/arm-linux-gnueabihf"; do
-        if [ -e "$_d/$_lib" ]; then _found="$_d/$_lib"; break; fi
-    done
-    if [ -z "$_found" ]; then
-        log "WARN: runtime lib $_lib not in sysroot -- device must provide it."
+    if ! _found=$(find_lib "$_lib"); then
+        log "WARN: runtime lib $_lib not found in sysroot -- device must provide it."
         continue
     fi
     cp -L "$_found" "$DST/lib/" 2>/dev/null || log "WARN: copy failed for $_lib"
-    if command -v "$READELF" >/dev/null 2>&1; then
-        while IFS= read -r _dep; do [ -n "$_dep" ] && _queue+=("$_dep"); done \
-            < <("$READELF" -d "$_found" 2>/dev/null | awk -F'[()]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
-    fi
+    while IFS= read -r _dep; do [ -n "$_dep" ] && _queue+=("$_dep"); done < <(needed_of "$_found")
 done
 log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
+
 log "Staged into $DST"
 log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
 log "overwriting the existing cubegm/ (stock rkgame/icube/driver.so/root.dat stay)."
