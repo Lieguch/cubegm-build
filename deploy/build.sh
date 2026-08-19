@@ -288,7 +288,7 @@ build_core() {
     make $mk platform=unix \
         CC="$WORKDIR/.toolchain/arm-gcc" CXX="$WORKDIR/.toolchain/arm-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/arm-g++" \
-        LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -5 \
+        LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
         || { log "WARN: core $name build had issues (may need per-core tweaks)."; popd >/dev/null; return; }
     local so
     for so in "$d/$bdir/${name}_libretro.so" "$d/$bdir/$(basename "$bdir")_libretro.so"; do
