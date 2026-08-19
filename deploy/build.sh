@@ -1,1 +1,390 @@
-IyEvdXNyL2Jpbi9lbnYgYmFzaA0KIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQ0KIyAgQ3ViZUdNIG9wZW4tc291cmNlIHJlcGxhY2VtZW50IC0tIG9uZS1jb21tYW5kIGJ1aWxkZXIgKExpbnV4IHg4Nl82NCBob3N0KQ0KIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQ0KIyAgUHJvZHVjZXMgZGVwbG95L2N1YmVnbS8gd2l0aCBjb21waWxlZCBiaW5hcmllcyB0aGF0IHlvdSBjb3B5IHN0cmFpZ2h0IHRvIHRoZQ0KIyAgZGV2aWNlIFNEIGNhcmQuIFRoZSBkZXZpY2UgYm9vdHMgdGhlIG9wZW4tc291cmNlIG1lbnUgKHBpY29hcmNoICsgRnJvZ1VJKQ0KIyAgdmlhIHRoZSBhdXRvcnVuIGhpamFjazsgc3RvY2sgcmtnYW1lL2ljdWJlL2RyaXZlci5zbyBhbmQgcm9vdC5kYXQgYXJlIGxlZnQNCiMgIHVudG91Y2hlZCwgc28gdGhlIGRldmljZSB3aWxsIE5PVCByZXBvcnQgInNkY2FyZCBpcyBkYW1hZ2VkIi4NCiMNCiMgIEFsbCBwcm9kdWNlZCBiaW5hcmllcyBhcmUgbGlua2VkIGFnYWluc3QgZ2xpYmMgPD0gMi4xNyAodGhlIGRldmljZSBjZWlsaW5nLA0KIyAgbWVhc3VyZWQgb24gdGhlIDIwIGRldmljZSBjb3JlcykgYW5kIHZlcmlmaWVkIGJ5IHZlcmlmeV90YXJnZXRfYWJpLnNoLg0KIw0KIyAgVVNBR0UNCiMgICAgLi9idWlsZC5zaCAgICAgICAgICAgICAgICAgIyBmdWxsIGJ1aWxkIChhdXRvLWJ1aWxkcyBnbGliYy0yLjE3IHN5c3Jvb3QpDQojICAgIFNZU1JPT1Q9L3BhdGgvdG8vc3lzcm9vdCAuL2J1aWxkLnNoDQojICAgIEFSTV9HTlU9L29wdC9hcm0tZ251LTEzLjIgLi9idWlsZC5zaA0KIyAgICBDT1JFUz0ibWdiYSBzbmVzOXggZmNldW1tIiAuL2J1aWxkLnNoICAgIyBidWlsZCBvbmx5IHRoZXNlIGxpYnJldHJvIGNvcmVzDQojICAgIFNLSVBfU1lTUk9PVD0xIFNZU1JPT1Q9L2V4aXN0aW5nIC4vYnVpbGQuc2gNCiMNCiMgIFJFUVVJUkVNRU5UUzogeDg2XzY0IExpbnV4LCBnaXQsIGN1cmwsIHh6LCBidWlsZC1lc3NlbnRpYWwsIGF1dG9jb25mLA0KIyAgYXV0b21ha2UsIHBrZy1jb25maWcsIGdwZXJmLCB0ZXhpbmZvLCBmbGV4LCBiaXNvbiwgcHl0aG9uMywgbWFrZSwgZ2NjLg0KIyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQ0Kc2V0IC1ldW8gcGlwZWZhaWwNCg0KSEVSRT0iJChjZCAiJChkaXJuYW1lICIkMCIpIiAmJiBwd2QpIg0KV09SS0RJUj0iJHtXT1JLRElSOi0kSEVSRS9idWlsZHJvb3R9Ig0KU1lTUk9PVD0iJHtTWVNST09UOi19IiAgICAgICAgICAgICAgICAgIyBpZiBlbXB0eSAtPiBidWlsdCBieSBjcm9zc3Rvb2wtTkcgYmVsb3cNCkFSTV9HTlU9IiR7QVJNX0dOVTotfSIgICAgICAgICAgICAgICAgICMgb3B0aW9uYWw6IGV4dHJhY3RlZCBBUk0gR05VIDEzLjIgZGlyDQpTS0lQX1NZU1JPT1Q9IiR7U0tJUF9TWVNST09UOi0wfSINCg0KIyAtLS0gdG9vbGNoYWluIC8gdGFyZ2V0IC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQ0KVEFSR0VUPSJhcm0tbGludXgtZ251ZWFiaWhmIg0KQVJDSF9GTEFHUz0iLW1hcmNoPWFybXY3LWEgLW10dW5lPWNvcnRleC1hNyAtbWZwdT1uZW9uLXZmcHY0IC1tZmxvYXQtYWJpPWhhcmQgLU8yIg0KDQojIC0tLSByZXBvcyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NClBJQ09BUkNIX1JFUE89Imh0dHBzOi8vZ2l0aHViLmNvbS90enViZXJ0b3dza2kvVHJlZUZyb2dVSV9waWNvYXJjaC5naXQiDQpGUk9HVUlfUkVQTz0iaHR0cHM6Ly9naXRodWIuY29tL3R6dWJlcnRvd3NraS9Gcm9nVUkuZ2l0Ig0KQUxTQV9MSUJfUkVQTz0iaHR0cHM6Ly9naXRodWIuY29tL2Fsc2EtcHJvamVjdC9hbHNhLWxpYi5naXQiDQoNCiMgU3RhZ2UtMSBkZWZhdWx0IGNvcmVzIChwcm92ZXMgdGhlIGxvb3AgYWNyb3NzIEdCQS9TTkVTL05FUy9NRC9BdGFyaSkuDQojIEVhY2ggaXMgYnVpbHQgZnJvbSBnaXRodWIuY29tL2xpYnJldHJvLzxOQU1FPiB3aXRoIHRoZSBsaWJyZXRybyBjb21tb24gTWFrZWZpbGUuDQpERUZBVUxUX0NPUkVTPSJtZ2JhIHNuZXM5eCBmY2V1bW0gcGljb2RyaXZlIG5lc3RvcGlhIg0KQ09SRVM9IiR7Q09SRVM6LSRERUZBVUxUX0NPUkVTfSINCg0KbG9nKCl7IHByaW50ZiAnXDAzM1sxOzMybVtidWlsZF1cMDMzWzBtICVzXG4nICIkKiI7IH0NCmVycigpeyBwcmludGYgJ1wwMzNbMTszMW1bRVJST1JdXDAzM1swbSAlc1xuJyAiJCoiID4mMjsgfQ0KZGllKCl7IGVyciAiJCoiOyBleGl0IDE7IH0NCg0KWyAiJCh1bmFtZSAtcykiID0gIkxpbnV4IiBdIHx8IGRpZSAiVGhpcyBzY3JpcHQgbXVzdCBydW4gb24gYSBMaW51eCB4ODZfNjQgYnVpbGQgaG9zdC4iDQpjb21tYW5kIC12IGdpdCA+L2Rldi9udWxsIHx8IGRpZSAiZ2l0IG5vdCBmb3VuZC4iDQpjb21tYW5kIC12IG1ha2UgPi9kZXYvbnVsbCB8fCBkaWUgIm1ha2Ugbm90IGZvdW5kLiINCg0KbWtkaXIgLXAgIiRXT1JLRElSIg0KY2QgIiRXT1JLRElSIg0KDQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tDQojIENJIGNsb25lIHJvYnVzdG5lc3MgLS0gYXV0aGVudGljYXRlIGdpdGh1Yi5jb20gd2l0aCB0aGUgam9iIHRva2VuDQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tDQojIEdpdEh1Yi1ob3N0ZWQgcnVubmVycyBzaGFyZSBOQVQgSVBzOyB1bmF1dGhlbnRpY2F0ZWQgZ2l0aHViLmNvbSBjbG9uZXMgaGl0DQojIHRoZSA2MC1yZXF1ZXN0L2hyIHNlY29uZGFyeSByYXRlIGxpbWl0IC0+IDQwMyAtPiBnaXQgcHJvbXB0cyBmb3IgYSB1c2VybmFtZQ0KIyAtPiB3aXRoIEdJVF9URVJNSU5BTF9QUk9NUFQ9MCB0aGlzIGZhaWxzIGFzDQojICJjb3VsZCBub3QgcmVhZCBVc2VybmFtZSAuLi4gTm8gc3VjaCBkZXZpY2Ugb3IgYWRkcmVzcyIgKG9yIGxlYXZlcyBhbiBlbXB0eQ0KIyBjbG9uZSBkaXIgLT4gIm1ha2U6IE5vIHRhcmdldHMgc3BlY2lmaWVkIGFuZCBubyBtYWtlZmlsZSBmb3VuZCIpLiBUaGF0IGJyZWFrcw0KIyBGcm9nVUkgKyB0aGUgbGlicmV0cm8gY29yZXMsIHdoaWNoIHRoZW4gZmFpbHMgdGhlIFNUQUdFIDggQUJJIGdhdGUuIEVtYmVkIHRoZQ0KIyBqb2IgdG9rZW4gaW4gdGhlIGdpdGh1Yi5jb20gVVJMIHRvIHJhaXNlIHRoZSBsaW1pdCB0byA1MDAwL2hyIGFuZCBhdm9pZCB0aGUNCiMgcHJvbXB0OyBmYWxscyBiYWNrIHRvIGFub255bW91cyBpZiBubyB0b2tlbiBpcyBwcmVzZW50IChsb2NhbCBkZXYpLiBTZWUNCiMgSEFORE9GRi5tZCBzZWxmLWhlYWwgbm90ZS4NCmlmIFsgLW4gIiR7R0lUSFVCX1RPS0VOOi19IiBdOyB0aGVuDQogICAgZ2l0IGNvbmZpZyAtLWdsb2JhbCB1cmwuImh0dHBzOi8veC1hY2Nlc3MtdG9rZW46JHtHSVRIVUJfVE9LRU59QGdpdGh1Yi5jb20vIi5pbnN0ZWFkT2YgImh0dHBzOi8vZ2l0aHViLmNvbS8iIHx8IHRydWUNCmZpDQoNCiMgY2xvbmVfcmVwbyA8cmVwbz4gPGRlc3Q+IFtleHRyYS1hcmdzLi4uXQ0KIyBSZXRyeSBhIHNoYWxsb3cgY2xvbmUgdXAgdG8gMyB0aW1lczsgb24gZmFpbHVyZSByZW1vdmUgdGhlIChwb3NzaWJseSBwYXJ0aWFsKQ0KIyBkZXN0aW5hdGlvbiBzbyBhIGxhdGVyIHJldHJ5IGlzIG5vdCBza2lwcGVkIGJ5IGEgc3RhbGUgWyAtZCAiJGRlc3QiIF0gZ3VhcmQuDQpjbG9uZV9yZXBvKCl7DQogICAgbG9jYWwgcmVwbz0iJDEiIGRlc3Q9IiQyIjsgc2hpZnQgMg0KICAgIGxvY2FsIGkgdHJpZXM9Mw0KICAgIGZvciAoKGk9MTtpPD10cmllcztpKyspKTsgZG8NCiAgICAgICAgaWYgZ2l0IGNsb25lIC0tZGVwdGggMSAiJEAiICIkcmVwbyIgIiRkZXN0IiA+L2Rldi9udWxsIDI+JjE7IHRoZW4NCiAgICAgICAgICAgIHJldHVybiAwDQogICAgICAgIGZpDQogICAgICAgIHJtIC1yZiAiJGRlc3QiDQogICAgICAgIFsgIiRpIiAtbHQgIiR0cmllcyIgXSAmJiBzbGVlcCA1DQogICAgZG9uZQ0KICAgIHJldHVybiAxDQp9DQoNCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCiMgU1RBR0UgMSAtLSBsb2NhdGUgLyBpbnN0YWxsIHRoZSBBUk0gY3Jvc3MgY29tcGlsZXINCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCmlmIGNvbW1hbmQgLXYgJHtUQVJHRVR9LWdjYyA+L2Rldi9udWxsIDI+JjE7IHRoZW4NCiAgICBDQz0iJHtUQVJHRVR9LWdjYyINCiAgICBsb2cgIlVzaW5nIHN5c3RlbSBjcm9zcyBjb21waWxlcjogJCgkQ0MgLS12ZXJzaW9uIHwgaGVhZCAtMSkiDQplbGlmIFsgLW4gIiRBUk1fR05VIiBdOyB0aGVuDQogICAgQ0M9IiRBUk1fR05VL2Jpbi8ke1RBUkdFVH0tZ2NjIg0KICAgIFsgLXggIiRDQyIgXSB8fCBkaWUgIkFSTV9HTlUgc2V0IGJ1dCAkQ0MgbWlzc2luZy4gRXh0cmFjdCBhcm0tZ251LXRvb2xjaGFpbi0xMy4yIGZpcnN0LiINCiAgICBsb2cgIlVzaW5nIEFSTSBHTlUgdG9vbGNoYWluOiAkQ0MiDQplbHNlDQogICAgZGllICJObyAke1RBUkdFVH0tZ2NjIG9uIFBBVEggYW5kIEFSTV9HTlUgbm90IHNldC4NCiAgSW5zdGFsbCBvbmUgb2Y6DQogICAgLSBhcHQ6ICBzdWRvIGFwdC1nZXQgaW5zdGFsbCBnY2MtYXJtLWxpbnV4LWdudWVhYmloZg0KICAgIC0gb3IgZG93bmxvYWQgYXJtLWdudS10b29sY2hhaW4tMTMuMi1yZWwxLXg4Nl82NC1hcm0tbm9uZS1saW51eC1nbnVlYWJpaGYudGFyLnh6DQogICAgICBhbmQgc2V0IEFSTV9HTlU9L3BhdGgvdG8vZXh0cmFjdGVkIg0KZmkNCkNYWD0iJHtDQyVnY2N9ZysrIg0KZXhwb3J0IENST1NTX0NPTVBJTEU9IiR7VEFSR0VUfS0iDQpleHBvcnQgQ0MgQ1hYDQoNCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCiMgU1RBR0UgMiAtLSBnbGliYy0yLjE3IHN5c3Jvb3QgKHRoZSBkZXZpY2UgY2VpbGluZykNCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCmlmIFsgLXogIiRTWVNST09UIiBdOyB0aGVuDQogICAgaWYgWyAiJFNLSVBfU1lTUk9PVCIgPSAiMSIgXTsgdGhlbg0KICAgICAgICBkaWUgIlNLSVBfU1lTUk9PVD0xIGJ1dCBubyBTWVNST09UIHByb3ZpZGVkLiINCiAgICBmaQ0KICAgIFNZU1JPT1Q9IiRXT1JLRElSL3N5c3Jvb3QtZ2xpYmMyMTciDQogICAgaWYgWyAtZCAiJFNZU1JPT1QvdXNyL2xpYiIgXTsgdGhlbg0KICAgICAgICBsb2cgIlJldXNpbmcgZXhpc3Rpbmcgc3lzcm9vdDogJFNZU1JPT1QiDQogICAgZWxzZQ0KICAgICAgICBsb2cgIkJ1aWxkaW5nIGdsaWJjLTIuMTcgc3lzcm9vdCB3aXRoIGNyb3NzdG9vbC1ORyAob25lLXRpbWUsIH4yMC02MCBtaW4pLi4uIg0KICAgICAgICBiYXNoICIkSEVSRS90b29sY2hhaW4vYnVpbGRfc3lzcm9vdF9jdG5nLnNoIiAiJFNZU1JPT1QiDQogICAgZmkNCmZpDQpbIC1kICIkU1lTUk9PVCIgXSB8fCBkaWUgIlNZU1JPT1Qgbm90IGZvdW5kOiAkU1lTUk9PVCINCmxvZyAiU3lzcm9vdDogJFNZU1JPT1QiDQoNCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCiMgU1RBR0UgMyAtLSBBTFNBIHVzZXJzcGFjZSBoZWFkZXJzIChub3QgaW4gdGhlIEFSTSB0b29sY2hhaW4gc3lzcm9vdCkNCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCkFMU0FfSU5DPSIkV09SS0RJUi9hbHNhLWxpYi9pbmNsdWRlIg0KaWYgWyAhIC1kICIkQUxTQV9JTkMvYWxzYSIgXTsgdGhlbg0KICAgIGxvZyAiRmV0Y2hpbmcgYWxzYS1saWIgaGVhZGVycyAoaW5jbHVkZS8gb25seSkuLi4iDQogICAgcm0gLXJmICIkV09SS0RJUi9hbHNhLWxpYiINCiAgICBjbG9uZV9yZXBvICIkQUxTQV9MSUJfUkVQTyIgIiRXT1JLRElSL2Fsc2EtbGliIg0KZmkNCkFMU0FfQ0ZMQUdTPSItSSRBTFNBX0lOQyINCg0KIyBDb21tb24gY29tcGlsZSBmbGFncyBmb3IgZXZlcnkgdGFyZ2V0IGJpbmFyeQ0KZXhwb3J0IENGTEFHUz0iJEFSQ0hfRkxBR1MgLS1zeXNyb290PSRTWVNST09UICRBTFNBX0NGTEFHUyINCmV4cG9ydCBDWFhGTEFHUz0iJENGTEFHUyINCmV4cG9ydCBMREZMQUdTPSItLXN5c3Jvb3Q9JFNZU1JPT1QgLVdsLC0tZHluYW1pYy1saW5rZXI9L2xpYi9sZC1saW51eC1hcm1oZi5zby4zIg0KDQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tDQojIFNUQUdFIDQgLS0gY2xvbmUgZnJvbnQtZW5kIHNvdXJjZXMNCiMgICBJTVBPUlRBTlQ6IHRoZSA1LWVkaXQgcGF0Y2ggKC4uL3BhdGNoL3BpY29hcmNoXzVlZGl0cy5wYXRjaCkgb25seSBhcHBsaWVzIG9uDQojICAgdGhlICpyMzZzeCogYnJhbmNoIGFuZCBuZWVkcyB0aGUgbGlicmV0cm8tY29tbW9uIHN1Ym1vZHVsZSAoZGVmaW5lcw0KIyAgIFJFVFJPX0RFVklDRV9JRF9KT1lQQURfKiB1c2VkIGJ5IHBsYXRfc2YzMDAwLmMpLiBDbG9uZSByMzZzeCBleHBsaWNpdGx5IGFuZA0KIyAgIGluaXQgdGhlIHN1Ym1vZHVsZS4gVG8gcmV1c2UgYW4gYWxyZWFkeS1wYXRjaGVkIGxvY2FsIGNoZWNrb3V0LCBzZXQNCiMgICBQSUNPQVJDSF9MT0NBTD0vcGF0aC90by9UcmVlRnJvZ1VJX3BpY29hcmNoLg0KIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQ0KaWYgWyAtbiAiJHtQSUNPQVJDSF9MT0NBTDotfSIgXSAmJiBbIC1kICIkUElDT0FSQ0hfTE9DQUwiIF07IHRoZW4NCiAgICBsb2cgIlVzaW5nIGxvY2FsIHBpY29hcmNoIHNvdXJjZTogJFBJQ09BUkNIX0xPQ0FMIg0KICAgIHJtIC1yZiBwaWNvYXJjaCAmJiBjcCAtYSAiJFBJQ09BUkNIX0xPQ0FMIiBwaWNvYXJjaA0KZWxpZiBbICEgLWQgcGljb2FyY2ggXTsgdGhlbg0KICAgIGxvZyAiQ2xvbmluZyBwaWNvYXJjaCAocjM2c3ggYnJhbmNoKS4uLiINCiAgICBjbG9uZV9yZXBvICIkUElDT0FSQ0hfUkVQTyIgcGljb2FyY2ggLWIgcjM2c3gNCmVsc2UNCiAgICBsb2cgIlJldXNpbmcgZXhpc3RpbmcgcGljb2FyY2gvIChlbnN1cmUgaXQgaXMgb24gcjM2c3ggQU5EIHBhdGNoZWQpLiINCmZpDQojIGxpYnJldHJvLWNvbW1vbiBzdWJtb2R1bGU6IHByb3ZpZGVzIGxpYnJldHJvLmggLyBSRVRST19ERVZJQ0VfSURfKi4NCmlmIFsgISAtZiBwaWNvYXJjaC9saWJyZXRyby1jb21tb24vaW5jbHVkZS9saWJyZXRyby5oIF0gXA0KICAgJiYgWyAhIC1mIHBpY29hcmNoL2xpYnJldHJvLWNvbW1vbi9pbmNsdWRlL2xpYnJldHJvL2xpYnJldHJvLmggXTsgdGhlbg0KICAgIGxvZyAiSW5pdGlhbGl6aW5nIGxpYnJldHJvLWNvbW1vbiBzdWJtb2R1bGUgKHJlcXVpcmVkIGZvciBSRVRST19ERVZJQ0VfSURfKikuLi4iDQogICAgKCBjZCBwaWNvYXJjaCAmJiBnaXQgc3VibW9kdWxlIHVwZGF0ZSAtLWluaXQgLS1yZWN1cnNpdmUgKSBcDQogICAgICAgIHx8IGxvZyAiV0FSTjogc3VibW9kdWxlIGluaXQgZmFpbGVkOyBydW4gbWFudWFsbHk6IGNkIHBpY29hcmNoICYmIGdpdCBzdWJtb2R1bGUgdXBkYXRlIC0taW5pdCBsaWJyZXRyby1jb21tb24iDQpmaQ0KIyBBcHBseSB0aGUgNS1lZGl0IHBhdGNoIChSVEMgKyBldmRldiBnYW1lcGFkKSBpZiBhIGNsZWFuIGNoZWNrb3V0IGFuZCBwYXRjaCBwcmVzZW50Lg0KaWYgWyAtZiAiJEhFUkUvLi4vcGF0Y2gvcGljb2FyY2hfNWVkaXRzLnBhdGNoIiBdOyB0aGVuDQogICAgaWYgZ2l0IC1DIHBpY29hcmNoIGFwcGx5IC0taWdub3JlLXdoaXRlc3BhY2UgLS1jaGVjayAiJEhFUkUvLi4vcGF0Y2gvcGljb2FyY2hfNWVkaXRzLnBhdGNoIiAyPi9kZXYvbnVsbDsgdGhlbg0KICAgICAgICBsb2cgIkFwcGx5aW5nIDUtZWRpdCBwYXRjaCAoUlRDICsgZXZkZXYgZ2FtZXBhZCkuLi4iDQogICAgICAgIGdpdCAtQyBwaWNvYXJjaCBhcHBseSAtLWlnbm9yZS13aGl0ZXNwYWNlICIkSEVSRS8uLi9wYXRjaC9waWNvYXJjaF81ZWRpdHMucGF0Y2giDQogICAgZWxzZQ0KICAgICAgICBsb2cgIjUtZWRpdCBwYXRjaCBhbHJlYWR5IGFwcGxpZWQgb3Igbm90IGFwcGxpY2FibGUgLS0gc2tpcHBpbmcuIg0KICAgIGZpDQpmaQ0KIyBBcHBseSB0aGUgUkszMDM2RyBkaXNwbGF5IHBhdGNoIChmYjAgZGlyZWN0LWRyaXZlOyBmaXhlcyBibGFjayBzY3JlZW4gb24NCiMgUkszMDM2RyB3aGljaCBoYXMgbm8gL2Rldi9kaXMgKyBubyBzdG9jayBkcml2ZXIuc28pLiBNVVNUIHJ1biBBRlRFUiB0aGUNCiMgNS1lZGl0IHBhdGNoIGFib3ZlIChib3RoIHRvdWNoIHBsYXRfc2RsLmMgYnV0IGluIG5vbi1vdmVybGFwcGluZyByZWdpb25zKS4NCmlmIFsgLWYgIiRIRVJFLy4uL3BhdGNoL3BpY29hcmNoX3JrMzAzNmdfZGlzcGxheS5wYXRjaCIgXTsgdGhlbg0KICAgIGlmIGdpdCAtQyBwaWNvYXJjaCBhcHBseSAtLWlnbm9yZS13aGl0ZXNwYWNlIC0tY2hlY2sgIiRIRVJFLy4uL3BhdGNoL3BpY29hcmNoX3JrMzAzNmdfZGlzcGxheS5wYXRjaCIgMj4vZGV2L251bGw7IHRoZW4NCiAgICAgICAgbG9nICJBcHBseWluZyBSSzMwMzZHIGRpc3BsYXkgcGF0Y2ggKGZiMCBkaXJlY3QtZHJpdmUpLi4uIg0KICAgICAgICBnaXQgLUMgcGljb2FyY2ggYXBwbHkgLS1pZ25vcmUtd2hpdGVzcGFjZSAiJEhFUkUvLi4vcGF0Y2gvcGljb2FyY2hfcmszMDM2Z19kaXNwbGF5LnBhdGNoIg0KICAgIGVsaWYgZ2l0IC1DIHBpY29hcmNoIGFwcGx5IC0taWdub3JlLXdoaXRlc3BhY2UgLVIgLS1jaGVjayAiJEhFUkUvLi4vcGF0Y2gvcGljb2FyY2hfcmszMDM2Z19kaXNwbGF5LnBhdGNoIiAyPi9kZXYvbnVsbDsgdGhlbg0KICAgICAgICBsb2cgIlJLMzAzNkcgZGlzcGxheSBwYXRjaCBhbHJlYWR5IGFwcGxpZWQgLS0gc2tpcHBpbmcuIg0KICAgIGVsc2UNCiAgICAgICAgZGllICJSSzMwMzZHIGRpc3BsYXkgcGF0Y2ggTk9UIGFwcGxpY2FibGUgYW5kIE5PVCBhbHJlYWR5IGFwcGxpZWQgLS0gd291bGQgc2hpcCBibGFjay1zY3JlZW4gYmluYXJ5LiBBYm9ydC4iDQogICAgZmkNCmZpDQpbIC1kIEZyb2dVSS8uZ2l0IF0gfHwgY2xvbmVfcmVwbyAiJEZST0dVSV9SRVBPIiBGcm9nVUkNCg0KIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQ0KIyBTVEFHRSA1IC0tIGJ1aWxkIHBpY29hcmNoIGZvciBSSzMwMzZHIChBUk0sIE5PVCBNSVBTISkNCiMgICBHb3RjaGE6IHRoZSByZXBvJ3MgYnVpbGRfc2YzMDAwLnNoIGFuZCB0aGUgTWFrZWZpbGUgJ3NmMzAwMCcgYnJhbmNoIGFyZQ0KIyAgIEhBUkRDT0RFRCB0byBNSVBTICgtbWlwczMycjIpLiBPdXIgZGV2aWNlIGlzIEFSTSAoUkszMDM2RyksIHNvIHVzZSB0aGUNCiMgICBwcm92aWRlZCBBUk0gdGVtcGxhdGUgYnVpbGRfc2YzMDAwX2FybWhmLnNoLiBJdCByZXdyaXRlcyB0aGUgTWFrZWZpbGUncw0KIyAgIE1JUFMgZmxhZ3MgdG8gQVJNIGFuZCBleHBlY3RzIFNETDEuMiArIGxpYnBuZzEyIChhcm1oZiwgbGlua2VkIGFnYWluc3QgdGhlDQojICAgMi4xNyBzeXNyb290KSB0byBiZSBwcmVzZW50IGluICRTWVNST09ULiBUaGUgbWluaW1hbCBjcm9zc3Rvb2wtTkcgc3lzcm9vdA0KIyAgIGRvZXMgTk9UIGluY2x1ZGUgU0RML2xpYnBuZyAtLSBjcm9zcy1idWlsZCB0aGVtIGZpcnN0IChzZWUgSEFORE9GRi5tZCkuDQojICAgQWxzbyBub3RlOiB0aGUgTWFrZWZpbGUgcmVhZHMgbG93ZXJjYXNlICdwbGF0Zm9ybSc7IHBhc3NpbmcgUExBVEZPUk09Li4uDQojICAgaXMgYSBuby1vcCBhbmQgc2lsZW50bHkgYnVpbGRzIHRoZSAndW5peCcgdGFyZ2V0Lg0KIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQ0KbG9nICJCdWlsZGluZyBwaWNvYXJjaCAocGxhdF9zZjMwMDAsIEFSTSkuLi4iDQpBUk1fQlVJTEQ9IiRIRVJFL2J1aWxkX3NmMzAwMF9hcm1oZi5zaCINCmlmIFsgLXggIiRBUk1fQlVJTEQiIF07IHRoZW4NCiAgICBTWVNST09UPSIkU1lTUk9PVCIgQ0M9IiRDQyIgQ1hYPSIkQ1hYIiBDUk9TU19DT01QSUxFPSIkQ1JPU1NfQ09NUElMRSIgXA0KICAgIENGTEFHUz0iJENGTEFHUyIgQ1hYRkxBR1M9IiRDWFhGTEFHUyIgTERGTEFHUz0iJExERkxBR1MiIFwNCiAgICBQSUNPQVJDSF9ESVI9IiRQV0QvcGljb2FyY2giIFwNCiAgICAgICAgYmFzaCAiJEFSTV9CVUlMRCINCmVsc2UNCiAgICBsb2cgIldBUk46IGJ1aWxkX3NmMzAwMF9hcm1oZi5zaCBtaXNzaW5nIC0tIGZhbGxiYWNrIG5lZWRzIG1hbnVhbCBNYWtlZmlsZSBmaXguIg0KICAgIHB1c2hkIHBpY29hcmNoID4vZGV2L251bGwNCiAgICBtYWtlIENDPSIkQ0MiIENYWD0iJENYWCIgQ1JPU1NfQ09NUElMRT0iJENST1NTX0NPTVBJTEUiIFwNCiAgICAgICAgIHBsYXRmb3JtPXNmMzAwMCBTWVNST09UPSIkU1lTUk9PVCIgXA0KICAgICAgICAgQ0ZMQUdTPSIkQ0ZMQUdTIiBDWFhGTEFHUz0iJENYWEZMQUdTIiBMREZMQUdTPSIkTERGTEFHUyIgXA0KICAgICAgICAgcGljb2FyY2ggLWoiJChucHJvYykiDQogICAgcG9wZCA+L2Rldi9udWxsDQpmaQ0KWyAteCBwaWNvYXJjaC9waWNvYXJjaCBdIHx8IGRpZSAicGljb2FyY2ggYnVpbGQgZmFpbGVkLiINCmxvZyAicGljb2FyY2ggYnVpbHQuIg0KDQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tDQojIFNUQUdFIDYgLS0gYnVpbGQgRnJvZ1VJIGxhdW5jaGVyIGNvcmUNCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCiMgQXBwbHkgdGhlIFJLMzAzNkcgYnVpbGQgZml4IEJFRk9SRSBjb21waWxpbmcuIFRoZSB1cHN0cmVhbSBGcm9nVUkgdGlwDQojIChjb21taXQgMmY0MWFjZSkgd2FzIGRldmVsb3BlZCBmb3IgU0YyMDAwIChNSVBTKTsgdGhlIHVuaXgvQVJNIE1ha2VmaWxlDQojIHRhcmdldCByZWZlcmVuY2VzIHRocmVlIHN5bWJvbHMgaXQgbmV2ZXIgZGVjbGFyZXMsIHNvIGZyb2d1aV9saWJyZXRyby5zbw0KIyBmYWlscyB0byBjb21waWxlL2xpbmsgYW5kIHRoZSBwYXlsb2FkIGNhbm5vdCBib290ICh6aGlqYWNrLnNoIHJlcXVpcmVzIGl0KS4NCiMgVGhpcyBwYXRjaCBkZWNsYXJlcyB0aGUgZ2FtZS1sYXVuY2ggYnVmZmVycyBhbmQgc3R1YnMgZGlyZWN0X2xvYWRlci94bG9nLg0KIyBBIGZhaWxlZC9hbHJlYWR5LWFwcGxpZWQgY2hlY2sgaXMgZmF0YWw6IHNoaXBwaW5nIHdpdGhvdXQgaXQgPSBubyBtZW51Lg0KaWYgWyAtZiAiJEhFUkUvLi4vcGF0Y2gvZnJvZ3VpX3JrMzAzNmdfYnVpbGQucGF0Y2giIF07IHRoZW4NCiAgICBpZiBnaXQgLUMgRnJvZ1VJIGFwcGx5IC0taWdub3JlLXdoaXRlc3BhY2UgLS1jaGVjayAiJEhFUkUvLi4vcGF0Y2gvZnJvZ3VpX3JrMzAzNmdfYnVpbGQucGF0Y2giIDI+L2Rldi9udWxsOyB0aGVuDQogICAgICAgIGxvZyAiQXBwbHlpbmcgUkszMDM2RyBGcm9nVUkgYnVpbGQgZml4IChkZWNsYXJlIGJ1ZmZlcnMgKyBzdHViIGRpcmVjdF9sb2FkZXIveGxvZykuLi4iDQogICAgICAgIGdpdCAtQyBGcm9nVUkgYXBwbHkgLS1pZ25vcmUtd2hpdGVzcGFjZSAiJEhFUkUvLi4vcGF0Y2gvZnJvZ3VpX3JrMzAzNmdfYnVpbGQucGF0Y2giDQogICAgZWxpZiBnaXQgLUMgRnJvZ1VJIGFwcGx5IC0taWdub3JlLXdoaXRlc3BhY2UgLVIgLS1jaGVjayAiJEhFUkUvLi4vcGF0Y2gvZnJvZ3VpX3JrMzAzNmdfYnVpbGQucGF0Y2giIDI+L2Rldi9udWxsOyB0aGVuDQogICAgICAgIGxvZyAiUkszMDM2RyBGcm9nVUkgYnVpbGQgZml4IGFscmVhZHkgYXBwbGllZCAtLSBza2lwcGluZy4iDQogICAgZWxzZQ0KICAgICAgICBkaWUgIlJLMzAzNkcgRnJvZ1VJIGJ1aWxkIGZpeCBOT1QgYXBwbGljYWJsZSBhbmQgTk9UIGFscmVhZHkgYXBwbGllZCAtLSBGcm9nVUkgd291bGQgZmFpbCB0byBidWlsZC4gQWJvcnQuIg0KICAgIGZpDQpmaQ0KbG9nICJCdWlsZGluZyBGcm9nVUkgKGZyb2d1aV9saWJyZXRyby5zbykuLi4iDQpwdXNoZCBGcm9nVUkgPi9kZXYvbnVsbA0KbWFrZSBDQz0iJENDIiBDWFg9IiRDWFgiIHx8IHRydWUgICAjIGJ1aWxkcyBtZW51X2xpYnJldHJvLnNvICh0aGUgbGlicmV0cm8gbWVudSBjb3JlKQ0KIyBUaGUgRnJvZ1VJIGxpYnJldHJvIE1ha2VmaWxlIGVtaXRzIG1lbnVfbGlicmV0cm8uc28sIGJ1dCB0aGUgcmVzdCBvZiB0aGUNCiMgcGlwZWxpbmUgKHpoaWphY2suc2gsIFNUQUdFIDggQUJJIGdhdGUsIFNUQUdFIDkgc3RhZ2luZykgZXhwZWN0cw0KIyBmcm9ndWlfbGlicmV0cm8uc28uIE5vcm1hbGl6ZSB0aGUgYXJ0aWZhY3QgbmFtZSAtLSB0aGUgbGlicmV0cm8gbWVudSBjb3JlIElTDQojIEZyb2dVSSdzIHBheWxvYWQgZm9yIHRoZSBhdXRvcnVuIGhpamFjayAoc2VlIEhBTkRPRkYubWQgc2VsZi1oZWFsIG5vdGUpLg0KaWYgWyAhIC1mIGZyb2d1aV9saWJyZXRyby5zbyBdICYmIFsgLWYgbWVudV9saWJyZXRyby5zbyBdOyB0aGVuDQogICAgY3AgbWVudV9saWJyZXRyby5zbyBmcm9ndWlfbGlicmV0cm8uc28NCiAgICBsb2cgIk5vcm1hbGl6ZWQgbWVudV9saWJyZXRyby5zbyAtPiBmcm9ndWlfbGlicmV0cm8uc28iDQpmaQ0KaWYgWyAhIC1mIGZyb2d1aV9saWJyZXRyby5zbyBdICYmIFsgLWYgTWFrZWZpbGUubGlicmV0cm8gXTsgdGhlbg0KICAgIG1ha2UgLWYgTWFrZWZpbGUubGlicmV0cm8gQ0M9IiRDQyIgQ1hYPSIkQ1hYIiB8fCB0cnVlDQogICAgWyAhIC1mIGZyb2d1aV9saWJyZXRyby5zbyBdICYmIFsgLWYgbWVudV9saWJyZXRyby5zbyBdICYmIGNwIG1lbnVfbGlicmV0cm8uc28gZnJvZ3VpX2xpYnJldHJvLnNvDQpmaQ0KcG9wZCA+L2Rldi9udWxsDQppZiBbIC1mIEZyb2dVSS9mcm9ndWlfbGlicmV0cm8uc28gXTsgdGhlbg0KICAgIGxvZyAiRnJvZ1VJIGJ1aWx0LiINCmVsc2UNCiAgICBsb2cgIldBUk46IGZyb2d1aV9saWJyZXRyby5zbyBub3QgcHJvZHVjZWQgLS0gY2hlY2sgRnJvZ1VJIGJ1aWxkIG91dHB1dCBvbiB0aGlzIHJlcG8uIg0KZmkNCg0KIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQ0KIyBTVEFHRSA3IC0tIGJ1aWxkIHN0YW5kYXJkIGxpYnJldHJvIGNvcmVzDQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tDQpDT1JFX09VVD0iJFdPUktESVIvY29yZXMiDQpta2RpciAtcCAiJENPUkVfT1VUIg0KZm9yIGMgaW4gJENPUkVTOyBkbw0KICAgIGxvZyAiQnVpbGRpbmcgbGlicmV0cm8gY29yZTogJGMiDQogICAgZD0iJFdPUktESVIvbGlicmV0cm8tJGMiDQogICAgaWYgWyAhIC1kICIkZC8uZ2l0IiBdOyB0aGVuDQogICAgICAgIGNsb25lX3JlcG8gImh0dHBzOi8vZ2l0aHViLmNvbS9saWJyZXRyby8kYy5naXQiICIkZCIgXA0KICAgICAgICAgICAgfHwgbG9nICJXQVJOOiBjb3JlICRjIGNsb25lIGZhaWxlZCBhZnRlciByZXRyaWVzIChyYXRlLWxpbWl0ZWQgb3Igb2ZmbGluZSkuIg0KICAgIGZpDQogICAgaWYgWyAtZCAiJGQiIF07IHRoZW4NCiAgICAgICAgcHVzaGQgIiRkIiA+L2Rldi9udWxsDQogICAgbWFrZSBjbGVhbiA+L2Rldi9udWxsIDI+JjEgfHwgdHJ1ZQ0KICAgIG1ha2UgQ0M9IiRDQyIgQ1hYPSIkQ1hYIiBDUk9TU19DT01QSUxFPSIkQ1JPU1NfQ09NUElMRSIgXA0KICAgICAgICAgcGxhdGZvcm09YXJtdjctbmVvbi1oYXJkZmxvYXQgXA0KICAgICAgICAgQ0ZMQUdTPSIkQ0ZMQUdTIiBDWFhGTEFHUz0iJENYWEZMQUdTIiBMREZMQUdTPSIkTERGTEFHUyIgXA0KICAgICAgICAgLWoiJChucHJvYykiIHx8IGxvZyAiV0FSTjogY29yZSAkYyBidWlsZCBoYWQgaXNzdWVzIChtYXkgbmVlZCBwZXItY29yZSB0d2Vha3MpLiINCiAgICAjIGxvY2F0ZSB0aGUgcHJvZHVjZWQgLnNvDQogICAgc289JChmaW5kIC4gLW1heGRlcHRoIDIgLW5hbWUgIiR7Y31fbGlicmV0cm8uc28iIDI+L2Rldi9udWxsIHwgaGVhZCAtMSkNCiAgICBbIC1uICIkc28iIF0gJiYgY3AgIiRzbyIgIiRDT1JFX09VVC8iICYmIGxvZyAiICAtPiAkQ09SRV9PVVQvJChiYXNlbmFtZSAiJHNvIikiDQogICAgICAgIHBvcGQgPi9kZXYvbnVsbA0KICAgIGZpDQpkb25lDQoNCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCiMgU1RBR0UgOCAtLSBBQkkgZ2F0ZQ0KIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQ0KbG9nICJSdW5uaW5nIEFCSSB2ZXJpZmljYXRpb24gZ2F0ZSAoRU1fQVJNIC8gMHg1MDAwNDAwIC8gZ2xpYmMgPD0gMi4xNykuLi4iDQpiYXNoICIkSEVSRS90b29sY2hhaW4vdmVyaWZ5X3RhcmdldF9hYmkuc2giIFwNCiAgICBwaWNvYXJjaC9waWNvYXJjaCBcDQogICAgRnJvZ1VJL2Zyb2d1aV9saWJyZXRyby5zbyBcDQogICAgJChscyAiJENPUkVfT1VUIi8qLnNvIDI+L2Rldi9udWxsKSBcDQogICAgfHwgZGllICJBQkkgZ2F0ZSBGQUlMRUQgLS0gZG8gbm90IGRlcGxveS4gRml4IHN5c3Jvb3QvdG9vbGNoYWluIGFuZCByZWJ1aWxkLiINCg0KIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQ0KIyBTVEFHRSA5IC0tIHN0YWdlIGludG8gZGVwbG95L2N1YmVnbS8NCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0NCkRTVD0iJEhFUkUvY3ViZWdtIg0KbWtkaXIgLXAgIiREU1QiICIkRFNUL2NvcmVzIiAiJERTVC9saWIiDQpjcCAtZiBwaWNvYXJjaC9waWNvYXJjaCAgICAgICAgICAgICAgICIkRFNULyIgMj4vZGV2L251bGwgfHwgdHJ1ZQ0KY3AgLWYgRnJvZ1VJL2Zyb2d1aV9saWJyZXRyby5zbyAgICAgICAgIiREU1QvIiAyPi9kZXYvbnVsbCB8fCB0cnVlDQpjcCAtZiAiJENPUkVfT1VUIi8qLnNvICAgICAgICAgICAgICAgICAgIiREU1QvY29yZXMvIiAyPi9kZXYvbnVsbCB8fCB0cnVlDQpjcCAtZiAiJEhFUkUvY3ViZWdtL2NvcmVzL2NvbmZpZy54bWwiICAgIiREU1QvY29yZXMvIiAyPi9kZXYvbnVsbCB8fCB0cnVlDQpjcCAtZiAiJEhFUkUvY3ViZWdtL3poaWphY2suc2giICAgICAgICAgIiREU1QvIiAyPi9kZXYvbnVsbCB8fCB0cnVlDQpjcCAtZiAiJEhFUkUvY3ViZWdtL2F1dG9ydW4iICAgICAgICAgICAgIiREU1QvIiAyPi9kZXYvbnVsbCB8fCB0cnVlDQpjaG1vZCAreCAiJERTVC9waWNvYXJjaCIgIiREU1QvemhpamFjay5zaCIgIiREU1QvYXV0b3J1biIgMj4vZGV2L251bGwgfHwgdHJ1ZQ0KDQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tDQojIFNUQUdFIDliIC0tIGJ1bmRsZSBydW50aW1lIGxpYnMgcGljb2FyY2ggKyBmcm9ndWkgbmVlZCBpbnRvIGN1YmVnbS9saWINCiMgICBwaWNvYXJjaCBsaW5rcyBTREwvbGlicG5nMTIvei9hc291bmQgYWdhaW5zdCB0aGUgQ0FDSEVEIHRvb2xjaGFpbidzIGJ1bmRsZWQNCiMgICBzeXNyb290ICgkQVJNX0dOVS9hcm0tbGludXgtZ251ZWFiaWhmL3N5c3Jvb3QpLCBOT1QgYnVpbGQuc2gncyBnbGliYy0yLjE3DQojICAgJFNZU1JPT1QuIFRoZSBkZXZpY2UgbG9hZGVyIHNldHMgTERfTElCUkFSWV9QQVRIPWN1YmVnbS9saWIsIHNvIHdlIGNvcHkgZXZlcnkNCiMgICBORUVERUQgLnNvIChhbmQgdHJhbnNpdGl2ZSBkZXBzKSB0aGVyZSB0byBiZSBzZWxmLWNvbnRhaW5lZC4gQmFzZSBsaWJzDQojICAgKGxpYmMvbGlibS9wdGhyZWFkL2RsL2djYy9sZCkgYXJlIHByb3ZpZGVkIGJ5IHRoZSBkZXZpY2Ugcm9vdGZzLCBzbyB3ZQ0KIyAgIGV4Y2x1ZGUgdGhlbSB0byBhdm9pZCBzaGlwcGluZyBhIHNlY29uZCBnbGliYyB0aGF0IG1pc21hdGNoZXMgdGhlIGRldmljZSdzDQojICAgZHluYW1pYyBsaW5rZXIuDQojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tDQpsb2cgIkJ1bmRsaW5nIHJ1bnRpbWUgbGlicyBpbnRvICREU1QvbGliIC4uLiINCm1rZGlyIC1wICIkRFNUL2xpYiINClJFQURFTEY9IiR7Q1JPU1NfQ09NUElMRX1yZWFkZWxmIg0KIyBiYXNlIGxpYnMgdGhlIGRldmljZSByb290ZnMgYWx3YXlzIHByb3ZpZGVzIC0tIGRvIE5PVCBidW5kbGUgdGhlc2UNCkJBU0VfTElCUz0ibGliYy5zby42IGxpYm0uc28uNiBsaWJwdGhyZWFkLnNvLjAgbGliZGwuc28uMiBsaWJnY2Nfcy5zby4xIFwNCiAgICAgICAgICAgbGlicnQuc28uMSBsaWJ1dGlsLnNvLjEgbGQtbGludXgtYXJtaGYuc28uMyBsZC0yLjE3LnNvIFwNCiAgICAgICAgICAgbGlic3RkYysrLnNvLjYgbGliYXRvbWljLnNvLjEiDQppc19iYXNlKCkgeyBmb3IgYiBpbiAkQkFTRV9MSUJTOyBkbyBbICIkMSIgPSAiJGIiIF0gJiYgcmV0dXJuIDA7IGRvbmU7IHJldHVybiAxOyB9DQojIFNlYXJjaCByb290czogZ2xpYmMtMi4xNyBzeXNyb290LCBnY2MncyBjb25maWd1cmVkIHN5c3Jvb3QsIEFORCB0aGUgY2FjaGVkDQojIHRvb2xjaGFpbidzIGJ1bmRsZWQgc3lzcm9vdCAod2hlcmUgU0RML2xpYnBuZy96L2Fzb3VuZCBhY3R1YWxseSBsaXZlKS4NCkdDQ19TWVNST09UPSIkKCR7Q0N9IC1wcmludC1zeXNyb290IDI+L2Rldi9udWxsKSINClNFQVJDSF9ST09UUz0iIg0KZm9yIF9yIGluICIkU1lTUk9PVCIgIiRHQ0NfU1lTUk9PVCIgIiRBUk1fR05VL2FybS1saW51eC1nbnVlYWJpaGYvc3lzcm9vdCIgIiRBUk1fR05VL2FybS1saW51eC1nbnVlYWJpaGYvbGliYyI7IGRvDQogICAgWyAtbiAiJF9yIiBdICYmIFsgLWQgIiRfciIgXSAmJiBTRUFSQ0hfUk9PVFM9IiRTRUFSQ0hfUk9PVFMgJF9yIg0KZG9uZQ0KIyBSZXNvbHZlIGEgU09OQU1FIHRvIGFuIGFic29sdXRlIHJlYWwgcGF0aDoNCiMgICAxKSBnY2MncyBvd24gcmVzb2x2ZXIgKGF1dGhvcml0YXRpdmUgLS0gc2FtZSBzZWFyY2ggdGhlIFNUQUdFIDUgbGluayB1c2VkKQ0KIyAgIDIpIHNjYW4gU0VBUkNIX1JPT1RTIGZvciB0aGUgU09OQU1FIG9yIGl0cyB2ZXJzaW9uLXN0cmlwcGVkIGxpbmtlciBuYW1lDQojICAgMykgc2NhbiB0aGUgd2hvbGUgJEFSTV9HTlUgdHJlZSAobGlicyBtYXkgc2l0IG91dHNpZGUgZ2NjJ3MgY29uZmlndXJlZCBzeXNyb290KQ0KcmVzb2x2ZV9saWIoKSB7DQogICAgbG9jYWwgc29uYW1lPSIkMSIgbGlua2VyPSIkezElLnNvLip9LnNvIiBwDQogICAgcD0kKCR7Q0N9IC1wcmludC1maWxlLW5hbWU9IiRzb25hbWUiIDI+L2Rldi9udWxsKQ0KICAgIFsgLW4gIiRwIiBdICYmIFsgLWUgIiRwIiBdICYmIHsgcmVhZGxpbmsgLWYgIiRwIjsgcmV0dXJuIDA7IH0NCiAgICBmb3IgX3IgaW4gJFNFQVJDSF9ST09UUzsgZG8NCiAgICAgICAgcD0kKGZpbmQgIiRfciIgXCggLW5hbWUgIiRzb25hbWUiIC1vIC1uYW1lICIkbGlua2VyIiBcKSAtdHlwZSBmIDI+L2Rldi9udWxsIHwgaGVhZCAtMSkNCiAgICAgICAgWyAtbiAiJHAiIF0gJiYgeyBlY2hvICIkcCI7IHJldHVybiAwOyB9DQogICAgZG9uZQ0KICAgIGlmIFsgLW4gIiRBUk1fR05VIiBdICYmIFsgLWQgIiRBUk1fR05VIiBdOyB0aGVuDQogICAgICAgIHA9JChmaW5kICIkQVJNX0dOVSIgXCggLW5hbWUgIiRzb25hbWUiIC1vIC1uYW1lICIkbGlua2VyIiBcKSAtdHlwZSBmIDI+L2Rldi9udWxsIHwgaGVhZCAtMSkNCiAgICAgICAgWyAtbiAiJHAiIF0gJiYgeyBlY2hvICIkcCI7IHJldHVybiAwOyB9DQogICAgZmkNCiAgICByZXR1cm4gMQ0KfQ0KIyBleHRyYWN0IE5FRURFRCBTT05BTUVzIGZyb20gYSBiaW5hcnkgLS0gcmVhZGVsZiAtZCBsaW5lOg0KIyAgIDB4MDAwMDAwMDEgKE5FRURFRCkgU2hhcmVkIGxpYnJhcnk6IFtsaWJjLnNvLjZdDQojIHNwbGl0IG9uIFsgYW5kIF0gLT4gZmllbGQgMiBpcyB0aGUgbmFtZSBpbnNpZGUgdGhlIGJyYWNrZXRzLg0KbmVlZGVkX29mKCkgew0KICAgIGlmIGNvbW1hbmQgLXYgIiRSRUFERUxGIiA+L2Rldi9udWxsIDI+JjE7IHRoZW4NCiAgICAgICAgIiRSRUFERUxGIiAtZCAiJDEiIDI+L2Rldi9udWxsIHwgYXdrIC1GJ1tdW10nICcvTkVFREVELyB7IGdzdWIoL1sgXHRdLywiIiwkMik7IGlmKCQyIT0iIikgcHJpbnQgJDIgfScNCiAgICBmaQ0KfQ0KZGVjbGFyZSAtQSBfc2Vlbj0oKQ0KX3F1ZXVlPSgpDQpmb3IgX2IgaW4gcGljb2FyY2gvcGljb2FyY2ggRnJvZ1VJL2Zyb2d1aV9saWJyZXRyby5zbzsgZG8NCiAgICBbIC1mICIkX2IiIF0gfHwgY29udGludWUNCiAgICB3aGlsZSBJRlM9IHJlYWQgLXIgX2w7IGRvIFsgLW4gIiRfbCIgXSAmJiBfcXVldWUrPSgiJF9sIik7IGRvbmUgPCA8KG5lZWRlZF9vZiAiJF9iIikNCmRvbmUNCiMgZmFsbGJhY2s6IGlmIHJlYWRlbGYgd2FzIHVuYXZhaWxhYmxlLCBzZWVkIHRoZSBrbm93biBkaXJlY3QgZGVwcw0KaWYgWyAkeyNfcXVldWVbQF19IC1lcSAwIF07IHRoZW4NCiAgICBfcXVldWU9KGxpYlNETC0xLjIuc28uMCBsaWJTREwuc28uMSBsaWJwbmcxMi5zby4wIGxpYnouc28uMSBsaWJhc291bmQuc28uMikNCiAgICBsb2cgIldBUk46IHJlYWRlbGYgdW5hdmFpbGFibGUgLS0gc2VlZGluZyBoYXJkY29kZWQgU0RML2xpYnBuZy96L2Fzb3VuZC4iDQpmaQ0Kd2hpbGUgWyAkeyNfcXVldWVbQF19IC1ndCAwIF07IGRvDQogICAgX2xpYj0iJHtfcXVldWVbMF19IjsgX3F1ZXVlPSgiJHtfcXVldWVbQF06MX0iKQ0KICAgIFsgLW4gIiR7X3NlZW5bJF9saWJdOi19IiBdICYmIGNvbnRpbnVlDQogICAgX3NlZW5bJF9saWJdPTENCiAgICBpc19iYXNlICIkX2xpYiIgJiYgY29udGludWUNCiAgICBpZiAhIF9mb3VuZD0kKHJlc29sdmVfbGliICIkX2xpYiIpOyB0aGVuDQogICAgICAgIGxvZyAiV0FSTjogcnVudGltZSBsaWIgJF9saWIgbm90IGZvdW5kIC0tIGRldmljZSBtdXN0IHByb3ZpZGUgaXQuIg0KICAgICAgICBjb250aW51ZQ0KICAgIGZpDQogICAgY3AgLUwgIiRfZm91bmQiICIkRFNUL2xpYi8iIDI+L2Rldi9udWxsIHx8IGxvZyAiV0FSTjogY29weSBmYWlsZWQgZm9yICRfbGliIg0KICAgIHdoaWxlIElGUz0gcmVhZCAtciBfZGVwOyBkbyBbIC1uICIkX2RlcCIgXSAmJiBfcXVldWUrPSgiJF9kZXAiKTsgZG9uZSA8IDwobmVlZGVkX29mICIkX2ZvdW5kIikNCmRvbmUNCmxvZyAiQnVuZGxlZCAkKGxzIC0xICIkRFNUL2xpYiIgMj4vZGV2L251bGwgfCB3YyAtbCkgcnVudGltZSBsaWJzIGludG8gJERTVC9saWIuIg0KDQpsb2cgIlN0YWdlZCBpbnRvICREU1QiDQpsb2cgIkRPTkUuIENvcHkgdGhlIHdob2xlICckRFNUJyBkaXJlY3RvcnkgdG8gdGhlIHJvb3Qgb2YgeW91ciBkZXZpY2UgU0QgY2FyZCwiDQpsb2cgIm92ZXJ3cml0aW5nIHRoZSBleGlzdGluZyBjdWJlZ20vIChzdG9jayBya2dhbWUvaWN1YmUvZHJpdmVyLnNvL3Jvb3QuZGF0IHN0YXkpLiINCmxvZyAiT24gbmV4dCBib290IHRoZSBkZXZpY2UgbGF1bmNoZXMgcGljb2FyY2ggKyBGcm9nVUkgZGlyZWN0bHkuIg0K
+#!/usr/bin/env bash
+# =============================================================================
+#  CubeGM open-source replacement -- one-command builder (Linux x86_64 host)
+# =============================================================================
+#  Produces deploy/cubegm/ with compiled binaries that you copy straight to the
+#  device SD card. The device boots the open-source menu (picoarch + FrogUI)
+#  via the autorun hijack; stock rkgame/icube/driver.so and root.dat are left
+#  untouched, so the device will NOT report "sdcard is damaged".
+#
+#  All produced binaries are linked against glibc <= 2.17 (the device ceiling,
+#  measured on the 20 device cores) and verified by verify_target_abi.sh.
+#
+#  USAGE
+#    ./build.sh                 # full build (auto-builds glibc-2.17 sysroot)
+#    SYSROOT=/path/to/sysroot ./build.sh
+#    ARM_GNU=/opt/arm-gnu-13.2 ./build.sh
+#    CORES="mgba snes9x fceumm" ./build.sh   # build only these libretro cores
+#    SKIP_SYSROOT=1 SYSROOT=/existing ./build.sh
+#
+#  REQUIREMENTS: x86_64 Linux, git, curl, xz, build-essential, autoconf,
+#  automake, pkg-config, gperf, texinfo, flex, bison, python3, make, gcc.
+# =============================================================================
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+WORKDIR="${WORKDIR:-$HERE/buildroot}"
+SYSROOT="${SYSROOT:-}"                 # if empty -> built by crosstool-NG below
+ARM_GNU="${ARM_GNU:-}"                 # optional: extracted ARM GNU 13.2 dir
+SKIP_SYSROOT="${SKIP_SYSROOT:-0}"
+
+# --- toolchain / target ------------------------------------------------------
+TARGET="arm-linux-gnueabihf"
+ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2"
+
+# --- repos ------------------------------------------------------------------
+PICOARCH_REPO="https://github.com/tzubertowski/TreeFrogUI_picoarch.git"
+FROGUI_REPO="https://github.com/tzubertowski/FrogUI.git"
+ALSA_LIB_REPO="https://github.com/alsa-project/alsa-lib.git"
+
+# Stage-1 default cores (proves the loop across GBA/SNES/NES/MD/Atari).
+# Each is built from github.com/libretro/<NAME> with the libretro common Makefile.
+DEFAULT_CORES="mgba snes9x fceumm picodrive nestopia"
+CORES="${CORES:-$DEFAULT_CORES}"
+
+log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
+err(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; }
+die(){ err "$*"; exit 1; }
+
+[ "$(uname -s)" = "Linux" ] || die "This script must run on a Linux x86_64 build host."
+command -v git >/dev/null || die "git not found."
+command -v make >/dev/null || die "make not found."
+
+mkdir -p "$WORKDIR"
+cd "$WORKDIR"
+
+# -----------------------------------------------------------------------------
+# CI clone robustness -- authenticate github.com with the job token
+# -----------------------------------------------------------------------------
+# GitHub-hosted runners share NAT IPs; unauthenticated github.com clones hit
+# the 60-request/hr secondary rate limit -> 403 -> git prompts for a username
+# -> with GIT_TERMINAL_PROMPT=0 this fails as
+# "could not read Username ... No such device or address" (or leaves an empty
+# clone dir -> "make: No targets specified and no makefile found"). That breaks
+# FrogUI + the libretro cores, which then fails the STAGE 8 ABI gate. Embed the
+# job token in the github.com URL to raise the limit to 5000/hr and avoid the
+# prompt; falls back to anonymous if no token is present (local dev). See
+# HANDOFF.md self-heal note.
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+    git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/" || true
+fi
+
+# clone_repo <repo> <dest> [extra-args...]
+# Retry a shallow clone up to 3 times; on failure remove the (possibly partial)
+# destination so a later retry is not skipped by a stale [ -d "$dest" ] guard.
+clone_repo(){
+    local repo="$1" dest="$2"; shift 2
+    local i tries=3
+    for ((i=1;i<=tries;i++)); do
+        if git clone --depth 1 "$@" "$repo" "$dest" >/dev/null 2>&1; then
+            return 0
+        fi
+        rm -rf "$dest"
+        [ "$i" -lt "$tries" ] && sleep 5
+    done
+    return 1
+}
+
+# -----------------------------------------------------------------------------
+# STAGE 1 -- locate / install the ARM cross compiler
+# -----------------------------------------------------------------------------
+if command -v ${TARGET}-gcc >/dev/null 2>&1; then
+    CC="${TARGET}-gcc"
+    log "Using system cross compiler: $($CC --version | head -1)"
+elif [ -n "$ARM_GNU" ]; then
+    CC="$ARM_GNU/bin/${TARGET}-gcc"
+    [ -x "$CC" ] || die "ARM_GNU set but $CC missing. Extract arm-gnu-toolchain-13.2 first."
+    log "Using ARM GNU toolchain: $CC"
+else
+    die "No ${TARGET}-gcc on PATH and ARM_GNU not set.
+  Install one of:
+    - apt:  sudo apt-get install gcc-arm-linux-gnueabihf
+    - or download arm-gnu-toolchain-13.2-rel1-x86_64-arm-none-linux-gnueabihf.tar.xz
+      and set ARM_GNU=/path/to/extracted"
+fi
+CXX="${CC%gcc}g++"
+export CROSS_COMPILE="${TARGET}-"
+export CC CXX
+
+# -----------------------------------------------------------------------------
+# STAGE 2 -- glibc-2.17 sysroot (the device ceiling)
+# -----------------------------------------------------------------------------
+if [ -z "$SYSROOT" ]; then
+    if [ "$SKIP_SYSROOT" = "1" ]; then
+        die "SKIP_SYSROOT=1 but no SYSROOT provided."
+    fi
+    SYSROOT="$WORKDIR/sysroot-glibc217"
+    if [ -d "$SYSROOT/usr/lib" ]; then
+        log "Reusing existing sysroot: $SYSROOT"
+    else
+        log "Building glibc-2.17 sysroot with crosstool-NG (one-time, ~20-60 min)..."
+        bash "$HERE/toolchain/build_sysroot_ctng.sh" "$SYSROOT"
+    fi
+fi
+[ -d "$SYSROOT" ] || die "SYSROOT not found: $SYSROOT"
+log "Sysroot: $SYSROOT"
+
+# -----------------------------------------------------------------------------
+# STAGE 3 -- ALSA userspace headers (not in the ARM toolchain sysroot)
+# -----------------------------------------------------------------------------
+ALSA_INC="$WORKDIR/alsa-lib/include"
+if [ ! -d "$ALSA_INC/alsa" ]; then
+    log "Fetching alsa-lib headers (include/ only)..."
+    rm -rf "$WORKDIR/alsa-lib"
+    clone_repo "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
+fi
+ALSA_CFLAGS="-I$ALSA_INC"
+
+# Common compile flags for every target binary
+export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS"
+export CXXFLAGS="$CFLAGS"
+export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
+
+# -----------------------------------------------------------------------------
+# STAGE 4 -- clone front-end sources
+#   IMPORTANT: the 5-edit patch (../patch/picoarch_5edits.patch) only applies on
+#   the *r36sx* branch and needs the libretro-common submodule (defines
+#   RETRO_DEVICE_ID_JOYPAD_* used by plat_sf3000.c). Clone r36sx explicitly and
+#   init the submodule. To reuse an already-patched local checkout, set
+#   PICOARCH_LOCAL=/path/to/TreeFrogUI_picoarch.
+# -----------------------------------------------------------------------------
+if [ -n "${PICOARCH_LOCAL:-}" ] && [ -d "$PICOARCH_LOCAL" ]; then
+    log "Using local picoarch source: $PICOARCH_LOCAL"
+    rm -rf picoarch && cp -a "$PICOARCH_LOCAL" picoarch
+elif [ ! -d picoarch ]; then
+    log "Cloning picoarch (r36sx branch)..."
+    clone_repo "$PICOARCH_REPO" picoarch -b r36sx
+else
+    log "Reusing existing picoarch/ (ensure it is on r36sx AND patched)."
+fi
+# libretro-common submodule: provides libretro.h / RETRO_DEVICE_ID_*.
+if [ ! -f picoarch/libretro-common/include/libretro.h ] \
+   && [ ! -f picoarch/libretro-common/include/libretro/libretro.h ]; then
+    log "Initializing libretro-common submodule (required for RETRO_DEVICE_ID_*)..."
+    ( cd picoarch && git submodule update --init --recursive ) \
+        || log "WARN: submodule init failed; run manually: cd picoarch && git submodule update --init libretro-common"
+fi
+# Apply the 5-edit patch (RTC + evdev gamepad) if a clean checkout and patch present.
+if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
+    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_5edits.patch" 2>/dev/null; then
+        log "Applying 5-edit patch (RTC + evdev gamepad)..."
+        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_5edits.patch"
+    else
+        log "5-edit patch already applied or not applicable -- skipping."
+    fi
+fi
+# Apply the RK3036G display patch (fb0 direct-drive; fixes black screen on
+# RK3036G which has no /dev/dis + no stock driver.so). MUST run AFTER the
+# 5-edit patch above (both touch plat_sdl.c but in non-overlapping regions).
+if [ -f "$HERE/../patch/picoarch_rk3036g_display.patch" ]; then
+    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
+        log "Applying RK3036G display patch (fb0 direct-drive)..."
+        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_rk3036g_display.patch"
+    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
+        log "RK3036G display patch already applied -- skipping."
+    else
+        die "RK3036G display patch NOT applicable and NOT already applied -- would ship black-screen binary. Abort."
+    fi
+fi
+[ -d FrogUI/.git ] || clone_repo "$FROGUI_REPO" FrogUI
+
+# -----------------------------------------------------------------------------
+# STAGE 5 -- build picoarch for RK3036G (ARM, NOT MIPS!)
+#   Gotcha: the repo's build_sf3000.sh and the Makefile 'sf3000' branch are
+#   HARDCODED to MIPS (-mips32r2). Our device is ARM (RK3036G), so use the
+#   provided ARM template build_sf3000_armhf.sh. It rewrites the Makefile's
+#   MIPS flags to ARM and expects SDL1.2 + libpng12 (armhf, linked against the
+#   2.17 sysroot) to be present in $SYSROOT. The minimal crosstool-NG sysroot
+#   does NOT include SDL/libpng -- cross-build them first (see HANDOFF.md).
+#   Also note: the Makefile reads lowercase 'platform'; passing PLATFORM=...
+#   is a no-op and silently builds the 'unix' target.
+# -----------------------------------------------------------------------------
+log "Building picoarch (plat_sf3000, ARM)..."
+ARM_BUILD="$HERE/build_sf3000_armhf.sh"
+if [ -x "$ARM_BUILD" ]; then
+    SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+    CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+    PICOARCH_DIR="$PWD/picoarch" \
+        bash "$ARM_BUILD"
+else
+    log "WARN: build_sf3000_armhf.sh missing -- fallback needs manual Makefile fix."
+    pushd picoarch >/dev/null
+    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+         platform=sf3000 SYSROOT="$SYSROOT" \
+         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+         picoarch -j"$(nproc)"
+    popd >/dev/null
+fi
+[ -x picoarch/picoarch ] || die "picoarch build failed."
+log "picoarch built."
+
+# -----------------------------------------------------------------------------
+# STAGE 6 -- build FrogUI launcher core
+# -----------------------------------------------------------------------------
+# Apply the RK3036G build fix BEFORE compiling. The upstream FrogUI tip
+# (commit 2f41ace) was developed for SF2000 (MIPS); the unix/ARM Makefile
+# target references three symbols it never declares, so frogui_libretro.so
+# fails to compile/link and the payload cannot boot (zhijack.sh requires it).
+# This patch declares the game-launch buffers and stubs direct_loader/xlog.
+# A failed/already-applied check is fatal: shipping without it = no menu.
+if [ -f "$HERE/../patch/frogui_rk3036g_build.patch" ]; then
+    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_rk3036g_build.patch" 2>/dev/null; then
+        log "Applying RK3036G FrogUI build fix (declare buffers + stub direct_loader/xlog)..."
+        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_rk3036g_build.patch"
+    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_rk3036g_build.patch" 2>/dev/null; then
+        log "RK3036G FrogUI build fix already applied -- skipping."
+    else
+        die "RK3036G FrogUI build fix NOT applicable and NOT already applied -- FrogUI would fail to build. Abort."
+    fi
+fi
+log "Building FrogUI (frogui_libretro.so)..."
+pushd FrogUI >/dev/null
+make CC="$CC" CXX="$CXX" || true   # builds menu_libretro.so (the libretro menu core)
+# The FrogUI libretro Makefile emits menu_libretro.so, but the rest of the
+# pipeline (zhijack.sh, STAGE 8 ABI gate, STAGE 9 staging) expects
+# frogui_libretro.so. Normalize the artifact name -- the libretro menu core IS
+# FrogUI's payload for the autorun hijack (see HANDOFF.md self-heal note).
+if [ ! -f frogui_libretro.so ] && [ -f menu_libretro.so ]; then
+    cp menu_libretro.so frogui_libretro.so
+    log "Normalized menu_libretro.so -> frogui_libretro.so"
+fi
+if [ ! -f frogui_libretro.so ] && [ -f Makefile.libretro ]; then
+    make -f Makefile.libretro CC="$CC" CXX="$CXX" || true
+    [ ! -f frogui_libretro.so ] && [ -f menu_libretro.so ] && cp menu_libretro.so frogui_libretro.so
+fi
+popd >/dev/null
+if [ -f FrogUI/frogui_libretro.so ]; then
+    log "FrogUI built."
+else
+    log "WARN: frogui_libretro.so not produced -- check FrogUI build output on this repo."
+fi
+
+# -----------------------------------------------------------------------------
+# STAGE 7 -- build standard libretro cores
+# -----------------------------------------------------------------------------
+CORE_OUT="$WORKDIR/cores"
+mkdir -p "$CORE_OUT"
+for c in $CORES; do
+    log "Building libretro core: $c"
+    d="$WORKDIR/libretro-$c"
+    if [ ! -d "$d/.git" ]; then
+        clone_repo "https://github.com/libretro/$c.git" "$d" \
+            || log "WARN: core $c clone failed after retries (rate-limited or offline)."
+    fi
+    if [ -d "$d" ]; then
+        pushd "$d" >/dev/null
+    make clean >/dev/null 2>&1 || true
+    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+         platform=armv7-neon-hardfloat \
+         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+         -j"$(nproc)" || log "WARN: core $c build had issues (may need per-core tweaks)."
+    # locate the produced .so
+    so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
+    [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
+        popd >/dev/null
+    fi
+done
+
+# -----------------------------------------------------------------------------
+# STAGE 8 -- ABI gate
+# -----------------------------------------------------------------------------
+log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.17)..."
+bash "$HERE/toolchain/verify_target_abi.sh" \
+    picoarch/picoarch \
+    FrogUI/frogui_libretro.so \
+    $(ls "$CORE_OUT"/*.so 2>/dev/null) \
+    || die "ABI gate FAILED -- do not deploy. Fix sysroot/toolchain and rebuild."
+
+# -----------------------------------------------------------------------------
+# STAGE 9 -- stage into deploy/cubegm/
+# -----------------------------------------------------------------------------
+DST="$HERE/cubegm"
+mkdir -p "$DST" "$DST/cores" "$DST/lib"
+cp -f picoarch/picoarch               "$DST/" 2>/dev/null || true
+cp -f FrogUI/frogui_libretro.so        "$DST/" 2>/dev/null || true
+cp -f "$CORE_OUT"/*.so                  "$DST/cores/" 2>/dev/null || true
+cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
+cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
+cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
+chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
+
+# -----------------------------------------------------------------------------
+# STAGE 9b -- bundle runtime libs picoarch + frogui need into cubegm/lib
+#   picoarch links SDL/libpng12/z/asound against the CACHED toolchain's bundled
+#   sysroot ($ARM_GNU/arm-linux-gnueabihf/sysroot), NOT build.sh's glibc-2.17
+#   $SYSROOT. The device loader sets LD_LIBRARY_PATH=cubegm/lib, so we copy every
+#   NEEDED .so (and transitive deps) there to be self-contained. Base libs
+#   (libc/libm/pthread/dl/gcc/ld) are provided by the device rootfs, so we
+#   exclude them to avoid shipping a second glibc that mismatches the device's
+#   dynamic linker.
+# -----------------------------------------------------------------------------
+log "Bundling runtime libs into $DST/lib ..."
+mkdir -p "$DST/lib"
+READELF="${CROSS_COMPILE}readelf"
+# base libs the device rootfs always provides -- do NOT bundle these
+BASE_LIBS="libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 libgcc_s.so.1 \
+           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.17.so \
+           libstdc++.so.6 libatomic.so.1"
+is_base() { for b in $BASE_LIBS; do [ "$1" = "$b" ] && return 0; done; return 1; }
+# Search roots: glibc-2.17 sysroot, gcc's configured sysroot, AND the cached
+# toolchain's bundled sysroot (where SDL/libpng/z/asound actually live).
+GCC_SYSROOT="$(${CC} -print-sysroot 2>/dev/null)"
+SEARCH_ROOTS=""
+for _r in "$SYSROOT" "$GCC_SYSROOT" "$ARM_GNU/arm-linux-gnueabihf/sysroot" "$ARM_GNU/arm-linux-gnueabihf/libc"; do
+    [ -n "$_r" ] && [ -d "$_r" ] && SEARCH_ROOTS="$SEARCH_ROOTS $_r"
+done
+# Resolve a SONAME to an absolute real path:
+#   1) gcc's own resolver (authoritative -- same search the STAGE 5 link used)
+#   2) scan SEARCH_ROOTS for the SONAME or its version-stripped linker name
+#   3) scan the whole $ARM_GNU tree (libs may sit outside gcc's configured sysroot)
+resolve_lib() {
+    local soname="$1" linker="${1%.so.*}.so" p
+    p=$(${CC} -print-file-name="$soname" 2>/dev/null)
+    [ -n "$p" ] && [ -e "$p" ] && { readlink -f "$p"; return 0; }
+    for _r in $SEARCH_ROOTS; do
+        p=$(find "$_r" \( -name "$soname" -o -name "$linker" \) -type f 2>/dev/null | head -1)
+        [ -n "$p" ] && { echo "$p"; return 0; }
+    done
+    if [ -n "$ARM_GNU" ] && [ -d "$ARM_GNU" ]; then
+        p=$(find "$ARM_GNU" \( -name "$soname" -o -name "$linker" \) -type f 2>/dev/null | head -1)
+        [ -n "$p" ] && { echo "$p"; return 0; }
+    fi
+    return 1
+}
+# extract NEEDED SONAMEs from a binary -- readelf -d line:
+#   0x00000001 (NEEDED) Shared library: [libc.so.6]
+# split on [ and ] -> field 2 is the name inside the brackets.
+needed_of() {
+    if command -v "$READELF" >/dev/null 2>&1; then
+        "$READELF" -d "$1" 2>/dev/null | awk -F'[][]' '/NEEDED/ { gsub(/[ \t]/,"",$2); if($2!="") print $2 }'
+    fi
+}
+declare -A _seen=()
+_queue=()
+for _b in picoarch/picoarch FrogUI/frogui_libretro.so; do
+    [ -f "$_b" ] || continue
+    while IFS= read -r _l; do [ -n "$_l" ] && _queue+=("$_l"); done < <(needed_of "$_b")
+done
+# fallback: if readelf was unavailable, seed the known direct deps
+if [ ${#_queue[@]} -eq 0 ]; then
+    _queue=(libSDL-1.2.so.0 libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2)
+    log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
+fi
+while [ ${#_queue[@]} -gt 0 ]; do
+    _lib="${_queue[0]}"; _queue=("${_queue[@]:1}")
+    [ -n "${_seen[$_lib]:-}" ] && continue
+    _seen[$_lib]=1
+    is_base "$_lib" && continue
+    if ! _found=$(resolve_lib "$_lib"); then
+        log "WARN: runtime lib $_lib not found -- device must provide it."
+        continue
+    fi
+    cp -L "$_found" "$DST/lib/" 2>/dev/null || log "WARN: copy failed for $_lib"
+    while IFS= read -r _dep; do [ -n "$_dep" ] && _queue+=("$_dep"); done < <(needed_of "$_found")
+done
+log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
+
+log "Staged into $DST"
+log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
+log "overwriting the existing cubegm/ (stock rkgame/icube/driver.so/root.dat stay)."
+log "On next boot the device launches picoarch + FrogUI directly."
