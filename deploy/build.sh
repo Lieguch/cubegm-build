@@ -228,11 +228,30 @@ if [ -f "$HERE/../patch/frogui_rk3036g_build.patch" ]; then
     fi
 fi
 log "Building FrogUI (frogui_libretro.so)..."
+# Apply the RK3036G 000-008 folder-table patch (stock-core aliases + arcade/PS1)
+if [ -f "$HERE/../patch/frogui_table_000_008.patch" ]; then
+    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_table_000_008.patch" 2>/dev/null; then
+        log "Applying RK3036G FrogUI 000-008 folder table patch..."
+        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_table_000_008.patch"
+    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_table_000_008.patch" 2>/dev/null; then
+        log "RK3036G FrogUI 000-008 table already applied -- skipping."
+    else
+        log "WARN: frogui 000-008 table patch NOT applicable -- arcade/PS1 folders will not resolve."
+    fi
+fi
 pushd FrogUI >/dev/null
-make CC="$CC" CXX="$CXX" || true   # some FrogUI builds use a wrapper; fall back below
+# Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
+# LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
+# Command-line CC/CFLAGS/SYSROOT override the MIPS hardcodes (GNU make precedence).
+if [ -f Makefile.sf3000 ]; then
+    make -f Makefile.sf3000 frogui_libretro.so \
+        CC="$CC" CXX="$CXX" \
+        CFLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -fPIC -Wall -Ofast -DPLATFORM_SF3000 -DNDEBUG -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DUI_SCALE=100 -I$SYSROOT/usr/include" \
+        SYSROOT="$SYSROOT" || true
+fi
 if [ ! -f frogui_libretro.so ]; then
-    # Fallback: build as a libretro core directly if a Makefile.libretro exists
-    [ -f Makefile.libretro ] && make -f Makefile.libretro CC="$CC" CXX="$CXX" || true
+    # Fallback: unix Makefile emits menu_libretro.so; normalize below.
+    make CC="$CC" CXX="$CXX" || true
 fi
 popd >/dev/null
 # The FrogUI libretro Makefile emits menu_libretro.so; zhijack.sh expects
@@ -254,7 +273,7 @@ fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||a
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro||arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26 -Iplatform/libretro/libretro-common|arm
 stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm
 vba_next|https://github.com/libretro/vba-next|.|-||arm
@@ -272,7 +291,7 @@ gpsp|https://github.com/libretro/gpsp|.|-f Makefile.libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
-ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG -DAT_HWCAP2=26"
+ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG -include stdint.h"
 printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
 printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
 printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
@@ -280,11 +299,7 @@ printf '#!/bin/bash\nexec %sg++ %s "$@" -fno-strict-aliasing -fsigned-char\n' "$
 chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.toolchain/fba-gcc" "$WORKDIR/.toolchain/fba-g++"
 LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++"
 build_core() {
-    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5"
-    # picodrive cyclone_gen is a HOST-side tool that generates Cyclone.s for the
-    # target; official common.mak exports CC=$(CYCLONE_CC). Without these the
-    # host tool gets cross-compiled -> link fails. Harmless for all other cores.
-    export CYCLONE_CC="${HOST_CC:-gcc}" CYCLONE_CXX="${HOST_CXX:-g++}" wrap="${6:-arm}"
+    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}"
     local d="$WORKDIR/libretro-$name"
     if [ ! -d "$d/.git" ]; then
         clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
@@ -382,7 +397,7 @@ while [ ${#_queue[@]} -gt 0 ]; do
     _seen[$_lib]=1
     is_base "$_lib" && continue
     _found=""
-    for _d in "$SYSROOT/lib" "$SYSROOT/usr/lib" "$SYSROOT/usr/lib/arm-linux-gnueabihf" "$SYSROOT/lib/arm-linux-gnueabihf" \n             "${ARM_GNU:+$ARM_GNU/arm-linux-gnueabihf/sysroot/usr/lib}" \n             "${ARM_GNU:+$ARM_GNU/arm-linux-gnueabihf/sysroot/lib}"; do
+    for _d in "$SYSROOT/lib" "$SYSROOT/usr/lib" "$SYSROOT/usr/lib/arm-linux-gnueabihf" "$SYSROOT/lib/arm-linux-gnueabihf"; do
         if [ -e "$_d/$_lib" ]; then _found="$_d/$_lib"; break; fi
     done
     if [ -z "$_found" ]; then
@@ -396,6 +411,86 @@ while [ ${#_queue[@]} -gt 0 ]; do
     fi
 done
 log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# STAGE 9c -- ship stock-core alias script (device-side)
+#   The device ALREADY carries the stock cores at cubegm/cores/libemu_*.so
+#   (they are the original firmware files; user requirement: reuse them).
+#   FrogUI resolves folder->core via frogui_libretro.c console_mappings which
+#   hardcodes *_libretro.so names. This script aliases (hardlinks) each stock
+#   libemu_*.so to its FrogUI table name ON DEVICE at first boot, so the
+#   menu can launch them without recompiling anything.
+# -----------------------------------------------------------------------------
+if [ -d "$HERE/../cubegm_stock" ]; then
+    # CI/local runs that DO have the stock tree: copy real binaries (e.g. dev builds)
+    STK="$HERE/../cubegm_stock"
+    log "cubegm_stock present -- copying stock binaries directly."
+    for src in "$STK"/cores/libemu_*.so; do
+        [ -e "$src" ] || continue
+        base=$(basename "$src")
+        case "$base" in
+            libemu_nes.so)        dst=fceumm_libretro.so ;;
+            libemu_nestopia.so)   dst=nestopia_libretro.so ;;
+            libemu_sfc.so)        dst=snes9x2005_plus_libretro.so ;;
+            libemu_snes9x.so)     dst=snes9x_libretro.so ;;
+            libemu_snes9x2010.so) dst=snes9x2010_libretro.so ;;
+            libemu_md.so)         dst=picodrive_libretro.so ;;
+            libemu_mgba.so)       dst=mgba_libretro.so ;;
+            libemu_vbam.so)       dst=vba_next_libretro.so ;;
+            libemu_gpsp.so)       dst=gpsp_libretro.so ;;
+            libemu_tgbdual.so)    dst=tgbdual_libretro.so ;;
+            libemu_stella.so)     dst=stella2014_libretro.so ;;
+            libemu_prosystem.so)  dst=prosystem_libretro.so ;;
+            libemu_mame2000.so)   dst=mame2000_libretro.so ;;
+            libemu_fbalpha2012.so)dst=fbalpha2012_libretro.so ;;
+            libemu_fbalpha.so)    dst=fbalpha_libretro.so ;;
+            libemu_fba.so)        dst=fba_libretro.so ;;
+            libemu_cps2.so)       dst=cps2_libretro.so ;;
+            libemu_pgm.so)        dst=pgm_libretro.so ;;
+            libemu_extend.so)     dst=extend_libretro.so ;;
+            libemu_pcsx.so)       dst=pcsx_rearmed_libretro.so ;;
+            *) continue ;;
+        esac
+        cp -f "$src" "$DST/cores/$dst" && log "  stock $base -> $dst"
+    done
+    [ -d "$STK/cores/bios" ]     && cp -rf "$STK/cores/bios"     "$DST/cores/" 2>/dev/null || true
+    [ -d "$STK/cores/mame2000" ] && cp -rf "$STK/cores/mame2000" "$DST/cores/" 2>/dev/null || true
+    [ -d "$STK/lib" ]            && cp -rf "$STK/lib"            "$DST/lib/"    2>/dev/null || true
+    log "Stock binaries copied (bios+mame2000+lib included)."
+else
+    # Device-side: ship an alias script; device stock cores stay untouched.
+    log "cubegm_stock absent -- shipping device-side alias script."
+    cat > "$DST/alias_stock_cores.sh" << 'ALIAS_EOF'
+#!/bin/sh
+# CubeGM stock-core aliaser: hardlink libemu_*.so -> FrogUI table names.
+# Safe to run repeatedly (idempotent). Does NOT modify/remove any stock file.
+CD="$(dirname "$0")/cores"
+link() { [ -f "$CD/$1" ] && [ ! -e "$CD/$2" ] && ln "$CD/$1" "$CD/$2" 2>/dev/null || cp "$CD/$1" "$CD/$2" 2>/dev/null; }
+link libemu_nes.so fceumm_libretro.so
+link libemu_nestopia.so nestopia_libretro.so
+link libemu_sfc.so snes9x2005_plus_libretro.so
+link libemu_snes9x.so snes9x_libretro.so
+link libemu_snes9x2010.so snes9x2010_libretro.so
+link libemu_md.so picodrive_libretro.so
+link libemu_mgba.so mgba_libretro.so
+link libemu_vbam.so vba_next_libretro.so
+link libemu_gpsp.so gpsp_libretro.so
+link libemu_tgbdual.so tgbdual_libretro.so
+link libemu_stella.so stella2014_libretro.so
+link libemu_prosystem.so prosystem_libretro.so
+link libemu_mame2000.so mame2000_libretro.so
+link libemu_fbalpha2012.so fbalpha2012_libretro.so
+link libemu_fbalpha.so fbalpha_libretro.so
+link libemu_fba.so fba_libretro.so
+link libemu_cps2.so cps2_libretro.so
+link libemu_pgm.so pgm_libretro.so
+link libemu_extend.so extend_libretro.so
+link libemu_pcsx.so pcsx_rearmed_libretro.so
+ALIAS_EOF
+    chmod +x "$DST/alias_stock_cores.sh"
+    log "alias_stock_cores.sh staged (run once on device to link stock cores)."
+fi
 
 log "Staged into $DST"
 log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
