@@ -39,7 +39,7 @@ ALSA_LIB_REPO="https://github.com/alsa-project/alsa-lib.git"
 
 # Stage-1 default cores (proves the loop across GBA/SNES/NES/MD/Atari).
 # Each is built from github.com/libretro/<NAME> with the libretro common Makefile.
-DEFAULT_CORES="fceumm nestopia snes9x2005_plus picodrive stella2014"
+DEFAULT_CORES="fceumm snes9x2005_plus picodrive stella2014"
 CORES="${CORES:-$DEFAULT_CORES}"
 
 log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
@@ -251,7 +251,6 @@ fi
 # STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
 CORE_TABLE="
 fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||arm
-nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS=-include stdint.h|arm
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
@@ -292,9 +291,9 @@ build_core() {
     # gitlink (no .gitmodules entry) -> submodule update silently skips it and
     # the include/ headers are missing. Detect and backfill from the official
     # repo (verified: headers exist upstream; API 200).
-    _lc="$(find "$d" -maxdepth 3 -type d -name libretro-common 2>/dev/null | head -1)"
-    if [ -n "$_lc" ] && [ ! -d "$_lc/include/compat" ]; then
-        log "WARN: $_lc headers missing -- backfilling libretro-common (official)"
+    _lc="$(find "$d" -maxdepth 4 -path "*/.git" -prune -o -type d -name libretro-common -print 2>/dev/null | head -1)"
+    if [ -n "$_lc" ] && [ ! -f "$_lc/include/compat/strcasestr.h" ]; then
+        log "WARN: $_lc vendored headers incomplete -- backfilling libretro-common (official)"
         rm -rf "$_lc"
         git clone --depth 1 https://github.com/libretro/libretro-common.git "$_lc" 2>&1 | tail -2 || log "WARN: libretro-common backfill failed"
     fi
