@@ -255,7 +255,7 @@ nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS=-include stdint.h
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26|arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26 -Iplatform/libretro/libretro-common|arm
 stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm
 vba_next|https://github.com/libretro/vba-next|.|-||arm
@@ -273,7 +273,7 @@ gpsp|https://github.com/libretro/gpsp|.|-f Makefile.libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
-ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG"
+ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG -include stdint.h"
 printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
 printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
 printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
@@ -365,7 +365,7 @@ if [ ${#_queue[@]} -eq 0 ]; then
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
     _lib="${_queue[0]}"; _queue=("${_queue[@]:1}")
-    [ -n "${_seen[$_lib]}" ] && continue
+    [ -n "${_seen[$_lib]:-}" ] && continue
     _seen[$_lib]=1
     is_base "$_lib" && continue
     _found=""
