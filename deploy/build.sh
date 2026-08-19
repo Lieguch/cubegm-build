@@ -278,7 +278,7 @@ build_core() {
     local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}"
     local d="$WORKDIR/libretro-$name"
     if [ ! -d "$d/.git" ]; then
-        clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
+        clone_repo "$repo" "$d" --recursive || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
     fi
     [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
     git -C "$d" submodule update --init --depth 1 --recursive >/dev/null 2>&1 || true
