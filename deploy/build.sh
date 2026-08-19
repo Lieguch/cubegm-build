@@ -280,7 +280,11 @@ printf '#!/bin/bash\nexec %sg++ %s "$@" -fno-strict-aliasing -fsigned-char\n' "$
 chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.toolchain/fba-gcc" "$WORKDIR/.toolchain/fba-g++"
 LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++"
 build_core() {
-    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}"
+    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5"
+    # picodrive cyclone_gen is a HOST-side tool that generates Cyclone.s for the
+    # target; official common.mak exports CC=$(CYCLONE_CC). Without these the
+    # host tool gets cross-compiled -> link fails. Harmless for all other cores.
+    export CYCLONE_CC="${HOST_CC:-gcc}" CYCLONE_CXX="${HOST_CXX:-g++}" wrap="${6:-arm}"
     local d="$WORKDIR/libretro-$name"
     if [ ! -d "$d/.git" ]; then
         clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
