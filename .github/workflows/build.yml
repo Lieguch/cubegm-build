@@ -24,7 +24,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 150
+    timeout-minutes: 360
 
     steps:
       - uses: actions/checkout@v4
@@ -45,11 +45,9 @@ jobs:
             tc-glibc217-
 
       - name: Run bootstrap (full build)
-        timeout-minutes: 120
         working-directory: deploy
         env:
           PREFIX: /home/runner/cubegm-tc
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # defend against CRLF line endings (files authored on Windows)
           sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
@@ -96,17 +94,8 @@ jobs:
           git config user.name "WorkBuddy Agent"
           git add -A
           git commit -q -m "build report $(date -u +%Y-%m-%dT%H:%M:%SZ) run ${{ github.run_number }}" || echo "nothing to commit"
-          # build-output is a DIAGNOSTIC-ONLY branch. Concurrent runs (a push + a
-          # workflow_dispatch for the same commit) race on the force-push and hit
-          # "cannot lock ref" -> the step fails -> an otherwise-GREEN build is marked
-          # red. That must not happen, so make the publish best-effort: a rejected
-          # force-push is non-fatal here. A genuinely broken firmware build still
-          # fails EARLIER at the STAGE 8 ABI gate ("|| die").
-          if git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" build-output; then
-            echo "Published build-output branch (BUILD_REPORT.txt + logs)."
-          else
-            echo "WARN: build-output publish raced with a concurrent run (non-fatal; diagnostic branch only)."
-          fi
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" build-output
+          echo "Published build-output branch (BUILD_REPORT.txt + logs)."
 
       - name: Create release with device payload
         if: success()
