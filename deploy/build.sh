@@ -260,10 +260,18 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# STAGE 7 -- build standard libretro cores
-# -----------------------------------------------------------------------------
+# STAGE 7 -- build libretro cores (ARM wrapper + LDFLAGS_S, RK3036G)
+#   Full 57-core builder: deploy/build_cores_armhf.sh (ported from treefrog-ui
+#   build_all.sh, MIPS->ARM). STAGE 7 below builds the $CORES whitelist with the
+#   same wrapper/LDFLAGS_S technique that fixes link failures (undefined symbol
+#   errors on cores whose Makefile links without -shared).
 CORE_OUT="$WORKDIR/cores"
-mkdir -p "$CORE_OUT"
+mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
+ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG"
+printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
+printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
+chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++"
+LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++"
 for c in $CORES; do
     log "Building libretro core: $c"
     d="$WORKDIR/libretro-$c"
@@ -273,19 +281,18 @@ for c in $CORES; do
     fi
     if [ -d "$d" ]; then
         pushd "$d" >/dev/null
-    make clean >/dev/null 2>&1 || true
-    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-         platform=armv7-neon-hardfloat \
-         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-         -j"$(nproc)" || log "WARN: core $c build had issues (may need per-core tweaks)."
-    # locate the produced .so
-    so=$(find . -maxdepth 2 -name "${c}_libretro.so" 2>/dev/null | head -1)
-    [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
+        make clean >/dev/null 2>&1 || true
+        MK=""; [ -f Makefile.libretro ] && MK="-f Makefile.libretro"
+        make $MK platform=unix \
+            CC="$WORKDIR/.toolchain/arm-gcc" CXX="$WORKDIR/.toolchain/arm-g++" \
+            AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/arm-g++" \
+            LDFLAGS="$LDFLAGS_S" -j"$(nproc)" || log "WARN: core $c build had issues (may need per-core tweaks)."
+        so=$(find . -maxdepth 2 -name "*_libretro.so" 2>/dev/null | head -1)
+        [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
         popd >/dev/null
     fi
 done
 
-# -----------------------------------------------------------------------------
 # STAGE 8 -- ABI gate
 # -----------------------------------------------------------------------------
 log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.17)..."
