@@ -262,21 +262,38 @@ fi
 # -----------------------------------------------------------------------------
 # STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
 CORE_TABLE="
-fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro|
-nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS=-include stdint.h
-snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-|
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26
-stella2014|https://github.com/libretro/stella2014-libretro|.|-|
+fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||arm
+nestopia|https://github.com/libretro/nestopia|libretro||CFLAGS=-include stdint.h|arm
+snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
+snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
+snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26|arm
+stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
+mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm
+vba_next|https://github.com/libretro/vba-next|.|-||arm
+tgbdual|https://github.com/libretro/tgbdual-libretro|.|-||arm
+prosystem|https://github.com/libretro/prosystem-libretro|.|-||arm
+mame2000|https://github.com/libretro/mame2000-libretro|.|-||arm
+mame2003_plus|https://github.com/libretro/mame2003-plus-libretro|.|-||arm
+fbalpha2012_cps1|https://github.com/libretro/fbalpha2012_cps1|.|-||fba
+fbalpha2012_cps2|https://github.com/libretro/fbalpha2012_cps2|.|-||fba
+fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|svn-current/trunk|-f makefile.libretro||fba
+fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-||fba
+fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-||fba
+pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=lightrec HAVE_NEON=1 BUILTIN_GPU=unai|arm
+gpsp|https://github.com/libretro/gpsp|.|-f Makefile.libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
 ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG"
 printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
 printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
-chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++"
+printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
+printf '#!/bin/bash\nexec %sg++ %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-g++"
+chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.toolchain/fba-gcc" "$WORKDIR/.toolchain/fba-g++"
 LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++"
 build_core() {
-    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5"
+    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}"
     local d="$WORKDIR/libretro-$name"
     if [ ! -d "$d/.git" ]; then
         clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
@@ -287,8 +304,8 @@ build_core() {
     make clean >/dev/null 2>&1 || true
     local -a XTRA; read -r -a XTRA <<< "$extra"
     timeout 1800 make $mk platform=unix "${XTRA[@]}" \
-        CC="$WORKDIR/.toolchain/arm-gcc" CXX="$WORKDIR/.toolchain/arm-g++" \
-        AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/arm-g++" \
+        CC="$WORKDIR/.toolchain/$wrap-gcc" CXX="$WORKDIR/.toolchain/$wrap-g++" \
+        AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/$wrap-g++" \
         LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
         || { log "WARN: core $name build had issues (may need per-core tweaks)."; popd >/dev/null; return; }
     local so
@@ -299,9 +316,9 @@ build_core() {
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
     popd >/dev/null
 }
-while IFS='|' read -r name repo bdir mk extra; do
+while IFS='|' read -r name repo bdir mk extra wrap; do
     [ -z "$name" ] && continue
-    case " $CORES " in *" $name "*) log "Building libretro core: $name"; build_core "$name" "$repo" "$bdir" "$mk" "$extra";; esac
+    case " $CORES " in *" $name "*) log "Building libretro core: $name"; build_core "$name" "$repo" "$bdir" "$mk" "$extra" "$wrap";; esac
 done <<< "$CORE_TABLE"
 
 # STAGE 8 -- ABI gate
