@@ -1,0 +1,28 @@
+diff --git a/frogui_libretro.c b/frogui_libretro.c
+index 263d1f1..aec4ad7 100644
+--- a/frogui_libretro.c
++++ b/frogui_libretro.c
+@@ -133,6 +133,23 @@ static const ConsoleMapping console_mappings[] = {
+     {"vapor",  CORES_PATH "/vaporspec_libretro.so"},
+     {"amiga",  CORES_PATH "/uae_libretro.so"},
+     {"atari-st", CORES_PATH "/castaway_libretro.so"},
++    /* --- RK3036G/CubeGM: stock 000-008.dat categories (stock libemu_* aliases) --- */
++    {"000",    CORES_PATH "/fbalpha2012_libretro.so"},   /* Arcade group (stock libemu_fbalpha2012) */
++    {"001",    CORES_PATH "/fceumm_libretro.so"},        /* NES/FC (stock libemu_nes) */
++    {"002",    CORES_PATH "/snes9x2005_plus_libretro.so"},/* SFC (stock libemu_sfc) */
++    {"003",    CORES_PATH "/picodrive_libretro.so"},     /* MD (stock libemu_md) */
++    {"004",    CORES_PATH "/mgba_libretro.so"},          /* GBA (stock libemu_mgba) */
++    {"005",    CORES_PATH "/nestopia_libretro.so"},      /* NES variant (stock libemu_nestopia) */
++    {"006",    CORES_PATH "/tgbdual_libretro.so"},       /* GB/GBC (stock libemu_tgbdual) */
++    {"007",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* PS1 (stock libemu_pcsx) */
++    {"008",    CORES_PATH "/stella2014_libretro.so"},    /* Atari 2600 (stock libemu_stella) */
++    {"ARCADE", CORES_PATH "/fbalpha2012_libretro.so"},   /* uppercase alias */
++    {"PS1",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* uppercase alias */
++    {"PSX",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* uppercase alias */
++    {"GB",     CORES_PATH "/tgbdual_libretro.so"},       /* uppercase alias */
++    {"GBC",    CORES_PATH "/tgbdual_libretro.so"},       /* uppercase alias */
++    {"GAMEBOY",CORES_PATH "/tgbdual_libretro.so"},       /* uppercase alias */
++    {"2600",   CORES_PATH "/stella2014_libretro.so"},    /* uppercase alias */
+     {NULL, NULL}
+ };
+ 
