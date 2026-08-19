@@ -254,7 +254,7 @@ fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||a
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26 -Iplatform/libretro/libretro-common|arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro||arm
 stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm
 vba_next|https://github.com/libretro/vba-next|.|-||arm
@@ -272,7 +272,7 @@ gpsp|https://github.com/libretro/gpsp|.|-f Makefile.libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
-ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG -include stdint.h"
+ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG -include stdint.h -DAT_HWCAP2=26"
 printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
 printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
 printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
@@ -378,7 +378,7 @@ while [ ${#_queue[@]} -gt 0 ]; do
     _seen[$_lib]=1
     is_base "$_lib" && continue
     _found=""
-    for _d in "$SYSROOT/lib" "$SYSROOT/usr/lib" "$SYSROOT/usr/lib/arm-linux-gnueabihf" "$SYSROOT/lib/arm-linux-gnueabihf"; do
+    for _d in "$SYSROOT/lib" "$SYSROOT/usr/lib" "$SYSROOT/usr/lib/arm-linux-gnueabihf" "$SYSROOT/lib/arm-linux-gnueabihf" \n             "${ARM_GNU:+$ARM_GNU/arm-linux-gnueabihf/sysroot/usr/lib}" \n             "${ARM_GNU:+$ARM_GNU/arm-linux-gnueabihf/sysroot/lib}"; do
         if [ -e "$_d/$_lib" ]; then _found="$_d/$_lib"; break; fi
     done
     if [ -z "$_found" ]; then
