@@ -415,6 +415,10 @@ build_core() {
     for x in "${EA[@]}"; do
         case "$x" in LDFLAGS=*) _ld="${x#LDFLAGS=}";; esac
     done
+    # Force re-link: cached core clones + incremental make keep the OLD .so
+    # when only LDFLAGS changed (e.g. -static-libstdc++ was ignored for
+    # stella2014 -> GLIBCXX_3.4.32 still present in payload-258).
+    find "$d" -name "*_libretro.so" -delete 2>/dev/null
     timeout 1800 make $mk platform=unix "${EA[@]}" \
         CC="$WORKDIR/.toolchain/$wrap-gcc" CXX="$WORKDIR/.toolchain/$wrap-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/$wrap-g++" \
