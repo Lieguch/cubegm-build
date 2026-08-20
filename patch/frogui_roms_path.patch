@@ -1,5 +1,5 @@
 diff --git a/frogui_libretro.c b/frogui_libretro.c
-index 263d1f1..ec3d104 100644
+index 263d1f1..ffebecb 100644
 --- a/frogui_libretro.c
 +++ b/frogui_libretro.c
 @@ -30,7 +30,23 @@
@@ -117,7 +117,7 @@ index 263d1f1..ec3d104 100644
      scan_directory(current_path);
      dbg("scan_directory done");
      shutdown_requested = false;
-@@ -528,7 +563,7 @@ void retro_run(void) {
+@@ -528,13 +563,16 @@ void retro_run(void) {
          render_settings_menu();
      } else {
          render_clear_screen(framebuffer);
@@ -126,7 +126,17 @@ index 263d1f1..ec3d104 100644
                              ? "TREEFROGUI: SYSTEMS" : get_basename(current_path);
          render_header(framebuffer, title);
          int visible = min(entry_count - scroll_offset, VISIBLE_ENTRIES);
-@@ -544,7 +579,7 @@ void retro_run(void) {
+         for (int i = 0; i < visible; i++) {
+             int idx = scroll_offset + i;
+-            render_menu_item(framebuffer, i, entries[idx].name, entries[idx].is_dir,
++            /* pass the GLOBAL idx: render_menu_item subtracts scroll_offset
++             * itself (visible_index = idx - scroll_offset); passing i made the
++             * list vanish after scrolling (index became negative). */
++            render_menu_item(framebuffer, idx, entries[idx].name, entries[idx].is_dir,
+                              (idx == selected_index), scroll_offset, 0);
+         }
+         render_legend(framebuffer, LEGEND_X_NONE);
+@@ -544,7 +582,7 @@ void retro_run(void) {
          video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
  }
  

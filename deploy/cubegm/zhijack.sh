@@ -135,6 +135,21 @@ if [ -e /dev/watchdog ]; then
 fi
 sync
 
+# Disarm the stock respawner permanently: rename its binaries so init/systemd
+# cannot restart them even if every watchdog we spawn is killed. (The 10-20 min
+# half-white + stock logo = icube revived and respawned rkgame which stole DRM
+# master; killing is only reactive, renaming is permanent.)
+for _name in icube rkgame; do
+    _pid=$(pidof "$_name" 2>/dev/null | awk '{print $1}')
+    [ -n "$_pid" ] || continue
+    _exe=$(readlink "/proc/$_pid/exe" 2>/dev/null)
+    if [ -n "$_exe" ] && [ -f "$_exe" ] && [ -w "$(dirname "$_exe")" ]; then
+        mv "$_exe" "$_exe.bak" 2>>"$LOG" && echo "zhijack: renamed $_exe -> $_exe.bak (respawner disarmed)" >> "$LOG"
+    else
+        echo "zhijack: cannot rename $_name exe=$_exe (keep watchdog)" >> "$LOG"
+    fi
+done
+
 # Background icube/rkgame watchdog: the main loop below only runs BETWEEN game
 # launches -- while FrogUI/game is up nothing kills the respawner, so icube
 # revives after ~10-15 min, respawns rkgame and steals DRM master back (the

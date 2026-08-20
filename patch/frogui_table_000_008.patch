@@ -9,11 +9,11 @@ index 263d1f1..aec4ad7 100644
 +    /* --- RK3036G/CubeGM: stock 000-008.dat categories (stock libemu_* aliases) --- */
 +    {"000",    CORES_PATH "/fbalpha2012_libretro.so"},   /* Arcade group (stock libemu_fbalpha2012) */
 +    {"001",    CORES_PATH "/fceumm_libretro.so"},        /* NES/FC (stock libemu_nes) */
-+    {"002",    CORES_PATH "/snes9x2005_plus_libretro.so"},/* SFC (stock libemu_sfc) */
++    {"002",    CORES_PATH "/snes9x2005_libretro.so"},     /* SFC (stock libemu_sfc; core outputs snes9x2005, no _plus) */
 +    {"003",    CORES_PATH "/picodrive_libretro.so"},     /* MD (stock libemu_md) */
 +    {"004",    CORES_PATH "/mgba_libretro.so"},          /* GBA (stock libemu_mgba) */
 +    {"005",    CORES_PATH "/fceumm_libretro.so"},        /* NES variant (stock libemu_nestopia; nestopia core not built yet) */
-+    {"006",    CORES_PATH "/tgbdual_libretro.so"},       /* GB/GBC (stock libemu_tgbdual) */
++    {"006",    CORES_PATH "/gambatte_libretro.so"},      /* GB/GBC (single-screen; tgbdual defaulted to link-cable dual) */
 +    {"007",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* PS1 (stock libemu_pcsx) */
 +    {"008",    CORES_PATH "/stella2014_libretro.so"},    /* Atari 2600 (stock libemu_stella) */
 +    {"ARCADE", CORES_PATH "/fbalpha2012_libretro.so"},   /* uppercase alias */

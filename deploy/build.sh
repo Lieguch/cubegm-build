@@ -324,6 +324,7 @@ stella2014|https://github.com/libretro/stella2014-libretro|.|-|LDFLAGS=__LDFLAGS
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm|rebase
 vba_next|https://github.com/libretro/vba-next|.|-||arm
 tgbdual|https://github.com/libretro/tgbdual-libretro|.|-||arm
+gambatte|https://github.com/libretro/gambatte-libretro|.|-f Makefile.libretro||arm
 gpsp|https://github.com/libretro/gpsp|.|-f Makefile|platform=classic_armv7_a7|arm
 prosystem|https://github.com/libretro/prosystem-libretro|.|-|LDFLAGS=__LDFLAGS_S__|arm
 mame2000|https://github.com/libretro/mame2000-libretro|.|-||arm
@@ -354,7 +355,7 @@ chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.
 # -shared there links the host tool as a .so and dies). LDFLAGS_S is only for
 # cores whose Makefile does NOT add -shared (mame2003_plus/fbneo/stella2014/
 # prosystem per upstream build_all.sh) -- passed via extra LDFLAGS=__LDFLAGS_S__.
-LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++ -lpthread -static-libstdc++ -static-libgcc"
+LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lpthread -static-libstdc++ -static-libgcc"
 LDFLAGS_S="-shared -Wl,--no-undefined $LDFLAGS"
 build_core() {
     local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}" branch="${7:-}"
