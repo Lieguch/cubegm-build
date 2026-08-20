@@ -1,12 +1,12 @@
-diff --git a/src/burn/snd/burn_ym2203.cpp b/src/burn/snd/burn_ym2203.cpp
-index 2c34dc9..1d5aa61 100644
---- a/src/burn/snd/burn_ym2203.cpp
-+++ b/src/burn/snd/burn_ym2203.cpp
-@@ -1,6 +1,7 @@
- #include "burnint.h"
- #include "burn_sound.h"
- #include "burn_ym2203.h"
-+#include "../timer.h"
+diff --git a/src/burn/burnint.h b/src/burn/burnint.h
+index 7fd01d3..193fb35 100644
+--- a/src/burn/burnint.h
++++ b/src/burn/burnint.h
+@@ -13,6 +13,7 @@
+ #endif
  
- #define MAX_YM2203	2
+ #include "burn_libretro_opts.h"
++#include "timer.h"
+ #include "burn.h"
  
+ #ifdef MSB_FIRST

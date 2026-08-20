@@ -1,12 +1,12 @@
-diff --git a/svn-current/trunk/src/burn/devices/seibusnd.cpp b/svn-current/trunk/src/burn/devices/seibusnd.cpp
-index 14f6312..56d935e 100644
---- a/svn-current/trunk/src/burn/devices/seibusnd.cpp
-+++ b/svn-current/trunk/src/burn/devices/seibusnd.cpp
-@@ -22,6 +22,7 @@
- //
+diff --git a/svn-current/trunk/src/burn/burnint.h b/svn-current/trunk/src/burn/burnint.h
+index 3b28336..f6289a0 100644
+--- a/svn-current/trunk/src/burn/burnint.h
++++ b/svn-current/trunk/src/burn/burnint.h
+@@ -18,6 +18,7 @@
  
- #include "burnint.h"
-+#include "../timer.h"
- #include "z80_intf.h"
- #include "burn_ym3812.h"
- #include "burn_ym2151.h"
+ #ifdef __LIBRETRO_OPTIMIZATIONS__
+ #include "burn_libretro_opts.h"
++#include "timer.h"
+ #endif
+ 
+ #include "burn.h"

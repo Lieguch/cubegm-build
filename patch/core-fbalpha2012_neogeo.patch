@@ -1,12 +1,12 @@
-diff --git a/src/burn/snd/burn_ym2610.cpp b/src/burn/snd/burn_ym2610.cpp
-index 8093c32..9313efe 100644
---- a/src/burn/snd/burn_ym2610.cpp
-+++ b/src/burn/snd/burn_ym2610.cpp
-@@ -1,6 +1,7 @@
- #include "burnint.h"
- #include "burn_sound.h"
- #include "burn_ym2610.h"
-+#include "../timer.h"
+diff --git a/src/burn/burnint.h b/src/burn/burnint.h
+index 44800e8..5a9320e 100644
+--- a/src/burn/burnint.h
++++ b/src/burn/burnint.h
+@@ -17,6 +17,7 @@
  
- void (*BurnYM2610Update)(INT16* pSoundBuf, INT32 nSegmentEnd);
+ #ifdef __LIBRETRO_OPTIMIZATIONS__
+ #include "burn_libretro_opts.h"
++#include "timer.h"
+ #endif
  
+ #include "burn.h"

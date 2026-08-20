@@ -319,12 +319,12 @@ fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||a
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26|arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26 CC_FOR_BUILD=gcc CXX_FOR_BUILD=g++|arm
 stella2014|https://github.com/libretro/stella2014-libretro|.|-|LDFLAGS=__LDFLAGS_S__|arm
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm|rebase
 vba_next|https://github.com/libretro/vba-next|.|-||arm
 tgbdual|https://github.com/libretro/tgbdual-libretro|.|-||arm
-gpsp|https://github.com/libretro/gpsp|.|-f Makefile||arm
+gpsp|https://github.com/libretro/gpsp|.|-f Makefile|platform=classic_armv7_a7|arm
 prosystem|https://github.com/libretro/prosystem-libretro|.|-|LDFLAGS=__LDFLAGS_S__|arm
 mame2000|https://github.com/libretro/mame2000-libretro|.|-||arm
 mame2003_plus|https://github.com/libretro/mame2003-plus-libretro|.|-|LDFLAGS=__LDFLAGS_S__|arm
@@ -334,7 +334,7 @@ fbalpha2012_cps2|https://github.com/libretro/fbalpha2012_cps2|.|-||fba
 fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|svn-current/trunk|-f makefile.libretro||fba
 fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-f makefile.libretro||fba
 fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-|CFLAGS=-DAT_HWCAP2=26 LDFLAGS=__LDFLAGS_S__|fba
-pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=ari64 HAVE_NEON=1 BUILTIN_GPU=unai|arm
+pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=ari64 HAVE_NEON=1 BUILTIN_GPU=unai LDFLAGS=__LDFLAGS_S__|arm
 nestopia|https://github.com/libretro/nestopia|libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
