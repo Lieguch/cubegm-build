@@ -1,7 +1,7 @@
-diff --git a/in_evdev.c b/in_evdev.c
+diff --git a/libpicofe/linux/in_evdev.c b/libpicofe/linux/in_evdev.c
 index ff714ce..fd6d05d 100644
---- a/in_evdev.c
-+++ b/in_evdev.c
+--- a/libpicofe/linux/in_evdev.c
++++ b/libpicofe/linux/in_evdev.c
 @@ -365,6 +365,20 @@ static int in_evdev_update(void *drv_data, const int *binds, int *result)
  		}
  	}
