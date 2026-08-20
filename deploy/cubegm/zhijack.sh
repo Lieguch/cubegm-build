@@ -78,6 +78,27 @@ else
     echo "zhijack: /dev/fb0 NOT PRESENT -> fb0 path cannot work" >> "$LOG"
 fi
 ls -la /dev/fb* /dev/dri 2>/dev/null >> "$LOG"
+
+# --- DRM/KMS + fb0 topology dump (payload-237 showed fb0 writes OK but HDMI
+#     stays black -> is fb0 really the HDMI source? RK3036 is DRM/KMS.) --------
+echo "=== DRM sysfs ===" >> "$LOG"
+ls /sys/class/drm/ 2>/dev/null >> "$LOG"
+for c in /sys/class/drm/card0-*; do
+    [ -e "$c" ] || continue
+    s=$(cat "$c/status" 2>/dev/null); e=$(cat "$c/enabled" 2>/dev/null)
+    m=$(cat "$c/modes" 2>/dev/null | tr '\n' ' ')
+    echo "DRM $c status=$s enabled=$e modes=[$m]" >> "$LOG"
+done
+echo "=== fb0 sysfs ===" >> "$LOG"
+cat /sys/class/graphics/fb0/name 2>/dev/null >> "$LOG"
+cat /sys/class/graphics/fb0/virtual_size 2>/dev/null >> "$LOG"
+cat /sys/class/graphics/fb0/stride 2>/dev/null >> "$LOG"
+cat /sys/class/graphics/fb0/bits_per_pixel 2>/dev/null >> "$LOG"
+echo "=== DRM master / process ===" >> "$LOG"
+cat /sys/class/drm/card0/device/driver/uevent 2>/dev/null | head -5 >> "$LOG"
+echo "=== ALSA cards ===" >> "$LOG"
+cat /proc/asound/cards 2>/dev/null >> "$LOG"
+ls /proc/asound/ 2>/dev/null | head -20 >> "$LOG"
 sync
 sleep 0.3
 
