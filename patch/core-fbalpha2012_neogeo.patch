@@ -1,12 +1,9 @@
 diff --git a/src/burn/burnint.h b/src/burn/burnint.h
-index 44800e8..5a9320e 100644
+index 44800e8..9c88e9e 100644
 --- a/src/burn/burnint.h
 +++ b/src/burn/burnint.h
-@@ -17,6 +17,7 @@
+@@ -149,3 +149,4 @@ void BurnExitMemoryManager();
+ #define BURN_SND_ROUTE_BOTH			(BURN_SND_ROUTE_LEFT | BURN_SND_ROUTE_RIGHT)
  
- #ifdef __LIBRETRO_OPTIMIZATIONS__
- #include "burn_libretro_opts.h"
-+#include "timer.h"
  #endif
- 
- #include "burn.h"
++#include "timer.h"

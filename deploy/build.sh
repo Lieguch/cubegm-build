@@ -319,7 +319,7 @@ fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||a
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26 CC_FOR_BUILD=gcc CXX_FOR_BUILD=g++|arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26 NO_ARM_ASM=1|arm
 stella2014|https://github.com/libretro/stella2014-libretro|.|-|LDFLAGS=__LDFLAGS_S__|arm
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm|rebase
 vba_next|https://github.com/libretro/vba-next|.|-||arm

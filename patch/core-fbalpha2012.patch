@@ -1,12 +1,9 @@
 diff --git a/svn-current/trunk/src/burn/burnint.h b/svn-current/trunk/src/burn/burnint.h
-index 3b28336..f6289a0 100644
+index 3b28336..a52a71d 100644
 --- a/svn-current/trunk/src/burn/burnint.h
 +++ b/svn-current/trunk/src/burn/burnint.h
-@@ -18,6 +18,7 @@
+@@ -249,3 +249,4 @@ extern UINT8 DebugCPU_SH2Initted;
+ void DebugTrackerExit();
  
- #ifdef __LIBRETRO_OPTIMIZATIONS__
- #include "burn_libretro_opts.h"
-+#include "timer.h"
  #endif
- 
- #include "burn.h"
++#include "timer.h"

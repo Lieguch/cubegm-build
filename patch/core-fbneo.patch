@@ -1,12 +1,10 @@
 diff --git a/src/burn/burnint.h b/src/burn/burnint.h
-index 067c820..3e811ca 100644
+index 067c820..1f00f92 100644
 --- a/src/burn/burnint.h
 +++ b/src/burn/burnint.h
-@@ -14,6 +14,7 @@
+@@ -294,4 +294,5 @@ extern UINT8 DebugCPU_SH2Initted;
  
- #include "burn.h"
- #include "burn_sound.h"
+ void DebugTrackerExit();
+ 
 +#include "timer.h"
- #include "joyprocess.h"
- #include "burn_endian.h"
- 
+ #endif
