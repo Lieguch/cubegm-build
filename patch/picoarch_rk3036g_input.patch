@@ -1,0 +1,96 @@
+diff --git a/in_evdev.c b/in_evdev.c
+index ff714ce..fd6d05d 100644
+--- a/in_evdev.c
++++ b/in_evdev.c
+@@ -365,6 +365,20 @@ static int in_evdev_update(void *drv_data, const int *binds, int *result)
+ 		}
+ 	}
+ 
++	/* d-pad hat (ABS_HAT0X/HAT0Y) -> digital UDLR. Many pads report the
++	 * d-pad as a hat rather than BTN_DPAD_* (e.g. Twin USB Gamepad whose
++	 * stock profile lists hat=1). EVIOCGABS returns -1 if unsupported. */
++	ret = ioctl(dev->fd, EVIOCGABS(ABS_HAT0X), &ainfo);
++	if (ret != -1) {
++		if (ainfo.value < 0) or_binds(binds, KEY_LEFT, result);
++		if (ainfo.value > 0) or_binds(binds, KEY_RIGHT, result);
++	}
++	ret = ioctl(dev->fd, EVIOCGABS(ABS_HAT0Y), &ainfo);
++	if (ret != -1) {
++		if (ainfo.value < 0) or_binds(binds, KEY_UP, result);
++		if (ainfo.value > 0) or_binds(binds, KEY_DOWN, result);
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/plat_sf3000.c b/plat_sf3000.c
+index 4d9c24d..d1ac234 100644
+--- a/plat_sf3000.c
++++ b/plat_sf3000.c
+@@ -268,6 +268,24 @@ static const struct in_pdata in_sdl_platform_data = {
+ #define BTN_DPAD_DOWN  0x221
+ #define BTN_DPAD_LEFT  0x222
+ #define BTN_DPAD_RIGHT 0x223
++/* PSX-style pads (Twin USB Gamepad 0810:0001 etc.): usbhid maps the 12
++ * buttons to BTN_TRIGGER(0x120)..BTN_BASE6(0x12b). Also arrow keys. */
++#define BTN_TRIGGER 0x120
++#define BTN_THUMB   0x121
++#define BTN_THUMB2  0x122
++#define BTN_TOP     0x123
++#define BTN_TOP2    0x124
++#define BTN_PINKIE  0x125
++#define BTN_BASE    0x126
++#define BTN_BASE2   0x127
++#define BTN_BASE3   0x128
++#define BTN_BASE4   0x129
++#define BTN_BASE5   0x12a
++#define BTN_BASE6   0x12b
++#define KEY_UP      0x67
++#define KEY_DOWN     0x6c
++#define KEY_LEFT     0x69
++#define KEY_RIGHT    0x6a
+ #endif
+ 
+ /* evdev keycode -> libretro joypad button. D-pad buttons AND the left analog
+@@ -291,6 +309,26 @@ static const struct in_default_bind in_evdev_defbinds[] = {
+     { BTN_START,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START },
+     /* Guide button opens the pause menu (matches handheld SELECT+START) */
+     { BTN_MODE,       IN_BINDTYPE_EMU, EACTION_MENU },
++    /* Arrow keys (d-pad hat mapped to these by in_evdev) */
++    { KEY_UP,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP },
++    { KEY_DOWN,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN },
++    { KEY_LEFT,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT },
++    { KEY_RIGHT,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
++    /* PSX-style pad buttons, order per stock profile 0810_0001_0100:
++     * btn0=A btn1=B btn2=L1 btn3=X btn4=Y btn5=R1 btn6/7=L2/R2 btn8/9=L2/R2
++     * btn10=Select btn11=Start (kernel keycodes 0x120..0x12b). */
++    { BTN_TRIGGER,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A },
++    { BTN_THUMB,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B },
++    { BTN_THUMB2,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L },
++    { BTN_TOP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y },
++    { BTN_TOP2,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X },
++    { BTN_PINKIE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R },
++    { BTN_BASE,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2 },
++    { BTN_BASE2,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2 },
++    { BTN_BASE3,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2 },
++    { BTN_BASE4,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2 },
++    { BTN_BASE5,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
++    { BTN_BASE6,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START },
+     { 0, 0, 0 }
+ };
+ 
+@@ -303,6 +341,14 @@ const struct menu_keymap in_evdev_key_map[] = {
+     { BTN_A,          PBTN_MOK },
+     { BTN_B,          PBTN_MBACK },
+     { BTN_MODE,       PBTN_MENU },
++    /* PSX pad: BTN_TRIGGER(0)/BTN_THUMB(1) = confirm/back, hat->arrows below */
++    { BTN_TRIGGER,    PBTN_MOK },
++    { BTN_THUMB,      PBTN_MBACK },
++    { BTN_BASE5,      PBTN_MENU },
++    { KEY_UP,         PBTN_UP },
++    { KEY_DOWN,       PBTN_DOWN },
++    { KEY_LEFT,       PBTN_LEFT },
++    { KEY_RIGHT,      PBTN_RIGHT },
+ };
+ 
+ static const struct in_pdata in_evdev_platform_data = {

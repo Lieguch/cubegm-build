@@ -99,6 +99,9 @@ cat /sys/class/drm/card0/device/driver/uevent 2>/dev/null | head -5 >> "$LOG"
 echo "=== ALSA cards ===" >> "$LOG"
 cat /proc/asound/cards 2>/dev/null >> "$LOG"
 ls /proc/asound/ 2>/dev/null | head -20 >> "$LOG"
+echo "=== input devices (gamepad keycodes) ===" >> "$LOG"
+cat /proc/bus/input/devices 2>/dev/null >> "$LOG"
+ls -la /dev/input/ 2>/dev/null >> "$LOG"
 sync
 sleep 0.3
 
@@ -115,8 +118,12 @@ ITER=0
 while true; do
     ITER=$((ITER+1))
     rm -f "$LAUNCH"
+    # icube is the respawner: if it revives (crash-restart), it respawns
+    # rkgame which takes DRM master back -> HDMI switches away from our dumb
+    # buffer (observed as half-white after ~10 min). Kill it every iteration.
+    killall icube 2>/dev/null
     killall rkgame 2>/dev/null
-    echo "--- iter $ITER: frogui ---" >> "$LOG"
+    echo "--- iter $ITER: frogui (icube=$(pidof icube 2>/dev/null)) ---" >> "$LOG"
     if [ ! -x "$PICOARCH" ]; then
         echo "zhijack: FATAL $PICOARCH missing/not executable" >> "$LOG"
         sync

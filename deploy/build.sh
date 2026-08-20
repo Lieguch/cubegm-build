@@ -181,6 +181,20 @@ fi
 # headers, so bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
 mkdir -p picoarch/include/drm
 cp -f "$HERE/drm_headers/drm/"*.h picoarch/include/drm/ 2>/dev/null || log "WARN: drm headers not copied (hwdisp_drm won't compile!)"
+# RK3036G input patch (gamepad): PSX-style keycodes in evdev defbinds + d-pad
+# hat handling. MUST run after the display patch (both touch plat_sf3000.c?
+# no -- input touches plat_sf3000.c + libpicofe/linux/in_evdev.c; display
+# touches hwdisp.c/plat_sdl.c/plat.h, so no overlap).
+if [ -f "$HERE/../patch/picoarch_rk3036g_input.patch" ]; then
+    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_rk3036g_input.patch" 2>/dev/null; then
+        log "Applying RK3036G input patch (gamepad keycodes + hat)..."
+        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_rk3036g_input.patch"
+    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/picoarch_rk3036g_input.patch" 2>/dev/null; then
+        log "RK3036G input patch already applied -- skipping."
+    else
+        log "WARN: RK3036G input patch NOT applicable and NOT applied -- gamepad may not work."
+    fi
+fi
 [ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
 
 # -----------------------------------------------------------------------------
