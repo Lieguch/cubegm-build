@@ -1,5 +1,5 @@
 diff --git a/hwdisp.c b/hwdisp.c
-index 5367b21..0f46713 100644
+index 5367b21..1d98897 100644
 --- a/hwdisp.c
 +++ b/hwdisp.c
 @@ -22,9 +22,30 @@
@@ -161,7 +161,7 @@ index 5367b21..0f46713 100644
      static int xmap[2048];
      static int last_w = -1, last_fbw = -1;
      if (w != last_w || g_fbw != last_fbw) {
-@@ -161,16 +233,202 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -161,16 +233,205 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
      for (int dy = 0; dy < g_fbh; dy++) {
          int sy = dy * h / g_fbh;
          const uint16_t *srow = s + sy * sp;
@@ -176,6 +176,9 @@ index 5367b21..0f46713 100644
 +/* ---- RK3036G DRM/KMS modeset (standard DRM UAPI via ioctl, no libdrm) ----
 + * Sets the HDMI-A connector to a mode, creates a 1280x720 XRGB8888 dumb
 + * buffer, mmaps it, ADDFB2 + SETCRTC -> HDMI shows the dumb buffer. */
++/* Linux-4.4 UAPI lacks the DRM_MODE_CONNECTED enum constant (added later). */
++#define DRM_MODE_CONNECTED 1
++static void hwdisp_drm_present(const void *src, int w, int h, int pitch_bytes);
 +static int hwdisp_drm_init(void) {
 +    g_drm_fd = open("/dev/dri/card0", O_RDWR);
 +    if (g_drm_fd < 0) {
@@ -292,7 +295,7 @@ index 5367b21..0f46713 100644
 +    cc.x = 0; cc.y = 0;
 +    cc.mode_valid = 1;
 +    cc.mode = chosen;
-+    cc.connector_id_ptr = (uintptr_t)&g_drm_conn_id;
++    cc.set_connectors_ptr = (uintptr_t)&g_drm_conn_id;  /* Linux-4.4 field name */
 +    cc.count_connectors = 1;
 +    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_SETCRTC, &cc) < 0) {
 +        hwdisp_fslog("hwdisp_drm: SETCRTC failed errno=%d", errno); goto fail;
@@ -366,7 +369,7 @@ index 5367b21..0f46713 100644
      sf3000_dump_fb_state("hwdisp_init/pre");
  
      /* Device-specific driver: each device ships its own driver.so build (panel
-@@ -546,7 +804,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
+@@ -546,7 +807,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
      static int s_n = 0;
      int lg = (s_n < 8);
      s_n++;
@@ -378,7 +381,7 @@ index 5367b21..0f46713 100644
      /* disp_frame HW-scales src→panel; the driver's fullscreen flag
       * (fbdev_video_aspect_ratio, like stock) picks fill vs aspect-fit. So:
       *   full   → flag=fill, pass src straight → GE distort-fills in HW (fast).
-@@ -621,6 +882,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -621,6 +885,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
                  s_n, src, w, h, pitch_bytes, g_active, (void*)p_disp,
                  g_filter_nearest, g_aspect_num, g_aspect_den, HW_W, HW_H);
      if (!g_active || !src) { if (lg) DBG("DBG present#%d: EARLY-RET\n", s_n); return; }
@@ -386,7 +389,7 @@ index 5367b21..0f46713 100644
      if (!p_disp) { if (lg) DBG("DBG present#%d: no p_disp\n", s_n); return; }
      int rv;
      /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
-@@ -785,6 +1047,8 @@ void hwdisp_deinit(void) {
+@@ -785,6 +1050,8 @@ void hwdisp_deinit(void) {
      sf3000_dump_fb_state("hwdisp_deinit/post-p_deinit");
      if (g_fbmem) { munmap(g_fbmem, g_fbsize); g_fbmem = NULL; }
      if (g_fbfd >= 0) { close(g_fbfd); g_fbfd = -1; }
