@@ -135,6 +135,21 @@ if [ -e /dev/watchdog ]; then
 fi
 sync
 
+# Background icube/rkgame watchdog: the main loop below only runs BETWEEN game
+# launches -- while FrogUI/game is up nothing kills the respawner, so icube
+# revives after ~10-15 min, respawns rkgame and steals DRM master back (the
+# observed half-white + stock boot logo screen). Kill -9 both every 5 s from a
+# detached loop so the front-end and games run uninterrupted.
+(
+    while true; do
+        killall -9 icube 2>/dev/null
+        killall -9 rkgame 2>/dev/null
+        sleep 5
+    done
+) &
+WD_PID=$!
+echo "zhijack: background icube/rkgame watchdog started (pid=$WD_PID)" >> "$LOG"
+
 # Front-end launcher loop. FrogUI writes $LAUNCH (core path on line 1, ROM path
 # on line 2) when the user picks a game; we then launch picoarch with that core.
 ITER=0

@@ -12,7 +12,7 @@ index 263d1f1..aec4ad7 100644
 +    {"002",    CORES_PATH "/snes9x2005_plus_libretro.so"},/* SFC (stock libemu_sfc) */
 +    {"003",    CORES_PATH "/picodrive_libretro.so"},     /* MD (stock libemu_md) */
 +    {"004",    CORES_PATH "/mgba_libretro.so"},          /* GBA (stock libemu_mgba) */
-+    {"005",    CORES_PATH "/nestopia_libretro.so"},      /* NES variant (stock libemu_nestopia) */
++    {"005",    CORES_PATH "/fceumm_libretro.so"},        /* NES variant (stock libemu_nestopia; nestopia core not built yet) */
 +    {"006",    CORES_PATH "/tgbdual_libretro.so"},       /* GB/GBC (stock libemu_tgbdual) */
 +    {"007",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* PS1 (stock libemu_pcsx) */
 +    {"008",    CORES_PATH "/stella2014_libretro.so"},    /* Atari 2600 (stock libemu_stella) */

@@ -1,5 +1,5 @@
 diff --git a/hwdisp.c b/hwdisp.c
-index 5367b21..702dbaa 100644
+index 5367b21..a790e74 100644
 --- a/hwdisp.c
 +++ b/hwdisp.c
 @@ -22,9 +22,30 @@
@@ -165,7 +165,7 @@ index 5367b21..702dbaa 100644
      static int xmap[2048];
      static int last_w = -1, last_fbw = -1;
      if (w != last_w || g_fbw != last_fbw) {
-@@ -161,16 +237,253 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -161,16 +237,260 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
      for (int dy = 0; dy < g_fbh; dy++) {
          int sy = dy * h / g_fbh;
          const uint16_t *srow = s + sy * sp;
@@ -370,16 +370,23 @@ index 5367b21..702dbaa 100644
 +     * w_out*h_out (256x240 game: ~61k vs ~921k conversions per frame). */
 +    static uint32_t rowbuf[2048];
 +    if (w > (int)(sizeof(rowbuf) / sizeof(rowbuf[0]))) w = (int)(sizeof(rowbuf) / sizeof(rowbuf[0]));
++    /* x lookup table: nearest-neighbor src x per dst x, rebuilt only when the
++     * src width changes — removes w*dst_w divisions from every frame. */
++    static int xmap[2048];
++    static int xmap_w = -1;
++    if (xmap_w != w) {
++        for (int x = 0; x < g_drm_w; x++)
++            xmap[x] = (w > 1) ? (x * w / g_drm_w) : 0;
++        xmap_w = w;
++    }
 +    for (int y = 0; y < g_drm_h; y++) {
 +        int sy = (h > 1) ? (y * h / g_drm_h) : 0;
 +        const uint16_t *srow = s + (size_t)sy * sp;
 +        for (int sx = 0; sx < w; sx++)
 +            rowbuf[sx] = hwdisp_cvt565(srow[sx]);
 +        uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
-+        for (int x = 0; x < g_drm_w; x++) {
-+            int sx = (w > 1) ? (x * w / g_drm_w) : 0;
-+            drow[x] = rowbuf[sx];
-+        }
++        for (int x = 0; x < g_drm_w; x++)
++            drow[x] = rowbuf[xmap[x]];
 +    }
 +}
 +
@@ -421,7 +428,7 @@ index 5367b21..702dbaa 100644
      sf3000_dump_fb_state("hwdisp_init/pre");
  
      /* Device-specific driver: each device ships its own driver.so build (panel
-@@ -546,7 +859,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
+@@ -546,7 +866,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
      static int s_n = 0;
      int lg = (s_n < 8);
      s_n++;
@@ -433,7 +440,7 @@ index 5367b21..702dbaa 100644
      /* disp_frame HW-scales src→panel; the driver's fullscreen flag
       * (fbdev_video_aspect_ratio, like stock) picks fill vs aspect-fit. So:
       *   full   → flag=fill, pass src straight → GE distort-fills in HW (fast).
-@@ -621,6 +937,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -621,6 +944,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
                  s_n, src, w, h, pitch_bytes, g_active, (void*)p_disp,
                  g_filter_nearest, g_aspect_num, g_aspect_den, HW_W, HW_H);
      if (!g_active || !src) { if (lg) DBG("DBG present#%d: EARLY-RET\n", s_n); return; }
@@ -441,7 +448,7 @@ index 5367b21..702dbaa 100644
      if (!p_disp) { if (lg) DBG("DBG present#%d: no p_disp\n", s_n); return; }
      int rv;
      /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
-@@ -785,6 +1102,8 @@ void hwdisp_deinit(void) {
+@@ -785,6 +1109,8 @@ void hwdisp_deinit(void) {
      sf3000_dump_fb_state("hwdisp_deinit/post-p_deinit");
      if (g_fbmem) { munmap(g_fbmem, g_fbsize); g_fbmem = NULL; }
      if (g_fbfd >= 0) { close(g_fbfd); g_fbfd = -1; }
@@ -477,7 +484,7 @@ index 1e955f4..cf646e0 100644
  
  struct audio_frame {
 diff --git a/plat_sdl.c b/plat_sdl.c
-index fe4f9d8..a06f4e0 100644
+index fe4f9d8..017a331 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
 @@ -21,6 +21,7 @@ static SDL_Surface* screen;
@@ -526,17 +533,13 @@ index fe4f9d8..a06f4e0 100644
  		had_msg = 1;
  	}
  
-@@ -1107,29 +1114,73 @@ static void *sf3000_audio_thread_fn(void *unused)
+@@ -1107,29 +1114,139 @@ static void *sf3000_audio_thread_fn(void *unused)
  static void plat_sound_finish(void)
  {
  #ifdef PLATFORM_SF3000
 -	if (sf3000_audio_running) {
 -		sf3000_audio_running = 0;
 -		pthread_join(sf3000_audio_thread, NULL);  /* thread deinits the DAC itself */
--	}
--	if (sf3000_sound_handle) {
--		dlclose(sf3000_sound_handle);
--		sf3000_sound_handle = NULL;
 +	/* RK3036G has no stock driver.so audio -> SDL/ALSA path below. */
 +	extern int sf3000_is_rk3036(void);
 +	if (!sf3000_is_rk3036()) {
@@ -548,6 +551,18 @@ index fe4f9d8..a06f4e0 100644
 +			dlclose(sf3000_sound_handle);
 +			sf3000_sound_handle = NULL;
 +		}
++		return;
+ 	}
+-	if (sf3000_sound_handle) {
+-		dlclose(sf3000_sound_handle);
+-		sf3000_sound_handle = NULL;
++	/* RK3036G: close the ALSA pcm if it was opened (SDL audio never opened). */
++	extern int sf3000_is_rk3036(void);
++	if (sf3000_is_rk3036()) {
++		plat_sound_finish_alsa();
++		SDL_PauseAudio(1);
++		SDL_CloseAudio();
++		if (audio.buf) { free(audio.buf); audio.buf = NULL; }
 +		return;
  	}
 -#else
@@ -570,6 +585,59 @@ index fe4f9d8..a06f4e0 100644
 + * Kept as a plain function instead of a #else-label + cross-#ifdef goto: the
 + * preprocessor deletes the label when PLATFORM_SF3000 is defined, which made
 + * run #247 fail with "label used but not defined". */
++/* ---- RK3036G: direct ALSA via dlopen. The device ships libasound.so.2 and a
++ * full /proc/asound (rockchiphdmi card) but this SDL build has no ALSA backend
++ * and there is no /dev/dsp, so SDL_OpenAudio fails ("No available audio
++ * device") -> cores run silent and audio starves (observed 1-2 s/frame).
++ * Opening the PCM with the simplified set_params API fixes both. dlopen keeps
++ * zero build-time dependency on alsa headers (sysroot has none). */
++#include <dlfcn.h>
++static void *g_alsa_handle = NULL;
++static void *g_alsa_pcm    = NULL;
++static int   g_alsa_ok     = 0;
++typedef int  (*alsa_open_fn)(void **, const char *, int, int);
++typedef int  (*alsa_setparams_fn)(void *, unsigned int, int, int, int, int, unsigned int);
++typedef long (*alsa_writei_fn)(void *, const void *, unsigned long);
++typedef int  (*alsa_close_fn)(void *);
++static alsa_open_fn       p_snd_pcm_open;
++static alsa_setparams_fn  p_snd_pcm_set_params;
++static alsa_writei_fn     p_snd_pcm_writei;
++static alsa_close_fn      p_snd_pcm_close;
++
++static int plat_sound_init_alsa(void) {
++    if (g_alsa_ok) return 0;
++    g_alsa_handle = dlopen("libasound.so.2", RTLD_LAZY);
++    if (!g_alsa_handle) return -1;
++    p_snd_pcm_open       = (alsa_open_fn)dlsym(g_alsa_handle, "snd_pcm_open");
++    p_snd_pcm_set_params = (alsa_setparams_fn)dlsym(g_alsa_handle, "snd_pcm_set_params");
++    p_snd_pcm_writei     = (alsa_writei_fn)dlsym(g_alsa_handle, "snd_pcm_writei");
++    p_snd_pcm_close      = (alsa_close_fn)dlsym(g_alsa_handle, "snd_pcm_close");
++    if (!p_snd_pcm_open || !p_snd_pcm_set_params || !p_snd_pcm_writei || !p_snd_pcm_close) {
++        dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++    }
++    void *pcm = NULL;
++    if (p_snd_pcm_open(&pcm, "default", 2 /*SND_PCM_STREAM_PLAYBACK*/, 0) < 0 || !pcm) {
++        if (pcm) p_snd_pcm_close(pcm);
++        dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++    }
++    /* set_params(pcm, S16_LE=2, RW_INTERLEAVED=3, 2ch, 44100, soft_resample=1, 50ms) */
++    if (p_snd_pcm_set_params(pcm, 2, 3, 2, 44100, 1, 50000) < 0) {
++        p_snd_pcm_close(pcm); dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++    }
++    g_alsa_pcm = pcm; g_alsa_ok = 1;
++    PA_INFO("RK3036G: ALSA audio via dlopen OK (default pcm, 44100 stereo)\n");
++    return 0;
++}
++static void plat_sound_write_alsa(const struct audio_frame *data, int frames) {
++    if (!g_alsa_ok || !g_alsa_pcm || !p_snd_pcm_writei) return;
++    p_snd_pcm_writei(g_alsa_pcm, data, (unsigned long)frames);
++}
++static void plat_sound_finish_alsa(void) {
++    if (g_alsa_pcm && p_snd_pcm_close) p_snd_pcm_close(g_alsa_pcm);
++    g_alsa_pcm = NULL; g_alsa_ok = 0;
++    if (g_alsa_handle) { dlclose(g_alsa_handle); g_alsa_handle = NULL; }
++}
++
 +static int plat_sound_init_sdl(void)
 +{
 +	if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
@@ -604,12 +672,16 @@ index fe4f9d8..a06f4e0 100644
 +	 * SDL backend below. This also stops the "sound_driver_init failed"
 +	 * audio-thread error and the core teardown it triggered. */
 +	extern int sf3000_is_rk3036(void);
-+	if (sf3000_is_rk3036())
++	if (sf3000_is_rk3036()) {
++		if (plat_sound_init_alsa() == 0)
++			return 0;
++		PA_INFO("RK3036G: ALSA init failed, falling back to SDL audio\n");
 +		return plat_sound_init_sdl();
++	}
  	/* NOTE: sound_driver_init() is NOT called here — it runs on the audio thread
  	 * (the SF3500-class driver's handle is thread-local; see sf3000_audio_thread_fn).
  	 * Here we only dlopen/dlsym, set rates, and start that thread. */
-@@ -1175,29 +1226,7 @@ static int plat_sound_init(void)
+@@ -1175,29 +1292,7 @@ static int plat_sound_init(void)
  	PA_INFO("SF3000: Proprietary audio driver initialized at %d Hz\n", SAMPLE_RATE);
  	return 0;
  #else
@@ -640,7 +712,7 @@ index fe4f9d8..a06f4e0 100644
  #endif
  }
  
-@@ -1221,9 +1250,16 @@ float plat_sound_capacity(void)
+@@ -1221,9 +1316,17 @@ float plat_sound_capacity(void)
  }
  
  #define BATCH_SIZE 100
@@ -651,13 +723,14 @@ index fe4f9d8..a06f4e0 100644
 +	/* RK3036G -> SDL/ALSA backend */
 +	extern int sf3000_is_rk3036(void);
 +	if (sf3000_is_rk3036()) {
++		if (g_alsa_ok) { plat_sound_write_alsa(data, frames); return; }
 +		plat_sound_write_sdl(data, frames);
 +		return;
 +	}
  	/* Non-blocking enqueue: hand frames to the consumer thread and return
  	 * immediately. On overrun we drop the excess rather than block the emu.
  	 * The DAC is fixed at SAMPLE_RATE (48kHz); cores emitting any other rate
-@@ -1263,6 +1299,14 @@ ring_full:
+@@ -1263,6 +1366,14 @@ ring_full:
  		pthread_mutex_unlock(&sf3000_aring_mtx);
  	}
  #else
@@ -672,7 +745,7 @@ index fe4f9d8..a06f4e0 100644
  	int consumed = 0;
  	if (audio.buf_len == 0)
  		return;
-@@ -1292,7 +1336,6 @@ ring_full:
+@@ -1292,7 +1403,6 @@ ring_full:
  		}
  	}
  	SDL_UnlockAudio();
@@ -680,7 +753,7 @@ index fe4f9d8..a06f4e0 100644
  }
  
  void plat_sound_resize_buffer(void) {
-@@ -1578,6 +1621,28 @@ int sf3000_fb_init(void) {
+@@ -1578,6 +1688,28 @@ int sf3000_fb_init(void) {
          }
          fprintf(stderr, "sf3000_fb_init: SF3500 hwdisp_init failed, falling back\n");
      }
@@ -709,7 +782,7 @@ index fe4f9d8..a06f4e0 100644
      /* Write per-process init log to dedicated file with fsync, so it
       * survives even when stderr buffer is lost on power-cycle. */
      int initlog = open("/mnt/sdcard/picoarch_init.log",
-@@ -1822,9 +1887,11 @@ void sf3000_frame_limit(void) {
+@@ -1822,9 +1954,11 @@ void sf3000_frame_limit(void) {
   * "present = fb-write" (R36SX only) is the single behavioural split downstream;
   * SF3500 follows SF3000 in every code path, differing only by driver file. */
  extern void dbg_log(const char *fmt, ...);
@@ -722,7 +795,7 @@ index fe4f9d8..a06f4e0 100644
  static int g_dev_w = 854, g_dev_h = 480, g_dev_scale = 150;
  
  /* Recursively scan /proc/device-tree for the R36SX panel node (r63311), without
-@@ -1880,12 +1947,59 @@ static int tf_read_env_file(int *w, int *h, int *scale) {
+@@ -1880,12 +2014,59 @@ static int tf_read_env_file(int *w, int *h, int *scale) {
      return id;
  }
  
@@ -782,7 +855,7 @@ index fe4f9d8..a06f4e0 100644
      if (id < 0) {                              /* fallback: scan live DT */
          int r63311 = 0;
          dt_scan_r63311("/proc/device-tree", 0, &r63311);
-@@ -1901,8 +2015,12 @@ void sf3000_detect_device(void) {
+@@ -1901,8 +2082,12 @@ void sf3000_detect_device(void) {
                  id = TF_DEV_SF3500;
              else
                  id = TF_DEV_GB350;
@@ -795,7 +868,7 @@ index fe4f9d8..a06f4e0 100644
      }
  
      /* Panel geometry by device (env-file overrides above already applied to
-@@ -1910,6 +2028,7 @@ void sf3000_detect_device(void) {
+@@ -1910,6 +2095,7 @@ void sf3000_detect_device(void) {
      if (id == TF_DEV_R36SX || id == TF_DEV_GB350) { if (w == 854) w = 640; }  /* landscape 640x480, 4:3 */
      g_dev_id    = id;
      g_dev_r36sx = (id == TF_DEV_R36SX);
@@ -803,7 +876,7 @@ index fe4f9d8..a06f4e0 100644
      g_dev_w = w; g_dev_h = h; g_dev_scale = scale;
  
      char s[16];
-@@ -1920,6 +2039,7 @@ void sf3000_detect_device(void) {
+@@ -1920,6 +2106,7 @@ void sf3000_detect_device(void) {
              id == TF_DEV_R36SX ? "R36SX" : id == TF_DEV_SF3500 ? "SF3500" :
              id == TF_DEV_GB350 ? "GB350" : "SF3000",
              g_dev_w, g_dev_h, g_dev_scale);
@@ -811,7 +884,7 @@ index fe4f9d8..a06f4e0 100644
  }
  
  int sf3000_panel_w(void)  { sf3000_detect_device(); return g_dev_w; }
-@@ -1927,6 +2047,7 @@ int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
+@@ -1927,6 +2114,7 @@ int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
  int sf3000_is_r36sx(void) { sf3000_detect_device(); return g_dev_r36sx > 0; }
  int sf3000_is_sf3500(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_SF3500; }
  int sf3000_is_gb350(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_GB350; }
@@ -819,7 +892,7 @@ index fe4f9d8..a06f4e0 100644
  /* 4:3 panels (R36SX, GB350 = 640x480) vs 16:9 (SF3000/SF3500 = 854x480). */
  int sf3000_aspect_is_43(void) { sf3000_detect_device(); return g_dev_r36sx > 0 || g_dev_id == TF_DEV_GB350; }
  
-@@ -2140,7 +2261,7 @@ void sf3000_fb_blit(const void *src, int width, int height, int pitch) {
+@@ -2140,7 +2328,7 @@ void sf3000_fb_blit(const void *src, int width, int height, int pitch) {
       * panel-size frames (only small game frames work), so SF3000 FrogUI falls
       * through to the SW transpose path below (bilinear-blended, its proven cold
       * renderer). */
@@ -828,7 +901,7 @@ index fe4f9d8..a06f4e0 100644
          width == PANEL_W && height == PANEL_H) {
          if (!sf3000_use_hwdisp && hwdisp_init() == 0) {
              sf3000_use_hwdisp = 1;
-@@ -2207,7 +2328,7 @@ if (sf3000_use_hwdisp) {
+@@ -2207,7 +2395,7 @@ if (sf3000_use_hwdisp) {
                  hwdisp_set_sharpen(sf3000_sharpness);
                  hwdisp_set_target_aspect(0, 0);            /* already panel-final */
                  hwdisp_set_filter(SCALE_FILTER_BILINEAR);  /* 1:1 present, no re-upscale */
@@ -837,7 +910,7 @@ index fe4f9d8..a06f4e0 100644
                      hwdisp_present(panb, PW, PH, PW * 2);
                  return;
              }
-@@ -2307,7 +2428,7 @@ if (sf3000_use_hwdisp) {
+@@ -2307,7 +2495,7 @@ if (sf3000_use_hwdisp) {
                  }
                  if (ff_skip) return;    /* FF: drop this present to keep display 60fps */
                  /* R36SX: disp_frame hangs → direct fb0 write. SF3000: disp_frame. */
@@ -846,7 +919,7 @@ index fe4f9d8..a06f4e0 100644
                      hwdisp_present(compose_buf, width, height, width * 2);
                  return;
              }
-@@ -2336,7 +2457,7 @@ if (sf3000_use_hwdisp) {
+@@ -2336,7 +2524,7 @@ if (sf3000_use_hwdisp) {
                  src = dst; width = PANEL_W; height = PANEL_H; pitch = PANEL_W * 2;
              }
          }

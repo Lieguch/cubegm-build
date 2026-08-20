@@ -354,7 +354,7 @@ chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.
 # -shared there links the host tool as a .so and dies). LDFLAGS_S is only for
 # cores whose Makefile does NOT add -shared (mame2003_plus/fbneo/stella2014/
 # prosystem per upstream build_all.sh) -- passed via extra LDFLAGS=__LDFLAGS_S__.
-LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++ -lpthread"
+LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++ -lpthread -static-libstdc++ -static-libgcc"
 LDFLAGS_S="-shared -Wl,--no-undefined $LDFLAGS"
 build_core() {
     local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}" branch="${7:-}"

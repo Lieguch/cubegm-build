@@ -1,5 +1,5 @@
 diff --git a/frogui_libretro.c b/frogui_libretro.c
-index 263d1f1..8432757 100644
+index 263d1f1..ec3d104 100644
 --- a/frogui_libretro.c
 +++ b/frogui_libretro.c
 @@ -30,7 +30,23 @@
@@ -36,7 +36,26 @@ index 263d1f1..8432757 100644
  static int selected_index   = 0;
  static int scroll_offset    = 0;
  static uint16_t *framebuffer = NULL;
-@@ -283,6 +299,8 @@ static void scan_directory(const char *path) {
+@@ -276,13 +292,27 @@ static const char* get_basename(const char *path) {
+ 
+ #define SETTINGS_ENTRY_NAME ">> Settings"
+ 
++static char g_scan_path[512] = "";
++static long g_scan_mtime = -1, g_scan_size = -1;
+ static void scan_directory(const char *path) {
++    /* re-entry cache: same dir + unchanged mtime/size -> reuse entries.
++     * (returning from a game re-runs retro_init -> full SD re-scan WAS the
++     * long menu delay; SD stat() is the slow part.) */
++    struct stat st0;
++    if (stat(path, &st0) == 0 && strcmp(path, g_scan_path) == 0 &&
++        (long)st0.st_mtime == g_scan_mtime && (long)st0.st_size == g_scan_size)
++        return;
++    strncpy(g_scan_path, path, sizeof(g_scan_path)-1);
++    g_scan_path[sizeof(g_scan_path)-1] = 0;
++    g_scan_mtime = (long)st0.st_mtime; g_scan_size = (long)st0.st_size;
+     DIR *dir = opendir(path);
+     if (!dir) return;
+     entry_count = 0;
      struct dirent *e;
      while ((e = readdir(dir)) != NULL) {
          if (e->d_name[0] == '.') continue;
@@ -45,7 +64,7 @@ index 263d1f1..8432757 100644
          struct stat st;
          char full[MAX_PATH_LEN];
          snprintf(full, sizeof(full), "%s/%s", path, e->d_name);
-@@ -291,7 +309,7 @@ static void scan_directory(const char *path) {
+@@ -291,7 +321,7 @@ static void scan_directory(const char *path) {
              const char *ext = strrchr(e->d_name, '.');
              if (ext && (strcasecmp(ext,".csv")==0 || strcasecmp(ext,".txt")==0 ||
                          strcasecmp(ext,".xml")==0 || strcasecmp(ext,".jpg")==0 ||
@@ -54,7 +73,7 @@ index 263d1f1..8432757 100644
          }
          if (entry_count >= entry_capacity) {
              entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
-@@ -313,7 +331,7 @@ static void scan_directory(const char *path) {
+@@ -313,7 +343,7 @@ static void scan_directory(const char *path) {
                  DirEntry tmp = entries[i]; entries[i] = entries[j]; entries[j] = tmp;
              }
      /* Append Settings shortcut at root level */
@@ -63,7 +82,7 @@ index 263d1f1..8432757 100644
          if (entry_count >= entry_capacity) {
              entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
              entries = realloc(entries, entry_capacity * sizeof(DirEntry));
-@@ -401,7 +419,7 @@ static void handle_input(void) {
+@@ -401,17 +431,19 @@ static void handle_input(void) {
          }
      }
  
@@ -72,7 +91,23 @@ index 263d1f1..8432757 100644
          char *slash = strrchr(current_path, '/');
          if (slash) { *slash = '\0'; scan_directory(current_path); }
      }
-@@ -477,6 +495,9 @@ void retro_init(void) {
+ 
+-    if (up && !up_last && selected_index > 0) {
+-        selected_index--;
++    if (up && !up_last) {                       /* wrap at top -> last entry */
++        if (selected_index > 0) selected_index--;
++        else selected_index = (entry_count > 0) ? entry_count - 1 : 0;
+         if (selected_index < scroll_offset) scroll_offset = selected_index;
+     }
+-    if (dn && !dn_last && selected_index < entry_count-1) {
+-        selected_index++;
++    if (dn && !dn_last) {                       /* wrap at bottom -> first entry */
++        if (selected_index < entry_count-1) selected_index++;
++        else selected_index = 0;
+         if (selected_index >= scroll_offset + VISIBLE_ENTRIES)
+             scroll_offset = selected_index - VISIBLE_ENTRIES + 1;
+     }
+@@ -477,6 +509,9 @@ void retro_init(void) {
      dbg("calloc done");
      render_init(framebuffer);
      dbg("render_init done");
@@ -82,7 +117,7 @@ index 263d1f1..8432757 100644
      scan_directory(current_path);
      dbg("scan_directory done");
      shutdown_requested = false;
-@@ -528,7 +549,7 @@ void retro_run(void) {
+@@ -528,7 +563,7 @@ void retro_run(void) {
          render_settings_menu();
      } else {
          render_clear_screen(framebuffer);
@@ -91,7 +126,7 @@ index 263d1f1..8432757 100644
                              ? "TREEFROGUI: SYSTEMS" : get_basename(current_path);
          render_header(framebuffer, title);
          int visible = min(entry_count - scroll_offset, VISIBLE_ENTRIES);
-@@ -544,7 +565,7 @@ void retro_run(void) {
+@@ -544,7 +579,7 @@ void retro_run(void) {
          video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
  }
  
