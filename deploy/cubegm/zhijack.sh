@@ -77,6 +77,14 @@ if [ -e /dev/fb0 ]; then
 else
     echo "zhijack: /dev/fb0 NOT PRESENT -> fb0 path cannot work" >> "$LOG"
 fi
+
+# --- SD card layout (ROM root diagnostics: stock card ships Roms/; FrogUI
+# probes roms then Roms. "11.png" visible on the card but black menu = path
+# mismatch) ----------------------------------------------------------------
+echo "=== SD card layout ===" >> "$LOG"
+ls /mnt/sdcard/ 2>/dev/null | head -30 >> "$LOG"
+if [ -d /mnt/sdcard/roms ]; then  echo "roms DIR EXISTS" >> "$LOG";  ls /mnt/sdcard/roms/ 2>/dev/null | head -30 >> "$LOG";  else echo "roms DIR MISSING" >> "$LOG"; fi
+if [ -d /mnt/sdcard/Roms ]; then  echo "Roms DIR EXISTS" >> "$LOG";  ls /mnt/sdcard/Roms/ 2>/dev/null | head -30 >> "$LOG";  else echo "Roms DIR MISSING" >> "$LOG"; fi
 ls -la /dev/fb* /dev/dri 2>/dev/null >> "$LOG"
 
 # --- DRM/KMS + fb0 topology dump (payload-237 showed fb0 writes OK but HDMI

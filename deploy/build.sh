@@ -272,6 +272,18 @@ if [ -f "$HERE/../patch/frogui_ext_fallback.patch" ]; then
         log "WARN: FrogUI ext-fallback patch NOT applicable -- root ROMs will not resolve."
     fi
 fi
+# ROMS_PATH runtime probe (roms vs stock Roms): fixes black/empty menu when the
+# card is mounted case-sensitively (stock card ships Roms/).
+if [ -f "$HERE/../patch/frogui_roms_path.patch" ]; then
+    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_roms_path.patch" 2>/dev/null; then
+        log "Applying FrogUI roms-path probe patch (roms/Roms)..."
+        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_roms_path.patch"
+    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_roms_path.patch" 2>/dev/null; then
+        log "FrogUI roms-path patch already applied -- skipping."
+    else
+        log "WARN: FrogUI roms-path patch NOT applicable."
+    fi
+fi
 pushd FrogUI >/dev/null
 # Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
 # LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
