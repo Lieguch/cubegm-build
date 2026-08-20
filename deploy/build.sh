@@ -39,7 +39,9 @@ ALSA_LIB_REPO="https://github.com/alsa-project/alsa-lib.git"
 
 # Stage-1 default cores (proves the loop across GBA/SNES/NES/MD/Atari).
 # Each is built from github.com/libretro/<NAME> with the libretro common Makefile.
-DEFAULT_CORES="fceumm snes9x2005_plus picodrive stella2014"
+# Game-able core set: FBA2012 (000 arcade group), FBNeo, MD, PS1 (lightrec),
+# GBA/NES/SNES/Atari/GBC etc. fbalpha2012_* build fast; pcsx/mgba slower.
+DEFAULT_CORES="fceumm snes9x2005_plus picodrive stella2014 mgba nestopia vba_next tgbdual gpsp prosystem mame2000 fbalpha2012_cps1 fbalpha2012_cps2 fbalpha2012_cps3 fbalpha2012_neogeo fbneo pcsx_rearmed"
 CORES="${CORES:-$DEFAULT_CORES}"
 
 log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
