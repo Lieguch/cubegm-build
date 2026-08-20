@@ -119,7 +119,7 @@ command -v make >/dev/null || die "make missing"
 # ---- config -----------------------------------------------------------------
 PREFIX="${PREFIX:-/opt/cubegm-toolchain}"
 SYSROOT="${SYSROOT:-}"          # if set, skip STAGE 1+2 (assume already built)
-CORES="${CORES:-fceumm snes9x2005_plus picodrive stella2014}"
+CORES="${CORES:-}"   # default resolved inside build.sh (DEFAULT_CORES, 17 cores)
 
 # =============================================================================
 # STAGE 0 -- apt build dependencies (Ubuntu / Debian)

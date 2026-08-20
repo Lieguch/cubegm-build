@@ -260,6 +260,18 @@ if [ -f "$HERE/../patch/frogui_table_000_008.patch" ]; then
         log "WARN: frogui 000-008 table patch NOT applicable -- arcade/PS1 folders will not resolve."
     fi
 fi
+# Extension fallback: ROMs dropped straight into /roms root (folder name not in
+# console_mappings -> previously nothing happened on select). Maps by file ext.
+if [ -f "$HERE/../patch/frogui_ext_fallback.patch" ]; then
+    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_ext_fallback.patch" 2>/dev/null; then
+        log "Applying FrogUI extension-fallback patch (root .bin/.md/.nes/... resolvable)..."
+        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_ext_fallback.patch"
+    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_ext_fallback.patch" 2>/dev/null; then
+        log "FrogUI ext-fallback already applied -- skipping."
+    else
+        log "WARN: FrogUI ext-fallback patch NOT applicable -- root ROMs will not resolve."
+    fi
+fi
 pushd FrogUI >/dev/null
 # Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
 # LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
@@ -295,7 +307,7 @@ fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||a
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26 -Iplatform/libretro/libretro-common|arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro||arm
 stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm
 vba_next|https://github.com/libretro/vba-next|.|-||arm

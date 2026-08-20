@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 #include <sys/ioctl.h>
 #include <sys/shm.h>
 #include <sys/ipc.h>
@@ -48,6 +49,39 @@ static volatile uint32_t *g_mask = NULL;
 static int g_down[KEY_CNT];
 
 static void upd(int code, int on) { if (code >= 0 && code < KEY_CNT) g_down[code] = on; }
+
+/* Direction keys (d-pad hat + analog stick) go through a 40 ms pulse on the
+ * press edge instead of a level. FrogUI's menu is edge-triggered
+ * (`up && !up_last`), and the 10 ms poll here can sample mechanical hat
+ * bounce into multiple level transitions across frame boundaries -> one press
+ * moves 2-3 rows (observed on device). A short pulse makes every physical
+ * press produce exactly one rising edge. Games don't read this shm (they use
+ * picoarch's own evdev input), so pulses can't break in-game hold. */
+#define DIR_PULSE_MS 40
+struct dir_state { int phys; int pulse; long deadline_ms; };
+static struct dir_state g_dir[4];   /* 0=UP 1=DOWN 2=LEFT 3=RIGHT */
+static long now_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
+}
+/* feed the physical level of a direction, returns the pulse level to OR in */
+static int dir_feed(int idx, int phys) {
+    long now = now_ms();
+    if (!phys) {
+        g_dir[idx].phys = 0;
+        g_dir[idx].pulse = 0;
+        return 0;
+    }
+    if (!g_dir[idx].phys) {           /* rising edge -> start pulse */
+        g_dir[idx].pulse = 1;
+        g_dir[idx].deadline_ms = now + DIR_PULSE_MS;
+    }
+    g_dir[idx].phys = 1;
+    if (g_dir[idx].pulse && now >= g_dir[idx].deadline_ms)
+        g_dir[idx].pulse = 0;          /* pulse expired while held */
+    return g_dir[idx].pulse;
+}
 
 int main(int argc, char **argv)
 {
@@ -102,28 +136,37 @@ int main(int argc, char **argv)
         if (g_down[BTN_BASE2])   mask |= 1u << K_R2;
         if (g_down[BTN_BASE3])   mask |= 1u << K_SEL;
         if (g_down[BTN_BASE4])   mask |= 1u << K_START;
-        /* d-pad hat + analog stick (any device) */
+        /* d-pad hat + analog stick (any device). Physical levels are
+         * merged per-direction then fed through the pulse debouncer. */
+        int ph_up = 0, ph_dn = 0, ph_lt = 0, ph_rt = 0;
         for (int i = 0; i < nfd; i++) {
             struct input_absinfo ai;
             if (ioctl(fds[i], EVIOCGABS(ABS_HAT0X), &ai) == 0) {
-                if (ai.value < 0) mask |= 1u << K_LEFT;
-                if (ai.value > 0) mask |= 1u << K_RIGHT;
+                if (ai.value < 0) ph_lt = 1;
+                if (ai.value > 0) ph_rt = 1;
             }
             if (ioctl(fds[i], EVIOCGABS(ABS_HAT0Y), &ai) == 0) {
-                if (ai.value < 0) mask |= 1u << K_UP;
-                if (ai.value > 0) mask |= 1u << K_DOWN;
+                if (ai.value < 0) ph_up = 1;
+                if (ai.value > 0) ph_dn = 1;
             }
-            if (ioctl(fds[i], EVIOCGABS(ABS_X), &ai) == 0) {
+            /* Analog stick: require a non-zero reading — an unplugged port of
+             * a 2-in-1 pad reports ABS all-zero, and 0 < min+lz would stick
+             * LEFT/UP forever otherwise. */
+            if (ioctl(fds[i], EVIOCGABS(ABS_X), &ai) == 0 && ai.value != 0) {
                 int lz = (ai.maximum - ai.minimum) / 4;
-                if (ai.value < ai.minimum + lz) mask |= 1u << K_LEFT;
-                if (ai.value > ai.maximum - lz) mask |= 1u << K_RIGHT;
+                if (ai.value < ai.minimum + lz) ph_lt = 1;
+                if (ai.value > ai.maximum - lz) ph_rt = 1;
             }
-            if (ioctl(fds[i], EVIOCGABS(ABS_Y), &ai) == 0) {
+            if (ioctl(fds[i], EVIOCGABS(ABS_Y), &ai) == 0 && ai.value != 0) {
                 int lz = (ai.maximum - ai.minimum) / 4;
-                if (ai.value < ai.minimum + lz) mask |= 1u << K_UP;
-                if (ai.value > ai.maximum - lz) mask |= 1u << K_DOWN;
+                if (ai.value < ai.minimum + lz) ph_up = 1;
+                if (ai.value > ai.maximum - lz) ph_dn = 1;
             }
         }
+        if (dir_feed(0, ph_up)) mask |= 1u << K_UP;
+        if (dir_feed(1, ph_dn)) mask |= 1u << K_DOWN;
+        if (dir_feed(2, ph_lt)) mask |= 1u << K_LEFT;
+        if (dir_feed(3, ph_rt)) mask |= 1u << K_RIGHT;
         *m = mask;
         usleep(10000); /* 10 ms poll */
     }
