@@ -1,12 +1,18 @@
 diff --git a/hwdisp.c b/hwdisp.c
-index 5367b21..736fdf2 100644
+index 5367b21..0f46713 100644
 --- a/hwdisp.c
 +++ b/hwdisp.c
-@@ -22,9 +22,24 @@
+@@ -22,9 +22,30 @@
  #include <sys/mman.h>
  #include <sys/ioctl.h>
  #include <linux/fb.h>
 +#include <errno.h>
++/* DRM/KMS UAPI (Linux 4.4, MIT-licensed; bundled in deploy/drm_headers/).
++ * RK3036G HDMI output needs a DRM modeset: fb0 is NOT the HDMI source
++ * (payload-238 device logs: HDMI-A-1 connected+enabled, fb0 name empty). */
++#include <drm/drm.h>
++#include <drm/drm_mode.h>
++#include <drm/drm_fourcc.h>
  extern void dbg_log(const char *fmt, ...);
  #define DBG(...) dbg_log(__VA_ARGS__)
  
@@ -27,7 +33,7 @@ index 5367b21..736fdf2 100644
  #ifndef HW_NATIVE_W
  #define HW_NATIVE_W 1280
  #endif
-@@ -39,6 +54,10 @@ extern void dbg_log(const char *fmt, ...);
+@@ -39,6 +60,10 @@ extern void dbg_log(const char *fmt, ...);
  static void   *g_handle = NULL;
  static int     g_active = 0;
  
@@ -38,7 +44,7 @@ index 5367b21..736fdf2 100644
  typedef int  (*fn_init_t)(void);
  typedef void (*fn_deinit_t)(void);
  typedef int  (*fn_disp_t)(void *src, int w, int h, int pitch);
-@@ -94,32 +113,52 @@ static int g_filter_sharp   = 0;   /* sharp variant: integer prescale + HW resid
+@@ -94,32 +119,60 @@ static int g_filter_sharp   = 0;   /* sharp variant: integer prescale + HW resid
   * video_driver_disp_frame (which hard-hangs on the engine sync on this driver). */
  static int       g_fbfd    = -1;
  static uint16_t *g_fbmem   = NULL;
@@ -49,6 +55,14 @@ index 5367b21..736fdf2 100644
 +static int       g_fbbpp   = 0;   /* fb0 pixel depth (16=RGB565, 32=ARGB...) */
  static long      g_fbsize  = 0;   /* mmap length (bytes) */
  
++/* ---- RK3036G DRM/KMS path (HDMI modeset; fb0 is not the HDMI source) ---- */
++static int       g_drm_mode = 0;  /* present via dumb-buffer plane instead of fb0 */
++static int       g_drm_fd   = -1;
++static uint32_t  g_drm_fb_id = 0, g_drm_crtc_id = 0, g_drm_conn_id = 0;
++static int       g_drm_w = 0, g_drm_h = 0, g_drm_pitch = 0;
++static uint8_t  *g_drm_map = NULL;
++static size_t    g_drm_size = 0;
++
  static void hwdisp_fb_open(void) {
      struct fb_var_screeninfo vi;
      struct fb_fix_screeninfo fi;
@@ -94,7 +108,7 @@ index 5367b21..736fdf2 100644
  }
  
  /* Write src(w×h RGB565) directly to fb0, nearest-scaled to fill it.
-@@ -127,14 +166,33 @@ static void hwdisp_fb_open(void) {
+@@ -127,14 +180,34 @@ static void hwdisp_fb_open(void) {
   *   SF3000: panel is 480x854 portrait-mounted; the driver's disp_frame normally
   *           rotates 90°, but we bypass it, so rotate the frame 90° CW here.
   * Returns 1 if drawn. */
@@ -115,8 +129,9 @@ index 5367b21..736fdf2 100644
 +
  static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
 +    static int s_n = 0; int lg = (s_n < 3); s_n++;
-+    if (lg) hwdisp_fslog("hwdisp_fb_present#%d: src=%dx%d pitch=%d -> fb0=%dx%d stride=%d bpp=%d",
-+                         s_n, w, h, pitch_bytes, g_fbw, g_fbh, g_fbstride, g_fbbpp);
++    if (lg) hwdisp_fslog("hwdisp_fb_present#%d: src=%dx%d pitch=%d -> fb0=%dx%d stride=%d bpp=%d drm=%d",
++                         s_n, w, h, pitch_bytes, g_fbw, g_fbh, g_fbstride, g_fbbpp, g_drm_mode);
++    if (g_drm_mode) { hwdisp_drm_present(src, w, h, pitch_bytes); return 1; }
      if (!g_fbmem || g_fbw <= 0 || g_fbh <= 0 || w <= 0 || h <= 0) return 0;
      extern int sf3000_is_r36sx(void);
 +    extern int sf3000_is_rk3036(void);
@@ -129,7 +144,7 @@ index 5367b21..736fdf2 100644
          /* SF3000: 90° CW rotate. fb row → src x; fb col(reversed) → src y. */
          static int symap[2048];
          static int last_h = -1, last_fbw = -1;
-@@ -144,14 +202,13 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -144,14 +217,13 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
          }
          for (int dy = 0; dy < g_fbh; dy++) {
              int sx = dy * w / g_fbh;
@@ -146,7 +161,7 @@ index 5367b21..736fdf2 100644
      static int xmap[2048];
      static int last_w = -1, last_fbw = -1;
      if (w != last_w || g_fbw != last_fbw) {
-@@ -161,9 +218,8 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -161,16 +233,202 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
      for (int dy = 0; dy < g_fbh; dy++) {
          int sy = dy * h / g_fbh;
          const uint16_t *srow = s + sy * sp;
@@ -157,15 +172,181 @@ index 5367b21..736fdf2 100644
      }
      return 1;
  }
-@@ -171,6 +227,27 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+ 
++/* ---- RK3036G DRM/KMS modeset (standard DRM UAPI via ioctl, no libdrm) ----
++ * Sets the HDMI-A connector to a mode, creates a 1280x720 XRGB8888 dumb
++ * buffer, mmaps it, ADDFB2 + SETCRTC -> HDMI shows the dumb buffer. */
++static int hwdisp_drm_init(void) {
++    g_drm_fd = open("/dev/dri/card0", O_RDWR);
++    if (g_drm_fd < 0) {
++        hwdisp_fslog("hwdisp_drm: open /dev/dri/card0 FAILED errno=%d", errno);
++        return -1;
++    }
++    struct drm_mode_card_res res;
++    memset(&res, 0, sizeof res);
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
++        hwdisp_fslog("hwdisp_drm: GETRESOURCES(1) failed errno=%d", errno); goto fail;
++    }
++    uint32_t *conns = calloc(res.count_connectors ? res.count_connectors : 1, sizeof(uint32_t));
++    uint32_t *crtcs = calloc(res.count_crtcs ? res.count_crtcs : 1, sizeof(uint32_t));
++    if (!conns || !crtcs) { hwdisp_fslog("hwdisp_drm: calloc failed"); goto fail; }
++    res.connector_id_ptr = (uintptr_t)conns;
++    res.crtc_id_ptr = (uintptr_t)crtcs;
++    res.count_connectors = 0;
++    res.count_crtcs = 0;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
++        hwdisp_fslog("hwdisp_drm: GETRESOURCES(2) failed errno=%d", errno); goto fail;
++    }
++    hwdisp_fslog("hwdisp_drm: card0 conn=%u crtc=%u enc=%u fb=%u",
++                 res.count_connectors, res.count_crtcs, res.count_encoders, res.count_fbs);
++
++    struct drm_mode_modeinfo chosen;
++    memset(&chosen, 0, sizeof chosen);
++    int chosen_found = 0;
++    for (uint32_t i = 0; i < res.count_connectors; i++) {
++        struct drm_mode_get_connector conn;
++        memset(&conn, 0, sizeof conn);
++        conn.connector_id = conns[i];
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn) < 0) continue;
++        if (conn.count_modes == 0) continue;
++        struct drm_mode_modeinfo *mode_buf = calloc((size_t)conn.count_modes,
++                                                    sizeof(struct drm_mode_modeinfo));
++        if (!mode_buf) continue;
++        conn.modes_ptr = (uintptr_t)mode_buf;
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn) < 0) { free(mode_buf); continue; }
++        hwdisp_fslog("hwdisp_drm: conn %u type=%d connected=%d modes=%u enc=%u",
++                     conns[i], conn.connector_type, conn.connection,
++                     conn.count_modes, conn.encoder_id);
++        if (conn.connection == DRM_MODE_CONNECTED && conn.count_modes > 0) {
++            int sel = 0;
++            for (int m = 0; m < (int)conn.count_modes; m++) {
++                struct drm_mode_modeinfo *mm = &mode_buf[m];
++                if (mm->hdisplay == 1280 && mm->vdisplay == 720 && mm->vrefresh == 60) { sel = m; break; }
++            }
++            chosen = mode_buf[sel];
++            chosen_found = 1;
++            g_drm_conn_id = conns[i];
++            hwdisp_fslog("hwdisp_drm: SELECT mode %dx%d@%d name='%s'",
++                         chosen.hdisplay, chosen.vdisplay, chosen.vrefresh, chosen.name);
++            free(mode_buf);
++            break;
++        }
++        free(mode_buf);
++    }
++    if (!chosen_found) { hwdisp_fslog("hwdisp_drm: NO connected HDMI connector/mode"); goto fail; }
++
++    /* CRTC: via connector's encoder, else first CRTC. */
++    uint32_t crtc_id = 0;
++    struct drm_mode_get_connector cq;
++    memset(&cq, 0, sizeof cq);
++    cq.connector_id = g_drm_conn_id;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &cq) == 0 && cq.encoder_id) {
++        struct drm_mode_get_encoder enc;
++        memset(&enc, 0, sizeof enc);
++        enc.encoder_id = cq.encoder_id;
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETENCODER, &enc) == 0)
++            crtc_id = enc.crtc_id;
++    }
++    if (!crtc_id && res.count_crtcs > 0) crtc_id = crtcs[0];
++    if (!crtc_id) { hwdisp_fslog("hwdisp_drm: no CRTC found"); goto fail; }
++    g_drm_crtc_id = crtc_id;
++    hwdisp_fslog("hwdisp_drm: crtc=%u", crtc_id);
++
++    struct drm_mode_create_dumb cd;
++    memset(&cd, 0, sizeof cd);
++    cd.width = 1280; cd.height = 720; cd.bpp = 32;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &cd) < 0) {
++        hwdisp_fslog("hwdisp_drm: CREATE_DUMB failed errno=%d", errno); goto fail;
++    }
++    g_drm_w = 1280; g_drm_h = 720; g_drm_pitch = (int)cd.pitch; g_drm_size = cd.size;
++    hwdisp_fslog("hwdisp_drm: dumb %ux%u pitch=%u size=%llu",
++                 cd.width, cd.height, cd.pitch, (unsigned long long)cd.size);
++
++    struct drm_mode_map_dumb md;
++    memset(&md, 0, sizeof md);
++    md.handle = cd.handle;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &md) < 0) {
++        hwdisp_fslog("hwdisp_drm: MAP_DUMB failed errno=%d", errno); goto fail;
++    }
++    g_drm_map = mmap(NULL, g_drm_size, PROT_READ|PROT_WRITE, MAP_SHARED, g_drm_fd, md.offset);
++    if (g_drm_map == MAP_FAILED) {
++        g_drm_map = NULL;
++        hwdisp_fslog("hwdisp_drm: mmap failed errno=%d", errno); goto fail;
++    }
++
++    struct drm_mode_fb_cmd2 fb;
++    memset(&fb, 0, sizeof fb);
++    fb.width = 1280; fb.height = 720;
++    fb.pixel_format = DRM_FORMAT_XRGB8888;
++    fb.handles[0] = cd.handle;
++    fb.pitches[0] = cd.pitch;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_ADDFB2, &fb) < 0) {
++        hwdisp_fslog("hwdisp_drm: ADDFB2 failed errno=%d", errno); goto fail;
++    }
++    g_drm_fb_id = fb.fb_id;
++
++    struct drm_mode_crtc cc;
++    memset(&cc, 0, sizeof cc);
++    cc.crtc_id = g_drm_crtc_id;
++    cc.fb_id = g_drm_fb_id;
++    cc.x = 0; cc.y = 0;
++    cc.mode_valid = 1;
++    cc.mode = chosen;
++    cc.connector_id_ptr = (uintptr_t)&g_drm_conn_id;
++    cc.count_connectors = 1;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_SETCRTC, &cc) < 0) {
++        hwdisp_fslog("hwdisp_drm: SETCRTC failed errno=%d", errno); goto fail;
++    }
++    /* White test frame: if HDMI lights up white, the modeset path is live. */
++    memset(g_drm_map, 0xFF, g_drm_size);
++    hwdisp_fslog("hwdisp_drm: SETCRTC ok fb_id=%u -> HDMI %dx%d (white frame written)",
++                 g_drm_fb_id, 1280, 720);
++    free(conns); free(crtcs);
++    return 0;
++fail:
++    hwdisp_fslog("hwdisp_drm: INIT FAILED");
++    if (g_drm_map) { munmap(g_drm_map, g_drm_size); g_drm_map = NULL; }
++    if (g_drm_fd >= 0) { close(g_drm_fd); g_drm_fd = -1; }
++    if (conns) free(conns);
++    if (crtcs) free(crtcs);
++    return -1;
++}
++
++/* RGB565 src (w x h, pitch_bytes) -> XRGB8888 dumb buffer (nearest scale). */
++static void hwdisp_drm_present(const void *src, int w, int h, int pitch_bytes) {
++    if (!g_drm_map || g_drm_w <= 0 || g_drm_h <= 0 || !src) return;
++    const uint16_t *s = (const uint16_t *)src;
++    const int sp = pitch_bytes / 2;
++    for (int y = 0; y < g_drm_h; y++) {
++        int sy = (h > 1) ? (y * h / g_drm_h) : 0;
++        uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
++        const uint16_t *srow = s + (size_t)sy * sp;
++        for (int x = 0; x < g_drm_w; x++) {
++            int sx = (w > 1) ? (x * w / g_drm_w) : 0;
++            drow[x] = hwdisp_cvt565(srow[sx]);
++        }
++    }
++}
++
  int hwdisp_init(void) {
      extern void sf3000_dump_fb_state(const char *);
      if (g_active) return 0;
 +
-+    /* RK3036G: no working driver.so / /dev/dis — drive /dev/fb0 directly. */
++    /* RK3036G: no working driver.so / /dev/dis — HDMI needs a DRM modeset
++     * (fb0 is NOT the HDMI source; device log: HDMI-A-1 connected+enabled). */
 +    extern int sf3000_is_rk3036(void);
 +    if (sf3000_is_rk3036()) {
-+        hwdisp_fslog("hwdisp_init: RK3036G branch (DT compatible), calling hwdisp_fb_open()");
++        hwdisp_fslog("hwdisp_init: RK3036G branch (DT compatible), trying DRM modeset first");
++        if (hwdisp_drm_init() == 0) {
++            g_active = 1;
++            g_fb_only = 1;
++            g_drm_mode = 1;
++            hwdisp_fslog("hwdisp_init: DRM modeset ACTIVE %dx%d (dumb-buffer present)",
++                         g_drm_w, g_drm_h);
++            fprintf(stderr, "hwdisp: RK3036G DRM modeset active %dx%d\n", g_drm_w, g_drm_h);
++            return 0;
++        }
++        hwdisp_fslog("hwdisp_init: DRM modeset failed, falling back to fb0-direct");
 +        hwdisp_fb_open();
 +        if (g_fbmem && g_fbw > 0 && g_fbh > 0) {
 +            g_active = 1;
@@ -185,7 +366,7 @@ index 5367b21..736fdf2 100644
      sf3000_dump_fb_state("hwdisp_init/pre");
  
      /* Device-specific driver: each device ships its own driver.so build (panel
-@@ -546,7 +623,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
+@@ -546,7 +804,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
      static int s_n = 0;
      int lg = (s_n < 8);
      s_n++;
@@ -197,7 +378,7 @@ index 5367b21..736fdf2 100644
      /* disp_frame HW-scales src→panel; the driver's fullscreen flag
       * (fbdev_video_aspect_ratio, like stock) picks fill vs aspect-fit. So:
       *   full   → flag=fill, pass src straight → GE distort-fills in HW (fast).
-@@ -621,6 +701,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -621,6 +882,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
                  s_n, src, w, h, pitch_bytes, g_active, (void*)p_disp,
                  g_filter_nearest, g_aspect_num, g_aspect_den, HW_W, HW_H);
      if (!g_active || !src) { if (lg) DBG("DBG present#%d: EARLY-RET\n", s_n); return; }
@@ -205,6 +386,15 @@ index 5367b21..736fdf2 100644
      if (!p_disp) { if (lg) DBG("DBG present#%d: no p_disp\n", s_n); return; }
      int rv;
      /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
+@@ -785,6 +1047,8 @@ void hwdisp_deinit(void) {
+     sf3000_dump_fb_state("hwdisp_deinit/post-p_deinit");
+     if (g_fbmem) { munmap(g_fbmem, g_fbsize); g_fbmem = NULL; }
+     if (g_fbfd >= 0) { close(g_fbfd); g_fbfd = -1; }
++    if (g_drm_map) { munmap(g_drm_map, g_drm_size); g_drm_map = NULL; g_drm_mode = 0; }
++    if (g_drm_fd >= 0) { close(g_drm_fd); g_drm_fd = -1; }
+     if (g_pad_buf) { free(g_pad_buf); g_pad_buf = NULL; g_pad_cap = 0; g_pad_w = 0; g_pad_h = 0; }
+     if (g_near_buf) { free(g_near_buf); g_near_buf = NULL; }
+     if (g_panel_buf) { free(g_panel_buf); g_panel_buf = NULL; }
 diff --git a/plat.h b/plat.h
 index 1e955f4..cf646e0 100644
 --- a/plat.h

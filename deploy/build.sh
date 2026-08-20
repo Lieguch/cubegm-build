@@ -176,6 +176,11 @@ if [ -f "$HERE/../patch/picoarch_rk3036g_display.patch" ]; then
         die "RK3036G display patch NOT applicable and NOT already applied -- would ship black-screen binary. Abort."
     fi
 fi
+# DRM UAPI headers for the RK3036G HDMI modeset path (hwdisp_drm in the display
+# patch #includes <drm/drm.h>). The crosstool glibc-2.17 sysroot ships no DRM
+# headers, so bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
+mkdir -p picoarch/include/drm
+cp -f "$HERE/drm_headers/drm/"*.h picoarch/include/drm/ 2>/dev/null || log "WARN: drm headers not copied (hwdisp_drm won't compile!)"
 [ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
 
 # -----------------------------------------------------------------------------
