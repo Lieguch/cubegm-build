@@ -308,32 +308,42 @@ snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
 picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26|arm
-stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
+stella2014|https://github.com/libretro/stella2014-libretro|.|-|LDFLAGS=$LDFLAGS_S|arm
 mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm|rebase
 vba_next|https://github.com/libretro/vba-next|.|-||arm
 tgbdual|https://github.com/libretro/tgbdual-libretro|.|-||arm
 gpsp|https://github.com/libretro/gpsp|.|-f Makefile||arm
-prosystem|https://github.com/libretro/prosystem-libretro|.|-||arm
+prosystem|https://github.com/libretro/prosystem-libretro|.|-|LDFLAGS=$LDFLAGS_S|arm
 mame2000|https://github.com/libretro/mame2000-libretro|.|-||arm
-mame2003_plus|https://github.com/libretro/mame2003-plus-libretro|.|-||arm
+mame2003_plus|https://github.com/libretro/mame2003-plus-libretro|.|-|LDFLAGS=$LDFLAGS_S|arm
 fbalpha2012|https://github.com/libretro/fbalpha2012|svn-current/trunk|-f makefile.libretro||fba
 fbalpha2012_cps1|https://github.com/libretro/fbalpha2012_cps1|.|-f makefile.libretro||fba
 fbalpha2012_cps2|https://github.com/libretro/fbalpha2012_cps2|.|-||fba
 fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|svn-current/trunk|-f makefile.libretro||fba
 fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-f makefile.libretro||fba
-fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-|CFLAGS=-DAT_HWCAP2=26|fba
+fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-|CFLAGS=-DAT_HWCAP2=26 LDFLAGS=$LDFLAGS_S|fba
 pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=ari64 HAVE_NEON=1 BUILTIN_GPU=unai|arm
 nestopia|https://github.com/libretro/nestopia|libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
-ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG -include stdint.h"
+# -include stdint.h removed from the generic wrapper: gpsp/pcsx compile .S
+# assembly with the same wrapper and the forced C header broke the assembler
+# ("bad instruction __extension__"). Only the fba wrapper keeps it (FBA's old
+# C code uses uint32_t etc. without including stdint.h).
+ARM_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -Ofast -DNDEBUG"
 printf '#!/bin/bash\nexec %sgcc %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-gcc"
 printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/arm-g++"
-printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
-printf '#!/bin/bash\nexec %sg++ %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-g++"
+printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char -include stdint.h\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
+printf '#!/bin/bash\nexec %sg++ %s "$@" -fno-strict-aliasing -fsigned-char -include stdint.h\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-g++"
 chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.toolchain/fba-gcc" "$WORKDIR/.toolchain/fba-g++"
-LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++ -lpthread"
+# Plain LDFLAGS: cores whose Makefile adds -shared/-fPIC itself (most libretro
+# cores, and any with host build tools like picodrive's cyclone_gen -- passing
+# -shared there links the host tool as a .so and dies). LDFLAGS_S is only for
+# cores whose Makefile does NOT add -shared (mame2003_plus/fbneo/stella2014/
+# prosystem per upstream build_all.sh) -- passed via extra LDFLAGS=$LDFLAGS_S.
+LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++ -lpthread"
+LDFLAGS_S="-shared -Wl,--no-undefined $LDFLAGS"
 build_core() {
     local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}" branch="${7:-}"
     local d="$WORKDIR/libretro-$name"
@@ -345,6 +355,17 @@ build_core() {
         fi
     fi
     [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
+    # Per-core patches (e.g. FBA family timer.h include fixes) live in
+    # patch/core-<name>.patch and are applied inside the core repo.
+    if [ -f "$HERE/../patch/core-${name}.patch" ]; then
+        if git -C "$d" apply --ignore-whitespace --check "$HERE/../patch/core-${name}.patch" 2>/dev/null; then
+            git -C "$d" apply --ignore-whitespace "$HERE/../patch/core-${name}.patch" && log "  $name: core patch applied"
+        elif git -C "$d" apply --ignore-whitespace -R --check "$HERE/../patch/core-${name}.patch" 2>/dev/null; then
+            log "  $name: core patch already applied"
+        else
+            log "WARN: core patch core-${name}.patch NOT applicable"
+        fi
+    fi
     git -C "$d" submodule update --init --recursive 2>&1 | tail -5 || log "WARN: submodule init incomplete for $name"
     # Some cores (nestopia/picodrive) carry libretro-common as an UNCONFIGURED
     # gitlink (no .gitmodules entry) -> submodule update silently skips it and
@@ -374,10 +395,16 @@ build_core() {
             esac
         done
     fi
+    # extra may carry LDFLAGS=$LDFLAGS_S (cores whose Makefile lacks -shared);
+    # otherwise use the plain LDFLAGS and let the core Makefile add -shared.
+    local _ld="$LDFLAGS"
+    for x in "${EA[@]}"; do
+        case "$x" in LDFLAGS=*) _ld="${x#LDFLAGS=}";; esac
+    done
     timeout 1800 make $mk platform=unix "${EA[@]}" \
         CC="$WORKDIR/.toolchain/$wrap-gcc" CXX="$WORKDIR/.toolchain/$wrap-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/$wrap-g++" \
-        LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
+        LDFLAGS="$_ld" -j"$(nproc)" 2>&1 | tail -25 \
         || { if [ -n "$_old_cf" ]; then export CFLAGS="$_old_cf"; else unset CFLAGS; fi; log "WARN: core $name build had issues (may need per-core tweaks)."; popd >/dev/null; return; }
     if [ -n "$_old_cf" ]; then export CFLAGS="$_old_cf"; else unset CFLAGS; fi
     local so

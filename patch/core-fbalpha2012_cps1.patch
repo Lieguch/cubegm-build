@@ -1,0 +1,12 @@
+diff --git a/src/burn/snd/burn_ym2203.cpp b/src/burn/snd/burn_ym2203.cpp
+index 2c34dc9..1d5aa61 100644
+--- a/src/burn/snd/burn_ym2203.cpp
++++ b/src/burn/snd/burn_ym2203.cpp
+@@ -1,6 +1,7 @@
+ #include "burnint.h"
+ #include "burn_sound.h"
+ #include "burn_ym2203.h"
++#include "../timer.h"
+ 
+ #define MAX_YM2203	2
+ 

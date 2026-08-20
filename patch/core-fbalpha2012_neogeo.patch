@@ -1,0 +1,12 @@
+diff --git a/src/burn/snd/burn_ym2610.cpp b/src/burn/snd/burn_ym2610.cpp
+index 8093c32..9313efe 100644
+--- a/src/burn/snd/burn_ym2610.cpp
++++ b/src/burn/snd/burn_ym2610.cpp
+@@ -1,6 +1,7 @@
+ #include "burnint.h"
+ #include "burn_sound.h"
+ #include "burn_ym2610.h"
++#include "../timer.h"
+ 
+ void (*BurnYM2610Update)(INT16* pSoundBuf, INT32 nSegmentEnd);
+ 

@@ -1,0 +1,13 @@
+diff --git a/src/cpu/m6502_intf.h b/src/cpu/m6502_intf.h
+index 076d9c8..64eb74f 100644
+--- a/src/cpu/m6502_intf.h
++++ b/src/cpu/m6502_intf.h
+@@ -94,6 +94,8 @@ void DecoCpu7SetDecode(UINT8 (*write)(UINT16,UINT8));
+ void M6502WriteRom(UINT32 Address, UINT8 Data); // cheat core
+ UINT8 M6502CheatRead(UINT32 a);
+ 
++#include "../burn/timer.h"
++
+ extern struct cpu_core_config M6502Config;
+ 
+ // depreciate this and use BurnTimerAttach directly!

@@ -1,0 +1,12 @@
+diff --git a/svn-current/trunk/src/burn/devices/seibusnd.cpp b/svn-current/trunk/src/burn/devices/seibusnd.cpp
+index 14f6312..56d935e 100644
+--- a/svn-current/trunk/src/burn/devices/seibusnd.cpp
++++ b/svn-current/trunk/src/burn/devices/seibusnd.cpp
+@@ -22,6 +22,7 @@
+ //
+ 
+ #include "burnint.h"
++#include "../timer.h"
+ #include "z80_intf.h"
+ #include "burn_ym3812.h"
+ #include "burn_ym2151.h"
