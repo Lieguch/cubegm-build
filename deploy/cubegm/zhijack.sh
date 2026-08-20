@@ -15,25 +15,32 @@
 #  has NO cubevol — driver.so strings confirm standard Linux input).
 #
 #  SAFETY: this script never touches root.dat or any checksum/partition data.
+#
+#  v2 (2026-08-20): observability build.
+#    - LOG is ALWAYS /mnt/sdcard/zhijack.log (no more opt-in /dev/null),
+#      and picoarch's stderr (fb0-direct status etc.) lands in it too.
+#    - Before picoarch starts, a full-white test frame is written to /dev/fb0:
+#        white flash visible -> fb0 -> HDMI link is good, issue is inside
+#                                 picoarch (read zhijack.log / picoarch_init.log)
+#        stays black          -> fb0/HDMI link itself is the problem
 # =============================================================================
 mkdir /tmp/zhijack.lock 2>/dev/null || exit 0
 
-# --- opt-in diagnostics (don't chew the SD in normal use) --------------------
-if [ -f /mnt/sdcard/log.txt ]; then
-    LOG=/mnt/sdcard/log.txt
-    mv "$LOG" "$LOG.prev" 2>/dev/null
-    : > "$LOG"
-    echo "=== zhijack boot [rk3036g] $(date '+%H:%M:%S' 2>/dev/null) ===" >> "$LOG"
-    sync
-else
-    LOG=/dev/null
-fi
+# --- diagnostics: ALWAYS write a boot log (cheap; survives power-cycle) -------
+LOG=/mnt/sdcard/zhijack.log
+: > "$LOG"
+echo "=== zhijack boot [rk3036g] $(date '+%H:%M:%S' 2>/dev/null) ===" >> "$LOG"
+echo "pid=$$ cmdline=$(cat /proc/$$/cmdline 2>/dev/null)" >> "$LOG"
+sync
+
+# --- boot-chain marker: did the stock launcher really reach us? ---------------
+echo "zhijack: reached, uname=$(uname -a 2>/dev/null)" >> "$LOG"
 
 # Freeze icube (the respawner) THEN kill rkgame so the stock menu can't redraw
 # over our frames and nothing respawns a fresh rkgame.
 kill -STOP $(pidof icube) 2>/dev/null
 killall rkgame 2>/dev/null
-echo "icube frozen, rkgame killed" >> "$LOG"
+echo "icube frozen, rkgame killed (pidof icube=$(pidof icube 2>/dev/null))" >> "$LOG"
 
 # Device environment for picoarch / frontends that read /tmp/tfdevice.env.
 cat > /tmp/tfdevice.env <<EOF
@@ -62,6 +69,18 @@ for c in /sys/devices/system/cpu/cpu*/cpufreq; do
     [ -n "$mx" ] && [ -w "$c/scaling_min_freq" ] && echo "$mx" > "$c/scaling_min_freq" 2>/dev/null
 done
 
+# --- fb0 link test: full-white frame (RGB565 0xFFFF / 32-bit 0xFFFFFFFF) -------
+echo "zhijack: fb0 white-frame test..." >> "$LOG"
+if [ -e /dev/fb0 ]; then
+    head -c 1843200 /dev/zero 2>/dev/null | tr '\000' '\377' > /dev/fb0 2>>"$LOG"
+    echo "zhijack: fb0 white frame rc=$? (white flash visible = fb0->HDMI OK)" >> "$LOG"
+else
+    echo "zhijack: /dev/fb0 NOT PRESENT -> fb0 path cannot work" >> "$LOG"
+fi
+ls -la /dev/fb* /dev/dri 2>/dev/null >> "$LOG"
+sync
+sleep 0.3
+
 # RK3036G input is standard evdev — picoarch (plat_linux.c) reads it directly.
 # No cubevol/gpio shim is required (driver.so has no cubevol references).
 
@@ -77,9 +96,16 @@ while true; do
     rm -f "$LAUNCH"
     killall rkgame 2>/dev/null
     echo "--- iter $ITER: frogui ---" >> "$LOG"
+    if [ ! -x "$PICOARCH" ]; then
+        echo "zhijack: FATAL $PICOARCH missing/not executable" >> "$LOG"
+        sync
+        sleep 5
+        continue
+    fi
     "$PICOARCH" "$FROGUI_CORE" "$FROGUI_CORE" >> "$LOG" 2>&1
     RC=$?
     echo "frogui exited rc=$RC" >> "$LOG"
+    sync
     if [ -f "$LAUNCH" ]; then
         CORE_PATH=$(sed -n '1p' "$LAUNCH")
         ROM_PATH=$(sed -n '2p' "$LAUNCH")
@@ -91,6 +117,7 @@ while true; do
             "$PICOARCH" "$CORE_PATH" "$ROM_PATH" >> "$LOG" 2>&1
             GRC=$?
             echo "game exited rc=$GRC" >> "$LOG"
+            sync
         fi
     fi
     sleep 0.2
