@@ -112,6 +112,21 @@ PICOARCH=/mnt/sdcard/cubegm/picoarch
 FROGUI_CORE=/mnt/sdcard/cubegm/cores/frogui_libretro.so
 LAUNCH=/tmp/frogui_launch.txt
 
+# --- cubevol_bridge: FrogUI reads input ONLY from the stock cubevol shm
+#     /tmp/joy_key (ftok 'a'). The stock daemon lives inside rkgame, which we
+#     killed, so launch our evdev->shm bridge (ships in this payload). ------
+BRIDGE=/mnt/sdcard/cubegm/cubevol_bridge
+if [ -x "$BRIDGE" ]; then
+    "$BRIDGE" >> "$LOG" 2>&1 &
+    echo "zhijack: cubevol_bridge started pid=$!" >> "$LOG"
+else
+    echo "zhijack: WARN cubevol_bridge missing -- FrogUI will have NO input" >> "$LOG"
+fi
+if [ -e /dev/watchdog ]; then
+    echo "zhijack: /dev/watchdog PRESENT -- petting each loop" >> "$LOG"
+fi
+sync
+
 # Front-end launcher loop. FrogUI writes $LAUNCH (core path on line 1, ROM path
 # on line 2) when the user picks a game; we then launch picoarch with that core.
 ITER=0
@@ -120,9 +135,11 @@ while true; do
     rm -f "$LAUNCH"
     # icube is the respawner: if it revives (crash-restart), it respawns
     # rkgame which takes DRM master back -> HDMI switches away from our dumb
-    # buffer (observed as half-white after ~10 min). Kill it every iteration.
-    killall icube 2>/dev/null
-    killall rkgame 2>/dev/null
+    # buffer (observed as half-white after ~10 min). Kill -9 it every iteration.
+    killall -9 icube 2>/dev/null
+    killall -9 rkgame 2>/dev/null
+    # pet the stock watchdog if present (prevents a ~10-min system reset)
+    [ -e /dev/watchdog ] && echo > /dev/watchdog 2>/dev/null
     echo "--- iter $ITER: frogui (icube=$(pidof icube 2>/dev/null)) ---" >> "$LOG"
     if [ ! -x "$PICOARCH" ]; then
         echo "zhijack: FATAL $PICOARCH missing/not executable" >> "$LOG"
