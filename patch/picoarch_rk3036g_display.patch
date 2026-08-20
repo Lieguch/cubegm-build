@@ -1,5 +1,5 @@
 diff --git a/hwdisp.c b/hwdisp.c
-index 5367b21..13f32cb 100644
+index 5367b21..80982a1 100644
 --- a/hwdisp.c
 +++ b/hwdisp.c
 @@ -22,9 +22,30 @@
@@ -165,7 +165,7 @@ index 5367b21..13f32cb 100644
      static int xmap[2048];
      static int last_w = -1, last_fbw = -1;
      if (w != last_w || g_fbw != last_fbw) {
-@@ -161,16 +237,204 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -161,16 +237,234 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
      for (int dy = 0; dy < g_fbh; dy++) {
          int sy = dy * h / g_fbh;
          const uint16_t *srow = s + sy * sp;
@@ -183,6 +183,7 @@ index 5367b21..13f32cb 100644
 +/* Linux-4.4 UAPI lacks the DRM_MODE_CONNECTED enum constant (added later). */
 +#define DRM_MODE_CONNECTED 1
 +static int hwdisp_drm_init(void) {
++    uint32_t *fbs = NULL, *crtcs = NULL, *encs = NULL, *conns = NULL;
 +    g_drm_fd = open("/dev/dri/card0", O_RDWR);
 +    if (g_drm_fd < 0) {
 +        hwdisp_fslog("hwdisp_drm: open /dev/dri/card0 FAILED errno=%d", errno);
@@ -193,13 +194,21 @@ index 5367b21..13f32cb 100644
 +    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
 +        hwdisp_fslog("hwdisp_drm: GETRESOURCES(1) failed errno=%d", errno); goto fail;
 +    }
-+    uint32_t *conns = calloc(res.count_connectors ? res.count_connectors : 1, sizeof(uint32_t));
-+    uint32_t *crtcs = calloc(res.count_crtcs ? res.count_crtcs : 1, sizeof(uint32_t));
-+    if (!conns || !crtcs) { hwdisp_fslog("hwdisp_drm: calloc failed"); goto fail; }
-+    res.connector_id_ptr = (uintptr_t)conns;
++    /* Official two-pass protocol (kernel drm_mode_getresources): pass 1 returns
++     * counts; pass 2 copies IDs into the arrays. ALL FOUR pointers must be
++     * valid — the kernel put_user()s into every one whose count is >= actual
++     * (a NULL fb_id_ptr/encoder_id_ptr with non-zero count_fbs/count_encoders
++     * is EFAULT, seen as GETRESOURCES(2) failed errno=14 on the device). */
++    fbs   = calloc(res.count_fbs ? res.count_fbs : 1, sizeof(uint32_t));
++    crtcs = calloc(res.count_crtcs ? res.count_crtcs : 1, sizeof(uint32_t));
++    encs  = calloc(res.count_encoders ? res.count_encoders : 1, sizeof(uint32_t));
++    conns = calloc(res.count_connectors ? res.count_connectors : 1, sizeof(uint32_t));
++    if (!fbs || !crtcs || !encs || !conns) { hwdisp_fslog("hwdisp_drm: calloc failed"); goto fail; }
++    res.fb_id_ptr = (uintptr_t)fbs;
 +    res.crtc_id_ptr = (uintptr_t)crtcs;
-+    res.count_connectors = 0;
-+    res.count_crtcs = 0;
++    res.encoder_id_ptr = (uintptr_t)encs;
++    res.connector_id_ptr = (uintptr_t)conns;
++    /* counts stay as returned by pass 1 (kernel copies when count >= actual) */
 +    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
 +        hwdisp_fslog("hwdisp_drm: GETRESOURCES(2) failed errno=%d", errno); goto fail;
 +    }
@@ -214,12 +223,31 @@ index 5367b21..13f32cb 100644
 +        memset(&conn, 0, sizeof conn);
 +        conn.connector_id = conns[i];
 +        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn) < 0) continue;
-+        if (conn.count_modes == 0) continue;
-+        struct drm_mode_modeinfo *mode_buf = calloc((size_t)conn.count_modes,
-+                                                    sizeof(struct drm_mode_modeinfo));
-+        if (!mode_buf) continue;
++        int nmodes = (int)conn.count_modes, nprops = (int)conn.count_props, nencs = (int)conn.count_encoders;
++        if (nmodes == 0) continue;
++        /* pass 2 (libdrm protocol): fresh struct, restore counts, set ALL FOUR
++         * pointers — the kernel copies props/encoders too (NULL ptr -> EFAULT). */
++        struct drm_mode_modeinfo *mode_buf  = calloc((size_t)nmodes, sizeof(struct drm_mode_modeinfo));
++        uint32_t *prop_ids   = calloc((size_t)(nprops ? nprops : 1), sizeof(uint32_t));
++        uint64_t *prop_vals  = calloc((size_t)(nprops ? nprops : 1), sizeof(uint64_t));
++        uint32_t *enc_ids    = calloc((size_t)(nencs ? nencs : 1), sizeof(uint32_t));
++        if (!mode_buf || !prop_ids || !prop_vals || !enc_ids) {
++            free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
++            continue;
++        }
++        memset(&conn, 0, sizeof conn);
++        conn.connector_id = conns[i];
++        conn.count_modes = nmodes;
++        conn.count_props = nprops;
++        conn.count_encoders = nencs;
 +        conn.modes_ptr = (uintptr_t)mode_buf;
-+        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn) < 0) { free(mode_buf); continue; }
++        conn.props_ptr = (uintptr_t)prop_ids;
++        conn.prop_values_ptr = (uintptr_t)prop_vals;
++        conn.encoders_ptr = (uintptr_t)enc_ids;
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn) < 0) {
++            free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
++            continue;
++        }
 +        hwdisp_fslog("hwdisp_drm: conn %u type=%d connected=%d modes=%u enc=%u",
 +                     conns[i], conn.connector_type, conn.connection,
 +                     conn.count_modes, conn.encoder_id);
@@ -234,10 +262,10 @@ index 5367b21..13f32cb 100644
 +            g_drm_conn_id = conns[i];
 +            hwdisp_fslog("hwdisp_drm: SELECT mode %dx%d@%d name='%s'",
 +                         chosen.hdisplay, chosen.vdisplay, chosen.vrefresh, chosen.name);
-+            free(mode_buf);
++            free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
 +            break;
 +        }
-+        free(mode_buf);
++        free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
 +    }
 +    if (!chosen_found) { hwdisp_fslog("hwdisp_drm: NO connected HDMI connector/mode"); goto fail; }
 +
@@ -307,14 +335,16 @@ index 5367b21..13f32cb 100644
 +    memset(g_drm_map, 0xFF, g_drm_size);
 +    hwdisp_fslog("hwdisp_drm: SETCRTC ok fb_id=%u -> HDMI %dx%d (white frame written)",
 +                 g_drm_fb_id, 1280, 720);
-+    free(conns); free(crtcs);
++    free(fbs); free(crtcs); free(encs); free(conns);
 +    return 0;
 +fail:
 +    hwdisp_fslog("hwdisp_drm: INIT FAILED");
 +    if (g_drm_map) { munmap(g_drm_map, g_drm_size); g_drm_map = NULL; }
 +    if (g_drm_fd >= 0) { close(g_drm_fd); g_drm_fd = -1; }
-+    if (conns) free(conns);
++    if (fbs) free(fbs);
 +    if (crtcs) free(crtcs);
++    if (encs) free(encs);
++    if (conns) free(conns);
 +    return -1;
 +}
 +
@@ -372,7 +402,7 @@ index 5367b21..13f32cb 100644
      sf3000_dump_fb_state("hwdisp_init/pre");
  
      /* Device-specific driver: each device ships its own driver.so build (panel
-@@ -546,7 +810,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
+@@ -546,7 +840,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
      static int s_n = 0;
      int lg = (s_n < 8);
      s_n++;
@@ -384,7 +414,7 @@ index 5367b21..13f32cb 100644
      /* disp_frame HW-scales src→panel; the driver's fullscreen flag
       * (fbdev_video_aspect_ratio, like stock) picks fill vs aspect-fit. So:
       *   full   → flag=fill, pass src straight → GE distort-fills in HW (fast).
-@@ -621,6 +888,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -621,6 +918,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
                  s_n, src, w, h, pitch_bytes, g_active, (void*)p_disp,
                  g_filter_nearest, g_aspect_num, g_aspect_den, HW_W, HW_H);
      if (!g_active || !src) { if (lg) DBG("DBG present#%d: EARLY-RET\n", s_n); return; }
@@ -392,7 +422,7 @@ index 5367b21..13f32cb 100644
      if (!p_disp) { if (lg) DBG("DBG present#%d: no p_disp\n", s_n); return; }
      int rv;
      /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
-@@ -785,6 +1053,8 @@ void hwdisp_deinit(void) {
+@@ -785,6 +1083,8 @@ void hwdisp_deinit(void) {
      sf3000_dump_fb_state("hwdisp_deinit/post-p_deinit");
      if (g_fbmem) { munmap(g_fbmem, g_fbsize); g_fbmem = NULL; }
      if (g_fbfd >= 0) { close(g_fbfd); g_fbfd = -1; }
