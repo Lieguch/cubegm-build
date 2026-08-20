@@ -155,7 +155,7 @@ index 5367b21..7e64fe1 100644
      int rv;
      /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
 diff --git a/plat_sdl.c b/plat_sdl.c
-index 9978411..bda2f09 100644
+index 9978411..e88a36d 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
 @@ -162,6 +162,7 @@ static size_t sf3000_fb_size = 0;
@@ -166,7 +166,7 @@ index 9978411..bda2f09 100644
  void sf3000_fb_blit(const void *src, int width, int height, int pitch);
  void sf3000_fb_finish(void);
  static void sf3000_text_native(int px, int py, const char *text, uint32_t color, int page_y_offset);
-@@ -1568,6 +1579,17 @@ int sf3000_fb_init(void) {
+@@ -1568,6 +1569,17 @@ int sf3000_fb_init(void) {
          }
          fprintf(stderr, "sf3000_fb_init: SF3500 hwdisp_init failed, falling back\n");
      }
@@ -184,7 +184,7 @@ index 9978411..bda2f09 100644
      /* Write per-process init log to dedicated file with fsync, so it
       * survives even when stderr buffer is lost on power-cycle. */
      int initlog = open("/mnt/sdcard/picoarch_init.log",
-@@ -1812,9 +1834,11 @@ void sf3000_frame_limit(void) {
+@@ -1812,9 +1824,11 @@ void sf3000_frame_limit(void) {
   * "present = fb-write" (R36SX only) is the single behavioural split downstream;
   * SF3500 follows SF3000 in every code path, differing only by driver file. */
  extern void dbg_log(const char *fmt, ...);
@@ -197,7 +197,7 @@ index 9978411..bda2f09 100644
  static int g_dev_w = 854, g_dev_h = 480, g_dev_scale = 150;
  
  /* Recursively scan /proc/device-tree for the R36SX panel node (r63311), without
-@@ -1870,6 +1894,18 @@ static int tf_read_env_file(int *w, int *h, int *scale) {
+@@ -1870,10 +1884,35 @@ static int tf_read_env_file(int *w, int *h, int *scale) {
      return id;
  }
  
@@ -216,7 +216,24 @@ index 9978411..bda2f09 100644
  void sf3000_detect_device(void) {
      if (g_dev_id != -1) return;
  
-@@ -1891,6 +1927,8 @@ void sf3000_detect_device(void) {
+     int w = 854, h = 480, scale = 150;        /* defaults (SF3000/SF3500) */
++    /* RK3036G is a SoC fact (DT compatible) -- must win over boot-env
++     * TF_DEVICE=SF3000 (stock firmware leaves it; it short-circuits detection
++     * and forces the SF3000 FBIOPUT path -> picoarch_init.log errno=22 black). */
++    if (tf_device_is_rk3036()) {
++        g_dev_id = TF_DEV_RK3036; g_dev_r36sx = 0; g_dev_rk3036 = 1;
++        g_dev_w = 1280; g_dev_h = 720; g_dev_scale = scale;
++        char s[16];
++        snprintf(s, sizeof s, "%d", g_dev_w);     setenv("TF_PANEL_W", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_h);     setenv("TF_PANEL_H", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_scale); setenv("TF_UI_SCALE", s, 1);
++        DBG("sf3000_detect_device: RK3036G via DT compatible\n");
++        return;
++    }
+     int id = tf_read_env_file(&w, &h, &scale); /* primary: boot env file */
+     if (id < 0) id = tf_id_from_name(getenv("TF_DEVICE")); /* inherited env */
+     if (id < 0) {                              /* fallback: scan live DT */
+@@ -1891,6 +1930,8 @@ void sf3000_detect_device(void) {
                  id = TF_DEV_SF3500;
              else
                  id = TF_DEV_GB350;
@@ -225,7 +242,7 @@ index 9978411..bda2f09 100644
          } else
              id = TF_DEV_SF3000;
      }
-@@ -1900,6 +1938,7 @@ void sf3000_detect_device(void) {
+@@ -1900,6 +1941,7 @@ void sf3000_detect_device(void) {
      if (id == TF_DEV_R36SX || id == TF_DEV_GB350) { if (w == 854) w = 640; }  /* landscape 640x480, 4:3 */
      g_dev_id    = id;
      g_dev_r36sx = (id == TF_DEV_R36SX);
@@ -233,7 +250,7 @@ index 9978411..bda2f09 100644
      g_dev_w = w; g_dev_h = h; g_dev_scale = scale;
  
      char s[16];
-@@ -1917,6 +1956,7 @@ int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
+@@ -1917,6 +1959,7 @@ int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
  int sf3000_is_r36sx(void) { sf3000_detect_device(); return g_dev_r36sx > 0; }
  int sf3000_is_sf3500(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_SF3500; }
  int sf3000_is_gb350(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_GB350; }
@@ -241,7 +258,7 @@ index 9978411..bda2f09 100644
  /* 4:3 panels (R36SX, GB350 = 640x480) vs 16:9 (SF3000/SF3500 = 854x480). */
  int sf3000_aspect_is_43(void) { sf3000_detect_device(); return g_dev_r36sx > 0 || g_dev_id == TF_DEV_GB350; }
  
-@@ -2130,7 +2170,7 @@ void sf3000_fb_blit(const void *src, int width, int height, int pitch) {
+@@ -2130,7 +2173,7 @@ void sf3000_fb_blit(const void *src, int width, int height, int pitch) {
       * panel-size frames (only small game frames work), so SF3000 FrogUI falls
       * through to the SW transpose path below (bilinear-blended, its proven cold
       * renderer). */
@@ -250,7 +267,7 @@ index 9978411..bda2f09 100644
          width == PANEL_W && height == PANEL_H) {
          if (!sf3000_use_hwdisp && hwdisp_init() == 0) {
              sf3000_use_hwdisp = 1;
-@@ -2197,7 +2237,7 @@ if (sf3000_use_hwdisp) {
+@@ -2197,7 +2240,7 @@ if (sf3000_use_hwdisp) {
                  hwdisp_set_sharpen(sf3000_sharpness);
                  hwdisp_set_target_aspect(0, 0);            /* already panel-final */
                  hwdisp_set_filter(SCALE_FILTER_BILINEAR);  /* 1:1 present, no re-upscale */
@@ -259,7 +276,7 @@ index 9978411..bda2f09 100644
                      hwdisp_present(panb, PW, PH, PW * 2);
                  return;
              }
-@@ -2297,7 +2337,7 @@ if (sf3000_use_hwdisp) {
+@@ -2297,7 +2340,7 @@ if (sf3000_use_hwdisp) {
                  }
                  if (ff_skip) return;    /* FF: drop this present to keep display 60fps */
                  /* R36SX: disp_frame hangs → direct fb0 write. SF3000: disp_frame. */
@@ -268,7 +285,7 @@ index 9978411..bda2f09 100644
                      hwdisp_present(compose_buf, width, height, width * 2);
                  return;
              }
-@@ -2326,7 +2366,7 @@ if (sf3000_use_hwdisp) {
+@@ -2326,7 +2369,7 @@ if (sf3000_use_hwdisp) {
                  src = dst; width = PANEL_W; height = PANEL_H; pitch = PANEL_W * 2;
              }
          }
