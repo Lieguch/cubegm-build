@@ -41,7 +41,7 @@ ALSA_LIB_REPO="https://github.com/alsa-project/alsa-lib.git"
 # Each is built from github.com/libretro/<NAME> with the libretro common Makefile.
 # Game-able core set: FBA2012 (000 arcade group), FBNeo, MD, PS1 (lightrec),
 # GBA/NES/SNES/Atari/GBC etc. fbalpha2012_* build fast; pcsx/mgba slower.
-DEFAULT_CORES="fceumm snes9x2005_plus picodrive stella2014 mgba nestopia vba_next tgbdual gpsp prosystem mame2000 fbalpha2012_cps1 fbalpha2012_cps2 fbalpha2012_cps3 fbalpha2012_neogeo fbneo pcsx_rearmed"
+DEFAULT_CORES="fceumm snes9x2005_plus picodrive stella2014 mgba nestopia vba_next tgbdual gpsp prosystem mame2000 mame2003_plus fbalpha2012 fbalpha2012_cps1 fbalpha2012_cps2 fbalpha2012_cps3 fbalpha2012_neogeo fbneo pcsx_rearmed"
 CORES="${CORES:-$DEFAULT_CORES}"
 
 log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
@@ -307,21 +307,23 @@ fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||a
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
 snes9x2002|https://github.com/tzubertowski/snes9x2002|.|-||arm
 snes9x2010|https://github.com/libretro/snes9x2010|.|-f Makefile.libretro|LTO=|arm
-picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro||arm
+picodrive|https://github.com/libretro/picodrive|.|-f Makefile.libretro|CFLAGS=-DAT_HWCAP2=26|arm
 stella2014|https://github.com/libretro/stella2014-libretro|.|-||arm
-mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm
+mgba|https://github.com/libretro/mgba|.|-f Makefile.libretro||arm|rebase
 vba_next|https://github.com/libretro/vba-next|.|-||arm
 tgbdual|https://github.com/libretro/tgbdual-libretro|.|-||arm
+gpsp|https://github.com/libretro/gpsp|.|-f Makefile||arm
 prosystem|https://github.com/libretro/prosystem-libretro|.|-||arm
 mame2000|https://github.com/libretro/mame2000-libretro|.|-||arm
 mame2003_plus|https://github.com/libretro/mame2003-plus-libretro|.|-||arm
-fbalpha2012_cps1|https://github.com/libretro/fbalpha2012_cps1|.|-||fba
+fbalpha2012|https://github.com/libretro/fbalpha2012|svn-current/trunk|-f makefile.libretro||fba
+fbalpha2012_cps1|https://github.com/libretro/fbalpha2012_cps1|.|-f makefile.libretro||fba
 fbalpha2012_cps2|https://github.com/libretro/fbalpha2012_cps2|.|-||fba
 fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|svn-current/trunk|-f makefile.libretro||fba
-fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-||fba
-fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-||fba
-pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=lightrec HAVE_NEON=1 BUILTIN_GPU=unai|arm
-gpsp|https://github.com/libretro/gpsp|.|-f Makefile.libretro||arm
+fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-f makefile.libretro||fba
+fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-|CFLAGS=-DAT_HWCAP2=26|fba
+pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=ari64 HAVE_NEON=1 BUILTIN_GPU=unai|arm
+nestopia|https://github.com/libretro/nestopia|libretro||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
@@ -331,12 +333,16 @@ printf '#!/bin/bash\nexec %sg++ %s "$@"\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WOR
 printf '#!/bin/bash\nexec %sgcc %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-gcc"
 printf '#!/bin/bash\nexec %sg++ %s "$@" -fno-strict-aliasing -fsigned-char\n' "$CROSS_COMPILE" "$ARM_FLAGS" > "$WORKDIR/.toolchain/fba-g++"
 chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.toolchain/fba-gcc" "$WORKDIR/.toolchain/fba-g++"
-LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++"
+LDFLAGS_S="-shared -Wl,--no-undefined -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -lstdc++ -lpthread"
 build_core() {
-    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}"
+    local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}" branch="${7:-}"
     local d="$WORKDIR/libretro-$name"
     if [ ! -d "$d/.git" ]; then
-        clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
+        if [ -n "$branch" ]; then
+            clone_repo "$repo" "$d" --branch "$branch" || { log "WARN: core $name clone failed (branch $branch)."; return; }
+        else
+            clone_repo "$repo" "$d" || { log "WARN: core $name clone failed (rate-limited or offline)."; return; }
+        fi
     fi
     [ -d "$d/.git" ] || { log "WARN: core $name missing clone dir."; return; }
     git -C "$d" submodule update --init --recursive 2>&1 | tail -5 || log "WARN: submodule init incomplete for $name"
@@ -352,12 +358,28 @@ build_core() {
     fi
     pushd "$d/$bdir" >/dev/null
     make clean >/dev/null 2>&1 || true
-    local -a EA=(); [ -n "$extra" ] && EA=("$extra")
+    # extra may contain CFLAGS=... -- pass it as an ENVIRONMENT variable, not a
+    # make command-line var: a command-line CFLAGS overrides the core Makefile's
+    # own "CFLAGS += ..." chain (kills libretro-common -I includes; observed on
+    # picodrive run #248/#249). Env CFLAGS is honoured by "CFLAGS ?=" and still
+    # appended by "CFLAGS +=". Save/restore so one core's CFLAGS can't leak.
+    local -a EA=()
+    local _old_cf="${CFLAGS-}"
+    if [ -n "$extra" ]; then
+        local x
+        for x in $extra; do
+            case "$x" in
+                CFLAGS=*) export CFLAGS="${x#CFLAGS=}"; log "  $name: CFLAGS env = ${x#CFLAGS=}" ;;
+                *) EA+=("$x") ;;
+            esac
+        done
+    fi
     timeout 1800 make $mk platform=unix "${EA[@]}" \
         CC="$WORKDIR/.toolchain/$wrap-gcc" CXX="$WORKDIR/.toolchain/$wrap-g++" \
         AR="$CROSS_COMPILE"ar RANLIB="$CROSS_COMPILE"ranlib LD="$WORKDIR/.toolchain/$wrap-g++" \
         LDFLAGS="$LDFLAGS_S" -j"$(nproc)" 2>&1 | tail -25 \
-        || { log "WARN: core $name build had issues (may need per-core tweaks)."; popd >/dev/null; return; }
+        || { if [ -n "$_old_cf" ]; then export CFLAGS="$_old_cf"; else unset CFLAGS; fi; log "WARN: core $name build had issues (may need per-core tweaks)."; popd >/dev/null; return; }
+    if [ -n "$_old_cf" ]; then export CFLAGS="$_old_cf"; else unset CFLAGS; fi
     local so
     for so in "$d/$bdir/${name}_libretro.so" "$d/$bdir/$(basename "$bdir")_libretro.so"; do
         [ -f "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")" && popd >/dev/null && return
@@ -366,9 +388,9 @@ build_core() {
     [ -n "$so" ] && cp "$so" "$CORE_OUT/" && log "  -> $CORE_OUT/$(basename "$so")"
     popd >/dev/null
 }
-while IFS='|' read -r name repo bdir mk extra wrap; do
+while IFS='|' read -r name repo bdir mk extra wrap branch; do
     [ -z "$name" ] && continue
-    case " $CORES " in *" $name "*) log "Building libretro core: $name"; build_core "$name" "$repo" "$bdir" "$mk" "$extra" "$wrap";; esac
+    case " $CORES " in *" $name "*) log "Building libretro core: $name"; build_core "$name" "$repo" "$bdir" "$mk" "$extra" "$wrap" "$branch";; esac
 done <<< "$CORE_TABLE"
 
 # STAGE 8 -- ABI gate
