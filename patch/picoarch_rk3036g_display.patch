@@ -206,10 +206,18 @@ index 5367b21..736fdf2 100644
      int rv;
      /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
 diff --git a/plat_sdl.c b/plat_sdl.c
-index fe4f9d8..98df27b 100644
+index fe4f9d8..3896a2a 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
-@@ -162,6 +162,7 @@ static size_t sf3000_fb_size = 0;
+@@ -21,6 +21,7 @@ static SDL_Surface* screen;
+ #ifdef PLATFORM_SF3000
+ #include <fcntl.h>
+ #include <errno.h>
++#include <stdarg.h>
+ #include <sys/mman.h>
+ #include <sys/ioctl.h>
+ #include <linux/fb.h>
+@@ -162,6 +163,7 @@ static size_t sf3000_fb_size = 0;
  
  // Forward declarations
  int sf3000_fb_init(void);
@@ -217,7 +225,7 @@ index fe4f9d8..98df27b 100644
  void sf3000_fb_blit(const void *src, int width, int height, int pitch);
  void sf3000_fb_finish(void);
  static void sf3000_text_native(int px, int py, const char *text, uint32_t color, int page_y_offset);
-@@ -1578,6 +1579,28 @@ int sf3000_fb_init(void) {
+@@ -1578,6 +1580,28 @@ int sf3000_fb_init(void) {
          }
          fprintf(stderr, "sf3000_fb_init: SF3500 hwdisp_init failed, falling back\n");
      }
@@ -246,7 +254,7 @@ index fe4f9d8..98df27b 100644
      /* Write per-process init log to dedicated file with fsync, so it
       * survives even when stderr buffer is lost on power-cycle. */
      int initlog = open("/mnt/sdcard/picoarch_init.log",
-@@ -1822,9 +1845,11 @@ void sf3000_frame_limit(void) {
+@@ -1822,9 +1846,11 @@ void sf3000_frame_limit(void) {
   * "present = fb-write" (R36SX only) is the single behavioural split downstream;
   * SF3500 follows SF3000 in every code path, differing only by driver file. */
  extern void dbg_log(const char *fmt, ...);
@@ -259,25 +267,40 @@ index fe4f9d8..98df27b 100644
  static int g_dev_w = 854, g_dev_h = 480, g_dev_scale = 150;
  
  /* Recursively scan /proc/device-tree for the R36SX panel node (r63311), without
-@@ -1880,10 +1905,35 @@ static int tf_read_env_file(int *w, int *h, int *scale) {
+@@ -1880,12 +1906,55 @@ static int tf_read_env_file(int *w, int *h, int *scale) {
      return id;
  }
  
 +/* RK3036G has no SF3000-class panel/DT nodes — detect via the SoC compatible
 + * string the kernel exposes. Returns 1 if /proc/device-tree/compatible lists
 + * an rk3036 SoC (e.g. "rockchip,rk3036"). rk3032-dongle does NOT match. */
++/* fsync'd file log (black-screen evidence; stderr is invisible on device). */
++static void sf3000_fslog(const char *fmt, ...) {
++    int il = open("/mnt/sdcard/picoarch_init.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
++    if (il < 0) return;
++    char buf[512]; va_list ap; va_start(ap, fmt);
++    int n = vsnprintf(buf, sizeof buf, fmt, ap); va_end(ap);
++    if (n > 0) (void)!write(il, buf, (size_t)n);
++    (void)!dprintf(il, "\n");
++    fsync(il); close(il);
++}
++
 +static int tf_device_is_rk3036(void) {
 +    FILE *f = fopen("/proc/device-tree/compatible", "r");
-+    if (!f) return 0;
++    if (!f) { sf3000_fslog("tf_device_is_rk3036: fopen /proc/device-tree/compatible FAILED errno=%d", errno); return 0; }
 +    char buf[256]; int n = fread(buf, 1, sizeof buf - 1, f); fclose(f);
-+    if (n <= 0) return 0;
++    if (n <= 0) { sf3000_fslog("tf_device_is_rk3036: fread EMPTY (n=%d)", n); return 0; }
 +    buf[n] = 0;
-+    return strstr(buf, "rk3036") != NULL;
++    int match = strstr(buf, "rk3036") != NULL;
++    sf3000_fslog("tf_device_is_rk3036: n=%d match=%d content='%s'", n, match, buf);
++    return match;
 +}
 +
  void sf3000_detect_device(void) {
      if (g_dev_id != -1) return;
  
++    sf3000_fslog("sf3000_detect_device: START (TF_DEVICE env='%s')",
++                 getenv("TF_DEVICE") ? getenv("TF_DEVICE") : "(null)");
      int w = 854, h = 480, scale = 150;        /* defaults (SF3000/SF3500) */
 +    /* RK3036G is a SoC fact (DT compatible) -- must win over boot-env
 +     * TF_DEVICE=SF3000 (stock firmware leaves it; it short-circuits detection
@@ -289,13 +312,18 @@ index fe4f9d8..98df27b 100644
 +        snprintf(s, sizeof s, "%d", g_dev_w);     setenv("TF_PANEL_W", s, 1);
 +        snprintf(s, sizeof s, "%d", g_dev_h);     setenv("TF_PANEL_H", s, 1);
 +        snprintf(s, sizeof s, "%d", g_dev_scale); setenv("TF_UI_SCALE", s, 1);
++        sf3000_fslog("sf3000_detect_device: RESULT=TF_DEV_RK3036 %dx%d (DT compatible matched)");
 +        DBG("sf3000_detect_device: RK3036G via DT compatible\n");
 +        return;
 +    }
      int id = tf_read_env_file(&w, &h, &scale); /* primary: boot env file */
++    sf3000_fslog("sf3000_detect_device: tf_read_env_file -> id=%d w=%d h=%d scale=%d", id, w, h, scale);
      if (id < 0) id = tf_id_from_name(getenv("TF_DEVICE")); /* inherited env */
++    sf3000_fslog("sf3000_detect_device: tf_id_from_name(env) -> id=%d", id);
      if (id < 0) {                              /* fallback: scan live DT */
-@@ -1901,6 +1951,8 @@ void sf3000_detect_device(void) {
+         int r63311 = 0;
+         dt_scan_r63311("/proc/device-tree", 0, &r63311);
+@@ -1901,8 +1970,12 @@ void sf3000_detect_device(void) {
                  id = TF_DEV_SF3500;
              else
                  id = TF_DEV_GB350;
@@ -303,8 +331,12 @@ index fe4f9d8..98df27b 100644
 +            id = TF_DEV_RK3036; w = 1280; h = 720;
          } else
              id = TF_DEV_SF3000;
++        sf3000_fslog("sf3000_detect_device: fallback DT scan -> id=%d (r63311=%d panel=%d)",
++                     id, r63311, access("/proc/device-tree/panel", F_OK) == 0);
      }
-@@ -1910,6 +1962,7 @@ void sf3000_detect_device(void) {
+ 
+     /* Panel geometry by device (env-file overrides above already applied to
+@@ -1910,6 +1983,7 @@ void sf3000_detect_device(void) {
      if (id == TF_DEV_R36SX || id == TF_DEV_GB350) { if (w == 854) w = 640; }  /* landscape 640x480, 4:3 */
      g_dev_id    = id;
      g_dev_r36sx = (id == TF_DEV_R36SX);
@@ -312,7 +344,15 @@ index fe4f9d8..98df27b 100644
      g_dev_w = w; g_dev_h = h; g_dev_scale = scale;
  
      char s[16];
-@@ -1927,6 +1980,7 @@ int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
+@@ -1920,6 +1994,7 @@ void sf3000_detect_device(void) {
+             id == TF_DEV_R36SX ? "R36SX" : id == TF_DEV_SF3500 ? "SF3500" :
+             id == TF_DEV_GB350 ? "GB350" : "SF3000",
+             g_dev_w, g_dev_h, g_dev_scale);
++    sf3000_fslog("sf3000_detect_device: FINAL id=%d rk3036=%d panel=%dx%d", id, g_dev_rk3036, g_dev_w, g_dev_h);
+ }
+ 
+ int sf3000_panel_w(void)  { sf3000_detect_device(); return g_dev_w; }
+@@ -1927,6 +2002,7 @@ int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
  int sf3000_is_r36sx(void) { sf3000_detect_device(); return g_dev_r36sx > 0; }
  int sf3000_is_sf3500(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_SF3500; }
  int sf3000_is_gb350(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_GB350; }
@@ -320,7 +360,7 @@ index fe4f9d8..98df27b 100644
  /* 4:3 panels (R36SX, GB350 = 640x480) vs 16:9 (SF3000/SF3500 = 854x480). */
  int sf3000_aspect_is_43(void) { sf3000_detect_device(); return g_dev_r36sx > 0 || g_dev_id == TF_DEV_GB350; }
  
-@@ -2140,7 +2194,7 @@ void sf3000_fb_blit(const void *src, int width, int height, int pitch) {
+@@ -2140,7 +2216,7 @@ void sf3000_fb_blit(const void *src, int width, int height, int pitch) {
       * panel-size frames (only small game frames work), so SF3000 FrogUI falls
       * through to the SW transpose path below (bilinear-blended, its proven cold
       * renderer). */
@@ -329,7 +369,7 @@ index fe4f9d8..98df27b 100644
          width == PANEL_W && height == PANEL_H) {
          if (!sf3000_use_hwdisp && hwdisp_init() == 0) {
              sf3000_use_hwdisp = 1;
-@@ -2207,7 +2261,7 @@ if (sf3000_use_hwdisp) {
+@@ -2207,7 +2283,7 @@ if (sf3000_use_hwdisp) {
                  hwdisp_set_sharpen(sf3000_sharpness);
                  hwdisp_set_target_aspect(0, 0);            /* already panel-final */
                  hwdisp_set_filter(SCALE_FILTER_BILINEAR);  /* 1:1 present, no re-upscale */
@@ -338,7 +378,7 @@ index fe4f9d8..98df27b 100644
                      hwdisp_present(panb, PW, PH, PW * 2);
                  return;
              }
-@@ -2307,7 +2361,7 @@ if (sf3000_use_hwdisp) {
+@@ -2307,7 +2383,7 @@ if (sf3000_use_hwdisp) {
                  }
                  if (ff_skip) return;    /* FF: drop this present to keep display 60fps */
                  /* R36SX: disp_frame hangs → direct fb0 write. SF3000: disp_frame. */
@@ -347,7 +387,7 @@ index fe4f9d8..98df27b 100644
                      hwdisp_present(compose_buf, width, height, width * 2);
                  return;
              }
-@@ -2336,7 +2390,7 @@ if (sf3000_use_hwdisp) {
+@@ -2336,7 +2412,7 @@ if (sf3000_use_hwdisp) {
                  src = dst; width = PANEL_W; height = PANEL_H; pitch = PANEL_W * 2;
              }
          }

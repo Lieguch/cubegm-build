@@ -353,7 +353,7 @@ bash "$HERE/toolchain/verify_target_abi.sh" \
 DST="$HERE/cubegm"
 mkdir -p "$DST" "$DST/cores" "$DST/lib"
 cp -f picoarch/picoarch               "$DST/" 2>/dev/null || true
-cp -f FrogUI/frogui_libretro.so        "$DST/" 2>/dev/null || true
+cp -f FrogUI/frogui_libretro.so        "$DST/cores/" 2>/dev/null || true
 cp -f "$CORE_OUT"/*.so                  "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
