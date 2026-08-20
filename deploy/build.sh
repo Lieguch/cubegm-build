@@ -246,6 +246,7 @@ pushd FrogUI >/dev/null
 if [ -f Makefile.sf3000 ]; then
     make -f Makefile.sf3000 frogui_libretro.so \
         CC="$CC" CXX="$CXX" \
+        STRIP="$CROSS_COMPILE"strip \
         CFLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -fPIC -Wall -Ofast -DPLATFORM_SF3000 -DNDEBUG -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DUI_SCALE=100 -I$SYSROOT/usr/include" \
         SYSROOT="$SYSROOT" || true
 fi
