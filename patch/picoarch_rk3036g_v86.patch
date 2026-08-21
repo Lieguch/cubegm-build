@@ -1,5 +1,5 @@
 diff --git a/core.c b/core.c
-index 376ef17..a2e4fe5 100644
+index 376ef17..532eadb 100644
 --- a/core.c
 +++ b/core.c
 @@ -794,29 +794,51 @@ int core_open(const char *corefile, const char *tag_name) {
@@ -15,14 +15,14 @@ index 376ef17..a2e4fe5 100644
  static void pa_crash_handler(int sig) {
      void *bt[24];
      int n = backtrace(bt, 24);
++    const char *nm = sig == SIGSEGV ? "SIGSEGV" : sig == SIGABRT ? "SIGABRT"
++                   : sig == SIGBUS  ? "SIGBUS"  : sig == SIGILL  ? "SIGILL"
++                   : sig == SIGFPE  ? "SIGFPE"  : "SIG";
      int fd = open("/mnt/sdcard/crash.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
      if (fd >= 0) {
 -        dprintf(fd, "=== %s pid=%d pc=%p ===\n",
 -                sig == SIGSEGV ? "SIGSEGV" : (sig == SIGABRT ? "SIGABRT" : "SIG"),
 -                (int)getpid(), bt[0]);
-+        const char *nm = sig == SIGSEGV ? "SIGSEGV" : sig == SIGABRT ? "SIGABRT"
-+                       : sig == SIGBUS  ? "SIGBUS"  : sig == SIGILL  ? "SIGILL"
-+                       : sig == SIGFPE  ? "SIGFPE"  : "SIG";
 +        dprintf(fd, "=== %s pid=%d pc=%p %s ===\n", nm, (int)getpid(), bt[0], g_crash_ctx);
          backtrace_symbols_fd(bt, n, fd);
          dprintf(fd, "---\n");
@@ -73,7 +73,7 @@ index 376ef17..a2e4fe5 100644
  	if (core_load_game_info(content, &game_info)) {
  		goto finish;
 diff --git a/hwdisp.c b/hwdisp.c
-index f892025..43fd54e 100644
+index f892025..806a962 100644
 --- a/hwdisp.c
 +++ b/hwdisp.c
 @@ -19,6 +19,7 @@
@@ -180,7 +180,7 @@ index f892025..43fd54e 100644
  
      struct drm_mode_crtc cc;
      memset(&cc, 0, sizeof cc);
-@@ -414,62 +447,148 @@ fail:
+@@ -414,62 +447,149 @@ fail:
      return -1;
  }
  
@@ -195,6 +195,7 @@ index f892025..43fd54e 100644
 +    struct timespec ts0, ts1;
 +    clock_gettime(CLOCK_MONOTONIC, &ts0);
      if (!g_drm_map || g_drm_w <= 0 || g_drm_h <= 0 || !src) return;
++    if (w > 2048) w = 2048;      /* rowbuf/xmap bound (no core frame exceeds this) */
      const uint16_t *s = (const uint16_t *)src;
      const int sp = pitch_bytes / 2;
 +    const int DW = g_drm_w, DH = g_drm_h, DP = g_drm_pitch;
