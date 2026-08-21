@@ -139,13 +139,25 @@ export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3
 #   RETRO_DEVICE_ID_JOYPAD_* used by plat_sf3000.c). Clone r36sx explicitly and
 #   init the submodule. To reuse an already-patched local checkout, set
 #   PICOARCH_LOCAL=/path/to/TreeFrogUI_picoarch.
+#
+#   v8.6.2: PIN the upstream commit. The upstream r36sx branch moves (HEAD
+#   advanced f8ff5ba -> aa591ed on 2026-08-21) and every patch in patch/ is
+#   context-based; a fresh clone then fails "display patch NOT applicable"
+#   (run 277). All patches are authored against f8ff5ba, so checkout that
+#   commit deterministically.
 # -----------------------------------------------------------------------------
+PICOARCH_PIN="f8ff5ba"
 if [ -n "${PICOARCH_LOCAL:-}" ] && [ -d "$PICOARCH_LOCAL" ]; then
     log "Using local picoarch source: $PICOARCH_LOCAL"
     rm -rf picoarch && cp -a "$PICOARCH_LOCAL" picoarch
 elif [ ! -d picoarch ]; then
-    log "Cloning picoarch (r36sx branch)..."
-    git clone --depth 1 -b r36sx "$PICOARCH_REPO" picoarch
+    log "Cloning picoarch (r36sx @ $PICOARCH_PIN)..."
+    git clone -q "$PICOARCH_REPO" picoarch
+    git -C picoarch checkout -q "$PICOARCH_PIN" || {
+        # pin unknown (upstream history rewritten): fall back to branch tip
+        log "WARN: pin $PICOARCH_PIN not found -- using r36sx tip (patches may not apply!)"
+        git -C picoarch checkout -q r36sx
+    }
 else
     log "Reusing existing picoarch/ (ensure it is on r36sx AND patched)."
 fi
@@ -229,7 +241,15 @@ if [ -f "$HERE/../patch/picoarch_rk3036g_v86.patch" ]; then
         log "WARN: RK3036G v8.6 patch NOT applicable and NOT applied."
     fi
 fi
-[ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
+# v8.6.2: pin FrogUI too (upstream tip moves and frogui patches are
+# context-based; all are authored against 2f41ace).
+if [ -d FrogUI ]; then
+    log "Reusing existing FrogUI/."
+else
+    log "Cloning FrogUI @ 2f41ace..."
+    git clone -q "$FROGUI_REPO" FrogUI
+    git -C FrogUI checkout -q 2f41ace || log "WARN: FrogUI pin 2f41ace not found -- using tip (patches may not apply!)"
+fi
 
 # -----------------------------------------------------------------------------
 # STAGE 5 -- build picoarch for RK3036G (ARM, NOT MIPS!)
