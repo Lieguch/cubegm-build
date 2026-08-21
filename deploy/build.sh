@@ -335,28 +335,30 @@ pushd FrogUI >/dev/null
 # Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
 # LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
 # Command-line CC/CFLAGS/SYSROOT override the MIPS hardcodes (GNU make precedence).
+# v8.6.1: NO silent fallback. Run #276's make failed (RTLD_DEFAULT/lt_last errors)
+# and the old code silently "normalized" the unix Makefile's menu_libretro.so (a
+# DIFFERENT binary with no FrogUI UI code) into frogui_libretro.so -> device
+# black-screen crash loop (retro_init pc=(nil)). A missing/empty FrogUI must fail
+# the build loudly, never ship a fake.
 if [ -f Makefile.sf3000 ]; then
     make -f Makefile.sf3000 frogui_libretro.so \
         CC="$CC" CXX="$CXX" \
         STRIP="$CROSS_COMPILE"strip \
         CFLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -fPIC -Wall -Ofast -DPLATFORM_SF3000 -DNDEBUG -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DUI_SCALE=100 -I$SYSROOT/usr/include" \
-        SYSROOT="$SYSROOT" || true
-fi
-if [ ! -f frogui_libretro.so ]; then
-    # Fallback: unix Makefile emits menu_libretro.so; normalize below.
-    make CC="$CC" CXX="$CXX" || true
+        SYSROOT="$SYSROOT" || { popd >/dev/null; die "FrogUI make failed (Makefile.sf3000) -- fix frogui_libretro.c, do NOT ship."; }
 fi
 popd >/dev/null
-# The FrogUI libretro Makefile emits menu_libretro.so; zhijack.sh expects
-# frogui_libretro.so. Normalize (regression: removed by b54a9810a6 rewrite).
-if [ ! -f FrogUI/frogui_libretro.so ] && [ -f FrogUI/menu_libretro.so ]; then
-    cp FrogUI/menu_libretro.so FrogUI/frogui_libretro.so
-    log "Normalized menu_libretro.so -> frogui_libretro.so"
-fi
 if [ -f FrogUI/frogui_libretro.so ]; then
-    log "FrogUI built."
+    # v8.6.1: sanity-check it really is FrogUI (not an empty/stubbed core) --
+    # catches build-script regressions that ship a non-FrogUI binary.
+    if grep -q "fork picoarch" FrogUI/frogui_libretro.so 2>/dev/null || \
+       strings FrogUI/frogui_libretro.so 2>/dev/null | grep -q "retro_init start"; then
+        log "FrogUI built (verified FrogUI binary)."
+    else
+        die "FrogUI frogui_libretro.so lacks FrogUI code (no 'retro_init start' string) -- refusing to ship a fake menu."
+    fi
 else
-    log "WARN: frogui_libretro.so not produced -- check FrogUI build output on this repo."
+    die "frogui_libretro.so not produced -- FrogUI build failed."
 fi
 
 # -----------------------------------------------------------------------------

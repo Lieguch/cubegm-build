@@ -1,5 +1,5 @@
 diff --git a/frogui_libretro.c b/frogui_libretro.c
-index 7b9dbf2..e75e7c5 100644
+index 7b9dbf2..c619683 100644
 --- a/frogui_libretro.c
 +++ b/frogui_libretro.c
 @@ -19,6 +19,7 @@
@@ -110,7 +110,7 @@ index 7b9dbf2..e75e7c5 100644
 +     * re-opens "default"; if the parent still holds it the child's
 +     * snd_pcm_open fails EBUSY ("ALSA init failed, falling back to SDL audio"
 +     * -> games silent). plat_sound_finish is exported from picoarch (-rdynamic). */
-+    void (*pf)(void) = (void (*)(void))dlsym(RTLD_DEFAULT, "plat_sound_finish");
++    void (*pf)(void) = (void (*)(void))dlsym(NULL, "plat_sound_finish");
 +    if (pf) pf();
 +    else    dbg("plat_sound_finish not exported (audio may stay silent)");
      pid_t pid = fork();
@@ -123,7 +123,7 @@ index 7b9dbf2..e75e7c5 100644
 +        /* v8.6: the game child's death releases DRM master; the kernel then
 +         * blanks the connector ("no signal" after a crashed ROM, e.g. 005).
 +         * Re-assert OUR dumb-buffer CRTC so the menu is visible again. */
-+        int (*hr)(void) = (int (*)(void))dlsym(RTLD_DEFAULT, "hwdisp_restore");
++        int (*hr)(void) = (int (*)(void))dlsym(NULL, "hwdisp_restore");
 +        if (hr) { if (hr() != 0) dbg("hwdisp_restore failed"); }
 +        else    dbg("hwdisp_restore not exported");
          dbg("game finished, returning to frogui");
@@ -134,12 +134,12 @@ index 7b9dbf2..e75e7c5 100644
              scroll_offset = selected_index - VISIBLE_ENTRIES + 1;
      }
 +    /* v8.6: L/R page ±8 rows through the list */
-+    if (lt && !lt_last && entry_count > 0) {
++    if (lt && !l_last && entry_count > 0) {
 +        selected_index -= 8;
 +        if (selected_index < 0) selected_index = 0;
 +        if (selected_index < scroll_offset) scroll_offset = selected_index;
 +    }
-+    if (rt && !rt_last && entry_count > 0) {
++    if (rt && !r_last && entry_count > 0) {
 +        selected_index += 8;
 +        if (selected_index >= entry_count) selected_index = entry_count - 1;
 +        if (selected_index >= scroll_offset + VISIBLE_ENTRIES)
