@@ -1,5 +1,5 @@
 diff --git a/frogui_libretro.c b/frogui_libretro.c
-index 263d1f1..b0a4b7e 100644
+index 263d1f1..ffebecb 100644
 --- a/frogui_libretro.c
 +++ b/frogui_libretro.c
 @@ -30,7 +30,23 @@
@@ -82,22 +82,7 @@ index 263d1f1..b0a4b7e 100644
          if (entry_count >= entry_capacity) {
              entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
              entries = realloc(entries, entry_capacity * sizeof(DirEntry));
-@@ -328,8 +358,14 @@ static void scan_directory(const char *path) {
-     scroll_offset  = 0;
- }
- 
-+extern void plat_sound_finish(void);   /* picoarch plat_sdl.c; closes the ALSA pcm */
- static void request_game_launch(const char *core_path, const char *rom_path) {
-     dbg("fork picoarch");
-+    /* Close ALSA BEFORE forking: the parent FrogUI process holds the hdmi PCM,
-+     * so the game child's snd_pcm_open("default") fails with EBUSY -> silent +
-+     * emu starvation (1-3 fps). The child re-inits ALSA itself; the parent
-+     * re-inits when the menu core is next loaded. */
-+    plat_sound_finish();
-     pid_t pid = fork();
-     if (pid == 0) {
-         /* Child: replace with picoarch+game */
-@@ -401,21 +437,40 @@ static void handle_input(void) {
+@@ -401,17 +431,19 @@ static void handle_input(void) {
          }
      }
  
@@ -122,28 +107,7 @@ index 263d1f1..b0a4b7e 100644
          if (selected_index >= scroll_offset + VISIBLE_ENTRIES)
              scroll_offset = selected_index - VISIBLE_ENTRIES + 1;
      }
- 
-+    /* L/R page up/down (user request): jump by one full page. */
-+    if (lt && !lt_last) {
-+        if (scroll_offset > 0) {
-+            scroll_offset -= VISIBLE_ENTRIES;
-+            if (scroll_offset < 0) scroll_offset = 0;
-+            selected_index = scroll_offset;
-+        }
-+    }
-+    if (rt && !rt_last) {
-+        int max_off = entry_count > VISIBLE_ENTRIES ? entry_count - VISIBLE_ENTRIES : 0;
-+        if (scroll_offset < max_off) {
-+            scroll_offset += VISIBLE_ENTRIES;
-+            if (scroll_offset > max_off) scroll_offset = max_off;
-+            selected_index = scroll_offset;
-+        }
-+    }
-+
-     a_last=a; b_last=b; up_last=up; dn_last=dn; l_last=lt; r_last=rt;
- }
- 
-@@ -477,6 +532,9 @@ void retro_init(void) {
+@@ -477,6 +509,9 @@ void retro_init(void) {
      dbg("calloc done");
      render_init(framebuffer);
      dbg("render_init done");
@@ -153,7 +117,7 @@ index 263d1f1..b0a4b7e 100644
      scan_directory(current_path);
      dbg("scan_directory done");
      shutdown_requested = false;
-@@ -528,13 +586,16 @@ void retro_run(void) {
+@@ -528,13 +563,16 @@ void retro_run(void) {
          render_settings_menu();
      } else {
          render_clear_screen(framebuffer);
@@ -172,7 +136,7 @@ index 263d1f1..b0a4b7e 100644
                               (idx == selected_index), scroll_offset, 0);
          }
          render_legend(framebuffer, LEGEND_X_NONE);
-@@ -544,7 +605,7 @@ void retro_run(void) {
+@@ -544,7 +582,7 @@ void retro_run(void) {
          video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
  }
  
