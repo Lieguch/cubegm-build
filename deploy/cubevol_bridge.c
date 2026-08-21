@@ -50,37 +50,33 @@ static int g_down[KEY_CNT];
 
 static void upd(int code, int on) { if (code >= 0 && code < KEY_CNT) g_down[code] = on; }
 
-/* Direction keys (d-pad hat + analog stick) go through a 40 ms pulse on the
- * press edge instead of a level. FrogUI's menu is edge-triggered
- * (`up && !up_last`), and the 10 ms poll here can sample mechanical hat
- * bounce into multiple level transitions across frame boundaries -> one press
- * moves 2-3 rows (observed on device). A short pulse makes every physical
- * press produce exactly one rising edge. Games don't read this shm (they use
- * picoarch's own evdev input), so pulses can't break in-game hold. */
-#define DIR_PULSE_MS 40
-struct dir_state { int phys; int pulse; long deadline_ms; };
+/* Direction keys (d-pad hat + analog stick): debounced level-follow.
+ * FrogUI's menu is edge-triggered (`up && !up_last`), so a held 1 produces
+ * exactly ONE move per physical press. The old 40 ms pulse made short/fast
+ * presses invisible to FrogUI's 60 Hz shm reads (observed: UP/LEFT dead while
+ * DOWN/RIGHT worked -- pulses are sampled by 10 ms polls and can be missed).
+ * Debounce (30 ms) kills mechanical hat bounce that previously moved 2-3 rows.
+ * Games don't read this shm (they use picoarch's own evdev), so level-follow
+ * can't break in-game hold. */
+#define DIR_DEBOUNCE_MS 30
+struct dir_state { int phys; int out; long change_ms; };
 static struct dir_state g_dir[4];   /* 0=UP 1=DOWN 2=LEFT 3=RIGHT */
 static long now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
 }
-/* feed the physical level of a direction, returns the pulse level to OR in */
+/* feed the physical level of a direction, returns the debounced level */
 static int dir_feed(int idx, int phys) {
     long now = now_ms();
-    if (!phys) {
-        g_dir[idx].phys = 0;
-        g_dir[idx].pulse = 0;
-        return 0;
+    if (phys != g_dir[idx].phys) {        /* any change: record, suppress bounce */
+        g_dir[idx].phys = phys;
+        g_dir[idx].change_ms = now;
     }
-    if (!g_dir[idx].phys) {           /* rising edge -> start pulse */
-        g_dir[idx].pulse = 1;
-        g_dir[idx].deadline_ms = now + DIR_PULSE_MS;
-    }
-    g_dir[idx].phys = 1;
-    if (g_dir[idx].pulse && now >= g_dir[idx].deadline_ms)
-        g_dir[idx].pulse = 0;          /* pulse expired while held */
-    return g_dir[idx].pulse;
+    if (now - g_dir[idx].change_ms < DIR_DEBOUNCE_MS)
+        return g_dir[idx].out;            /* still within debounce window */
+    g_dir[idx].out = phys;                /* stable -> level-follow */
+    return g_dir[idx].out;
 }
 
 int main(int argc, char **argv)

@@ -153,13 +153,14 @@ echo "zhijack: respawner frozen (icube pidof=$(pidof icube 2>/dev/null))" >> "$L
 # Background icube/rkgame watchdog: the main loop below only runs BETWEEN game
 # launches -- while FrogUI/game is up nothing stops the respawner, so icube
 # revives after ~10-15 min, respawns rkgame and steals DRM master back (the
-# observed half-white + stock boot logo screen). SIGSTOP + kill -9 every 5 s
+# observed half-white + stock boot logo screen). SIGSTOP + kill -9 every 2 s
 # from a detached loop (kill only, never renames anything).
 (
     while true; do
         kill -STOP $(pidof icube) 2>/dev/null
+        killall -9 icube 2>/dev/null
         killall -9 rkgame 2>/dev/null
-        sleep 5
+        sleep 2
     done
 ) &
 WD_PID=$!
