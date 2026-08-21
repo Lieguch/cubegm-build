@@ -135,29 +135,29 @@ if [ -e /dev/watchdog ]; then
 fi
 sync
 
-# Disarm the stock respawner permanently: rename its binaries so init/systemd
-# cannot restart them even if every watchdog we spawn is killed. (The 10-20 min
-# half-white + stock logo = icube revived and respawned rkgame which stole DRM
-# master; killing is only reactive, renaming is permanent.)
+# NEVER rename/delete the stock icube/rkgame binaries. A previous build renamed
+# icube -> icube.bak to "disarm" the respawner; on the NEXT boot the stock init
+# could not find icube and the device hung on the boot logo (half-white + stock
+# logo, unrecoverable by reboot). Restore any .bak first, then FREEZE (SIGSTOP)
+# the respawner -- the binary stays intact so the stock chain can always boot.
 for _name in icube rkgame; do
-    _pid=$(pidof "$_name" 2>/dev/null | awk '{print $1}')
-    [ -n "$_pid" ] || continue
-    _exe=$(readlink "/proc/$_pid/exe" 2>/dev/null)
-    if [ -n "$_exe" ] && [ -f "$_exe" ] && [ -w "$(dirname "$_exe")" ]; then
-        mv "$_exe" "$_exe.bak" 2>>"$LOG" && echo "zhijack: renamed $_exe -> $_exe.bak (respawner disarmed)" >> "$LOG"
-    else
-        echo "zhijack: cannot rename $_name exe=$_exe (keep watchdog)" >> "$LOG"
+    _bak="/mnt/sdcard/cubegm/$_name.bak"
+    if [ -f "$_bak" ]; then
+        mv "$_bak" "/mnt/sdcard/cubegm/$_name" 2>>"$LOG" && echo "zhijack: RESTORED $_bak -> $_name (boot chain repaired)" >> "$LOG"
     fi
 done
+kill -STOP $(pidof icube) 2>/dev/null
+killall -9 rkgame 2>/dev/null
+echo "zhijack: respawner frozen (icube pidof=$(pidof icube 2>/dev/null))" >> "$LOG"
 
 # Background icube/rkgame watchdog: the main loop below only runs BETWEEN game
-# launches -- while FrogUI/game is up nothing kills the respawner, so icube
+# launches -- while FrogUI/game is up nothing stops the respawner, so icube
 # revives after ~10-15 min, respawns rkgame and steals DRM master back (the
-# observed half-white + stock boot logo screen). Kill -9 both every 5 s from a
-# detached loop so the front-end and games run uninterrupted.
+# observed half-white + stock boot logo screen). SIGSTOP + kill -9 every 5 s
+# from a detached loop (kill only, never renames anything).
 (
     while true; do
-        killall -9 icube 2>/dev/null
+        kill -STOP $(pidof icube) 2>/dev/null
         killall -9 rkgame 2>/dev/null
         sleep 5
     done
