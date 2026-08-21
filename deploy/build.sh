@@ -183,6 +183,19 @@ fi
 # headers, so bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
 mkdir -p picoarch/include/drm
 cp -f "$HERE/drm_headers/drm/"*.h picoarch/include/drm/ 2>/dev/null || log "WARN: drm headers not copied (hwdisp_drm won't compile!)"
+# Crash backtrace logging (SIGSEGV/SIGABRT -> /mnt/sdcard/crash.log).
+# Applies to core.c AFTER 5-edit + display (its core.c hunks are based on that
+# state). Build with -rdynamic (added above) so backtrace shows symbol names.
+if [ -f "$HERE/../patch/core_rk3036g_crashlog.patch" ]; then
+    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/core_rk3036g_crashlog.patch" 2>/dev/null; then
+        log "Applying RK3036G crashlog patch (backtrace on SIGSEGV)..."
+        git -C picoarch apply --ignore-whitespace "$HERE/../patch/core_rk3036g_crashlog.patch"
+    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/core_rk3036g_crashlog.patch" 2>/dev/null; then
+        log "RK3036G crashlog patch already applied -- skipping."
+    else
+        log "WARN: RK3036G crashlog patch NOT applicable."
+    fi
+fi
 # RK3036G input patch (gamepad): PSX-style keycodes in evdev defbinds + d-pad
 # hat handling. MUST run after the display patch (both touch plat_sf3000.c?
 # no -- input touches plat_sf3000.c + libpicofe/linux/in_evdev.c; display
@@ -355,7 +368,7 @@ chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.
 # -shared there links the host tool as a .so and dies). LDFLAGS_S is only for
 # cores whose Makefile does NOT add -shared (mame2003_plus/fbneo/stella2014/
 # prosystem per upstream build_all.sh) -- passed via extra LDFLAGS=__LDFLAGS_S__.
-LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lpthread -static-libstdc++ -static-libgcc"
+LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lpthread -static-libstdc++ -static-libgcc -rdynamic"
 LDFLAGS_S="-shared -Wl,--no-undefined $LDFLAGS"
 build_core() {
     local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}" branch="${7:-}"
