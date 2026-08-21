@@ -1,5 +1,5 @@
 diff --git a/core.c b/core.c
-index 5440ffd..8677f15 100644
+index 5440ffd..376ef17 100644
 --- a/core.c
 +++ b/core.c
 @@ -1,5 +1,7 @@
@@ -42,3 +42,15 @@ index 5440ffd..8677f15 100644
  	current_core.retro_init();
  	current_core.initialized = true;
  	PA_INFO("Finished loading core\n");
+@@ -810,6 +836,11 @@ int core_load_content(struct content *content) {
+ 	DBG("DBG M5b: retro_load_game path=%s\n", game_info.path ? game_info.path : "(null)");
+ 	if (!current_core.retro_load_game(&game_info)) {
+ 		PA_ERROR("Couldn't load content\n");
++		/* Mark not-initialized so core_unload() skips retro_unload_game() /
++		 * retro_deinit(): some cores (fceumm on bad ROM) crash in unload ->
++		 * observed SIG=11 right after "Unloading core...". dlclose alone is
++		 * safe. */
++		current_core.initialized = false;
+ 		goto finish;
+ 	}
+ 	DBG("DBG M5c: retro_load_game returned\n");
