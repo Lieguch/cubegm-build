@@ -1,0 +1,44 @@
+diff --git a/core.c b/core.c
+index 5440ffd..8677f15 100644
+--- a/core.c
++++ b/core.c
+@@ -1,5 +1,7 @@
+ #include <dlfcn.h>
+ #include <errno.h>
++#include <signal.h>
++#include <execinfo.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -790,7 +792,31 @@ int core_open(const char *corefile, const char *tag_name) {
+ 	return 0;
+ }
+ 
++/* Debug: crash backtrace to /mnt/sdcard/crash.log (build with -rdynamic for
++ * symbol names; addresses always available). Helps diagnose the SIG=11s seen
++ * on device (e.g. FrogUI load crash in payload-263). */
++static void pa_crash_handler(int sig) {
++    void *bt[24];
++    int n = backtrace(bt, 24);
++    int fd = open("/mnt/sdcard/crash.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
++    if (fd >= 0) {
++        dprintf(fd, "=== %s pid=%d pc=%p ===\n",
++                sig == SIGSEGV ? "SIGSEGV" : (sig == SIGABRT ? "SIGABRT" : "SIG"),
++                (int)getpid(), bt[0]);
++        backtrace_symbols_fd(bt, n, fd);
++        dprintf(fd, "---\n");
++        close(fd);
++    }
++    signal(sig, SIG_DFL);
++    raise(sig);
++}
++
+ void core_load(void) {
++    struct sigaction sa;
++    memset(&sa, 0, sizeof sa);
++    sa.sa_handler = pa_crash_handler;
++    sigaction(SIGSEGV, &sa, NULL);
++    sigaction(SIGABRT, &sa, NULL);
+ 	current_core.retro_init();
+ 	current_core.initialized = true;
+ 	PA_INFO("Finished loading core\n");
