@@ -210,6 +210,25 @@ if [ -f "$HERE/../patch/picoarch_rk3036g_input.patch" ]; then
         log "WARN: RK3036G input patch NOT applicable and NOT applied -- gamepad may not work."
     fi
 fi
+# RK3036G v8.6 patch (applied LAST, on top of input/display/crashlog):
+#   - hwdisp.c: RGB565 dumb buffer (halves per-frame write volume -> FPS),
+#     aspect-fit letterbox for game frames, 90° rotation row-pointer bug fix,
+#     cvt565 LUT, per-frame present timing log, exported hwdisp_restore()
+#   - plat_sdl.c: exported plat_sound_finish(), ALSA open retry, skip SDL
+#     joystick on RK3036G (duplicate devices -> menu drift)
+#   - core.c/main.c: crash-log handler installed at startup, SIGBUS/ILL/FPE
+#     covered, ROM path in crash.log
+#   - menu.c/libpicofe/menu.c: pause-menu auto-repeat 70/100ms -> 500ms
+if [ -f "$HERE/../patch/picoarch_rk3036g_v86.patch" ]; then
+    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_rk3036g_v86.patch" 2>/dev/null; then
+        log "Applying RK3036G v8.6 patch (FPS/menu/audio/crashlog/display-restore)..."
+        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_rk3036g_v86.patch"
+    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/picoarch_rk3036g_v86.patch" 2>/dev/null; then
+        log "RK3036G v8.6 patch already applied -- skipping."
+    else
+        log "WARN: RK3036G v8.6 patch NOT applicable and NOT applied."
+    fi
+fi
 [ -d FrogUI ] || git clone --depth 1 "$FROGUI_REPO" FrogUI
 
 # -----------------------------------------------------------------------------
@@ -295,6 +314,21 @@ if [ -f "$HERE/../patch/frogui_roms_path.patch" ]; then
         log "FrogUI roms-path patch already applied -- skipping."
     else
         log "WARN: FrogUI roms-path patch NOT applicable."
+    fi
+fi
+# FrogUI v8.6 patch (applied LAST, on top of roms_path): /tmp file scan cache
+# (cross-process, fixes slow menu), L/R paging in the file list, ALSA release
+# before the game fork (dlsym plat_sound_finish -> game sound), and display
+# re-assert after the game child exits (dlsym hwdisp_restore -> no black screen
+# after a crashed ROM).
+if [ -f "$HERE/../patch/frogui_v86.patch" ]; then
+    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_v86.patch" 2>/dev/null; then
+        log "Applying FrogUI v8.6 patch (scan cache / L-R paging / audio pre-fork / display restore)..."
+        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_v86.patch"
+    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_v86.patch" 2>/dev/null; then
+        log "FrogUI v8.6 patch already applied -- skipping."
+    else
+        log "WARN: FrogUI v8.6 patch NOT applicable and NOT applied."
     fi
 fi
 pushd FrogUI >/dev/null

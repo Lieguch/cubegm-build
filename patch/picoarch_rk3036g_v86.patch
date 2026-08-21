@@ -1,0 +1,570 @@
+diff --git a/core.c b/core.c
+index 376ef17..a2e4fe5 100644
+--- a/core.c
++++ b/core.c
+@@ -794,29 +794,51 @@ int core_open(const char *corefile, const char *tag_name) {
+ 
+ /* Debug: crash backtrace to /mnt/sdcard/crash.log (build with -rdynamic for
+  * symbol names; addresses always available). Helps diagnose the SIG=11s seen
+- * on device (e.g. FrogUI load crash in payload-263). */
++ * on device (e.g. FrogUI load crash in payload-263).
++ * v8.6: covers SIGBUS/SIGILL/SIGFPE too, and appends the ROM/core context so
++ * a crash.log says WHICH rom was loading (the 005-fceumm case had no usable
++ * clue before). */
++static char g_crash_ctx[384] = "";
+ static void pa_crash_handler(int sig) {
+     void *bt[24];
+     int n = backtrace(bt, 24);
+     int fd = open("/mnt/sdcard/crash.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
+     if (fd >= 0) {
+-        dprintf(fd, "=== %s pid=%d pc=%p ===\n",
+-                sig == SIGSEGV ? "SIGSEGV" : (sig == SIGABRT ? "SIGABRT" : "SIG"),
+-                (int)getpid(), bt[0]);
++        const char *nm = sig == SIGSEGV ? "SIGSEGV" : sig == SIGABRT ? "SIGABRT"
++                       : sig == SIGBUS  ? "SIGBUS"  : sig == SIGILL  ? "SIGILL"
++                       : sig == SIGFPE  ? "SIGFPE"  : "SIG";
++        dprintf(fd, "=== %s pid=%d pc=%p %s ===\n", nm, (int)getpid(), bt[0], g_crash_ctx);
+         backtrace_symbols_fd(bt, n, fd);
+         dprintf(fd, "---\n");
+         close(fd);
+     }
++    /* also one line on stderr (lands in zhijack.log) — async-signal-safe */
++    {
++        char ln[96];
++        int m = snprintf(ln, sizeof ln, "CRASH %s pc=%p ctx=%s\n", nm, bt[0], g_crash_ctx);
++        if (m > 0) write(2, ln, m < (int)sizeof ln ? m : (int)sizeof ln);
++    }
+     signal(sig, SIG_DFL);
+     raise(sig);
+ }
+ 
+-void core_load(void) {
++/* install the crash.log handler for the full crash signal set. Exported so
++ * main() can install it at startup (before any core/dlopen — the earlier
++ * default handler only wrote one line to stderr and no crash.log). */
++void pa_crash_install(void) {
+     struct sigaction sa;
+     memset(&sa, 0, sizeof sa);
+     sa.sa_handler = pa_crash_handler;
++    sigemptyset(&sa.sa_mask);
+     sigaction(SIGSEGV, &sa, NULL);
+     sigaction(SIGABRT, &sa, NULL);
++    sigaction(SIGBUS,  &sa, NULL);
++    sigaction(SIGILL,  &sa, NULL);
++    sigaction(SIGFPE,  &sa, NULL);
++}
++
++void core_load(void) {
++    pa_crash_install();
+ 	current_core.retro_init();
+ 	current_core.initialized = true;
+ 	PA_INFO("Finished loading core\n");
+@@ -828,6 +850,12 @@ int core_load_content(struct content *content) {
+ 	int ret = -1;
+ 	char cheats_path[MAX_PATH] = {0};
+ 
++	/* crash context: which ROM was loading when a signal fires */
++	if (content && content->path)
++		snprintf(g_crash_ctx, sizeof g_crash_ctx, "rom=%s", content->path);
++	else
++		snprintf(g_crash_ctx, sizeof g_crash_ctx, "rom=(none)");
++
+ 	DBG("DBG M5a: load_game_info (unzip if needed)\n");
+ 	if (core_load_game_info(content, &game_info)) {
+ 		goto finish;
+diff --git a/hwdisp.c b/hwdisp.c
+index f892025..43fd54e 100644
+--- a/hwdisp.c
++++ b/hwdisp.c
+@@ -19,6 +19,7 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <sys/time.h>
++#include <time.h>
+ #include <sys/mman.h>
+ #include <sys/ioctl.h>
+ #include <linux/fb.h>
+@@ -29,6 +30,7 @@
+ #include <drm/drm.h>
+ #include <drm/drm_mode.h>
+ #include <drm/drm_fourcc.h>
++#include <drm/drm_fourcc.h>
+ extern void dbg_log(const char *fmt, ...);
+ #define DBG(...) dbg_log(__VA_ARGS__)
+ 
+@@ -133,6 +135,23 @@ static uint32_t  g_drm_fb_id = 0, g_drm_crtc_id = 0, g_drm_conn_id = 0;
+ static int       g_drm_w = 0, g_drm_h = 0, g_drm_pitch = 0;
+ static uint8_t  *g_drm_map = NULL;
+ static size_t    g_drm_size = 0;
++static int       g_drm_bpp = 0;   /* dumb-buffer pixel depth: 16=RGB565, 32=XRGB8888 */
++static struct drm_mode_modeinfo g_drm_modeinfo;  /* kept for hwdisp_restore() */
++
++/* RGB565→ARGB8888 lookup table (64KB). Built lazily; hwdisp_cvt565() falls
++ * back to the arithmetic path before it is ready. Eliminates 10 shift/or ops
++ * per converted pixel in the 32-bpp present path. */
++static uint32_t g_cvt_lut[65536];
++static int      g_cvt_lut_ready = 0;
++static void hwdisp_cvt_lut_init(void) {
++    if (g_cvt_lut_ready) return;
++    for (int i = 0; i < 65536; i++)
++        g_cvt_lut[i] = 0xFF000000u |
++            (((i & 0xF800) << 8) | ((i & 0xE000) << 3)) |
++            (((i & 0x07E0) << 5) | ((i & 0x0600) >> 1)) |
++            (((i & 0x001F) << 3) | ((i & 0x001C) >> 2));
++    g_cvt_lut_ready = 1;
++}
+ 
+ /* hwdisp_fb_present() (below) calls hwdisp_drm_present() — declare it here so
+  * the call is NOT an implicit (non-static) declaration. */
+@@ -184,8 +203,10 @@ static void hwdisp_fb_open(void) {
+  *   SF3000: panel is 480x854 portrait-mounted; the driver's disp_frame normally
+  *           rotates 90°, but we bypass it, so rotate the frame 90° CW here.
+  * Returns 1 if drawn. */
+-/* RGB565 → ARGB8888 (for fb0 configured as 32-bit). Alpha fixed opaque. */
++/* RGB565 → ARGB8888 (for fb0 configured as 32-bit). Alpha fixed opaque.
++ * Uses the 64KB LUT when ready (fast path); falls back to arithmetic. */
+ static inline uint32_t hwdisp_cvt565(uint16_t c) {
++    if (g_cvt_lut_ready) return g_cvt_lut[c];
+     return 0xFF000000u |
+            (((c & 0xF800) << 8) | ((c & 0xE000) << 3)) |
+            (((c & 0x07E0) << 5) | ((c & 0x0600) >> 1)) |
+@@ -250,6 +271,7 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+ #define DRM_MODE_CONNECTED 1
+ static int hwdisp_drm_init(void) {
+     uint32_t *fbs = NULL, *crtcs = NULL, *encs = NULL, *conns = NULL;
++    hwdisp_cvt_lut_init();   /* lazy 64KB RGB565→ARGB LUT (32bpp fallback path) */
+     g_drm_fd = open("/dev/dri/card0", O_RDWR);
+     if (g_drm_fd < 0) {
+         hwdisp_fslog("hwdisp_drm: open /dev/dri/card0 FAILED errno=%d", errno);
+@@ -354,13 +376,23 @@ static int hwdisp_drm_init(void) {
+ 
+     struct drm_mode_create_dumb cd;
+     memset(&cd, 0, sizeof cd);
+-    cd.width = 1280; cd.height = 720; cd.bpp = 32;
++    /* v8.5: try RGB565 first (halves the per-frame write volume vs XRGB8888 —
++     * the present path is the dominant per-frame cost on this SoC and the
++     * HDMI writes to the dumb buffer look uncached). Fall back to 32bpp if
++     * the VOP rejects RGB565. */
++    cd.width = 1280; cd.height = 720; cd.bpp = 16;
+     if (ioctl(g_drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &cd) < 0) {
+-        hwdisp_fslog("hwdisp_drm: CREATE_DUMB failed errno=%d", errno); goto fail;
++        hwdisp_fslog("hwdisp_drm: CREATE_DUMB(16bpp) failed errno=%d, retry 32bpp", errno);
++        memset(&cd, 0, sizeof cd);
++        cd.width = 1280; cd.height = 720; cd.bpp = 32;
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &cd) < 0) {
++            hwdisp_fslog("hwdisp_drm: CREATE_DUMB(32bpp) failed errno=%d", errno); goto fail;
++        }
+     }
++    g_drm_bpp = (int)cd.bpp;
+     g_drm_w = 1280; g_drm_h = 720; g_drm_pitch = (int)cd.pitch; g_drm_size = cd.size;
+-    hwdisp_fslog("hwdisp_drm: dumb %ux%u pitch=%u size=%llu",
+-                 cd.width, cd.height, cd.pitch, (unsigned long long)cd.size);
++    hwdisp_fslog("hwdisp_drm: dumb %ux%u bpp=%u pitch=%u size=%llu",
++                 cd.width, cd.height, cd.bpp, cd.pitch, (unsigned long long)cd.size);
+ 
+     struct drm_mode_map_dumb md;
+     memset(&md, 0, sizeof md);
+@@ -377,13 +409,14 @@ static int hwdisp_drm_init(void) {
+     struct drm_mode_fb_cmd2 fb;
+     memset(&fb, 0, sizeof fb);
+     fb.width = 1280; fb.height = 720;
+-    fb.pixel_format = DRM_FORMAT_XRGB8888;
++    fb.pixel_format = (g_drm_bpp == 16) ? DRM_FORMAT_RGB565 : DRM_FORMAT_XRGB8888;
+     fb.handles[0] = cd.handle;
+     fb.pitches[0] = cd.pitch;
+     if (ioctl(g_drm_fd, DRM_IOCTL_MODE_ADDFB2, &fb) < 0) {
+         hwdisp_fslog("hwdisp_drm: ADDFB2 failed errno=%d", errno); goto fail;
+     }
+     g_drm_fb_id = fb.fb_id;
++    g_drm_modeinfo = chosen;
+ 
+     struct drm_mode_crtc cc;
+     memset(&cc, 0, sizeof cc);
+@@ -414,62 +447,148 @@ fail:
+     return -1;
+ }
+ 
+-/* RGB565 src (w x h, pitch_bytes) -> XRGB8888 dumb buffer (nearest scale). */
++/* RGB565 src (w x h, pitch_bytes) -> dumb buffer (RGB565 or XRGB8888),
++ * nearest scale, aspect-fit (black bars), 90° rotation for portrait sources.
++ * v8.5: 16bpp dumb buffer halves the per-frame write volume (the HDMI write
++ * to the dumb buffer is the dominant cost on this SoC); game frames are
++ * aspect-fitted instead of stretched; rotation row-pointer bug fixed. */
+ static void hwdisp_drm_present(const void *src, int w, int h, int pitch_bytes) {
++    static long t_last = 0, t_acc = 0; static int t_cnt = 0;
++    struct timespec ts0, ts1;
++    clock_gettime(CLOCK_MONOTONIC, &ts0);
+     if (!g_drm_map || g_drm_w <= 0 || g_drm_h <= 0 || !src) return;
+     const uint16_t *s = (const uint16_t *)src;
+     const int sp = pitch_bytes / 2;
++    const int DW = g_drm_w, DH = g_drm_h, DP = g_drm_pitch;
++    uint8_t *base = g_drm_map;
++
++    /* 1:1 fast path (FrogUI menu frames): straight copy, no scale lookups. */
++    if (w == DW && h == DH) {
++        if (g_drm_bpp == 16) {
++            for (int y = 0; y < DH; y++) {
++                uint16_t *drow = (uint16_t *)(base + (size_t)y * DP);
++                const uint16_t *srow = s + (size_t)y * sp;
++                memcpy(drow, srow, (size_t)DW * 2);
++            }
++        } else {
++            for (int y = 0; y < DH; y++) {
++                uint32_t *drow = (uint32_t *)(base + (size_t)y * DP);
++                const uint16_t *srow = s + (size_t)y * sp;
++                for (int x = 0; x < DW; x++)
++                    drow[x] = hwdisp_cvt565(srow[x]);
++            }
++        }
++        goto done;
++    }
+ 
+-    /* 1:1 fast path (FrogUI menu frames): straight store, no scale lookups. */
+-    if (w == g_drm_w && h == g_drm_h) {
+-        for (int y = 0; y < g_drm_h; y++) {
+-            uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
+-            const uint16_t *srow = s + (size_t)y * sp;
+-            for (int x = 0; x < g_drm_w; x++)
+-                drow[x] = hwdisp_cvt565(srow[x]);
++    /* Game frames: aspect-fit (no stretching) into the panel, black bars
++     * baked. Geometry changes only when the src size flips, so the clear
++     * (full-buffer memset) runs once per geometry, not per frame. */
++    static int g_last_w = -1, g_last_h = -1, g_dw = 0, g_dh = 0, g_ox = 0, g_oy = 0;
++    if (w != g_last_w || h != g_last_h) {
++        g_last_w = w; g_last_h = h;
++        double A = (double)w / (double)h;          /* src aspect */
++        if (A > (double)DW / (double)DH) {          /* wider than panel */
++            g_dw = DW; g_dh = (int)((double)DW / A + 0.5);
++        } else {
++            g_dh = DH; g_dw = (int)((double)DH * A + 0.5);
+         }
+-        return;
++        if (g_dw < 1) g_dw = 1; if (g_dh < 1) g_dh = 1;
++        g_ox = (DW - g_dw) / 2; g_oy = (DH - g_dh) / 2;
++        if (g_drm_bpp == 16) memset(base, 0, (size_t)DH * DP);
++        else                memset(base, 0, (size_t)DH * DP);
++        hwdisp_fslog("hwdisp_drm: aspect-fit %dx%d -> rect %dx%d+%d+%d (bpp=%d)",
++                     w, h, g_dw, g_dh, g_ox, g_oy, g_drm_bpp);
+     }
+ 
+-    /* Scaled path (game frames): convert each SOURCE row to ARGB once into a
+-     * scratch row, then nearest-copy — cvt565 runs w*h times instead of
+-     * w_out*h_out (256x240 game: ~61k vs ~921k conversions per frame). */
+-    static uint32_t rowbuf[2048];
+-    if (w > (int)(sizeof(rowbuf) / sizeof(rowbuf[0]))) w = (int)(sizeof(rowbuf) / sizeof(rowbuf[0]));
+-    /* Portrait source (arcade games, w < h): rotate 90 deg to landscape.
+-     * dst(y,x) <- src(col= y*h/dst_h, row=(dst_w-1-x)*w/dst_w). */
+     if (w < h) {
+-        for (int y = 0; y < g_drm_h; y++) {
+-            int sx = (y * h / g_drm_h); if (sx >= w) sx = w - 1;
+-            const uint16_t *scol = s + (size_t)sx;
+-            uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
+-            for (int x = 0; x < g_drm_w; x++) {
+-                int sy = ((g_drm_w - 1 - x) * h / g_drm_w); if (sy >= h) sy = h - 1;
+-                drow[x] = hwdisp_cvt565(scol[(size_t)sy * sp]);
++        /* Portrait source (vertical arcade): rotate 90° CW into the fit rect.
++         * dst(x,y) <- src(col = (y-oy)*h/g_dh, row = (g_dw-1-(x-ox))*w/g_dw). */
++        if (g_drm_bpp == 16) {
++            for (int y = 0; y < g_dh; y++) {
++                int sx = (int)(((long long)(y) * h) / g_dh); if (sx >= w) sx = w - 1;
++                const uint16_t *scol = s + (size_t)sx * sp;   /* v8.5: row sx */
++                uint16_t *drow = (uint16_t *)(base + (size_t)(g_oy + y) * DP) + g_ox;
++                for (int x = 0; x < g_dw; x++) {
++                    int sy = (int)(((long long)(g_dw - 1 - x) * w) / g_dw); if (sy >= h) sy = h - 1;
++                    drow[x] = scol[sy];                        /* v8.5: element sy */
++                }
++            }
++        } else {
++            for (int y = 0; y < g_dh; y++) {
++                int sx = (int)(((long long)(y) * h) / g_dh); if (sx >= w) sx = w - 1;
++                const uint16_t *scol = s + (size_t)sx * sp;
++                uint32_t *drow = (uint32_t *)(base + (size_t)(g_oy + y) * DP) + g_ox;
++                for (int x = 0; x < g_dw; x++) {
++                    int sy = (int)(((long long)(g_dw - 1 - x) * w) / g_dw); if (sy >= h) sy = h - 1;
++                    drow[x] = hwdisp_cvt565(scol[sy]);
++                }
+             }
+         }
+-        return;
++        goto done;
+     }
+-    /* x lookup table: nearest-neighbor src x per dst x, rebuilt only when the
+-     * src width changes — removes w*dst_w divisions from every frame. */
+-    static int xmap[2048];
+-    static int xmap_w = -1;
+-    if (xmap_w != w) {
+-        for (int x = 0; x < g_drm_w; x++)
+-            xmap[x] = (w > 1) ? (x * w / g_drm_w) : 0;
+-        xmap_w = w;
++
++    /* Landscape source: nearest scale into the fit rect. x/y maps rebuilt
++     * only when the src size changes — removes all per-frame divisions. */
++    static int xmap[2048]; static int xmap_w = -1;
++    static int ymap[2048]; static int ymap_h = -1;
++    if (xmap_w != w || ymap_h != h) {
++        for (int x = 0; x < g_dw; x++) xmap[x] = (w > 1) ? (int)(((long long)x * w) / g_dw) : 0;
++        for (int y = 0; y < g_dh; y++) ymap[y] = (h > 1) ? (int)(((long long)y * h) / g_dh) : 0;
++        xmap_w = w; ymap_h = h;
++    }
++    if (g_drm_bpp == 16) {
++        for (int y = 0; y < g_dh; y++) {
++            const uint16_t *srow = s + (size_t)ymap[y] * sp;
++            uint16_t *drow = (uint16_t *)(base + (size_t)(g_oy + y) * DP) + g_ox;
++            for (int x = 0; x < g_dw; x++)
++                drow[x] = srow[xmap[x]];
++        }
++    } else {
++        static uint32_t rowbuf[2048];
++        for (int y = 0; y < g_dh; y++) {
++            const uint16_t *srow = s + (size_t)ymap[y] * sp;
++            for (int sx = 0; sx < w; sx++)
++                rowbuf[sx] = hwdisp_cvt565(srow[sx]);
++            uint32_t *drow = (uint32_t *)(base + (size_t)(g_oy + y) * DP) + g_ox;
++            for (int x = 0; x < g_dw; x++)
++                drow[x] = rowbuf[xmap[x]];
++        }
+     }
+-    for (int y = 0; y < g_drm_h; y++) {
+-        int sy = (h > 1) ? (y * h / g_drm_h) : 0;
+-        const uint16_t *srow = s + (size_t)sy * sp;
+-        for (int sx = 0; sx < w; sx++)
+-            rowbuf[sx] = hwdisp_cvt565(srow[sx]);
+-        uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
+-        for (int x = 0; x < g_drm_w; x++)
+-            drow[x] = rowbuf[xmap[x]];
++done:
++    /* per-frame present cost (diagnostic): cumulative avg every ~2s */
++    clock_gettime(CLOCK_MONOTONIC, &ts1);
++    long us = (ts1.tv_sec - ts0.tv_sec) * 1000000L + (ts1.tv_nsec - ts0.tv_nsec) / 1000L;
++    t_acc += us; t_cnt++;
++    long now = ts1.tv_sec * 1000L + ts1.tv_nsec / 1000000L;
++    if (t_last == 0) t_last = now;
++    if (now - t_last >= 2000) {
++        hwdisp_fslog("hwdisp_drm: present %d frames in %ld ms (avg %.2f ms, last %.2f ms)",
++                     t_cnt, now - t_last, (double)t_acc / t_cnt / 1000.0, (double)us / 1000.0);
++        t_acc = 0; t_cnt = 0; t_last = now;
+     }
+ }
+ 
++/* Re-assert our CRTC after a forked game child died (its exit released DRM
++ * master and the kernel blanked the connector — "no signal" on HDMI). Called
++ * by the front-end via dlsym after waitpid(). Exported (non-static) so
++ * -rdynamic makes it visible to dlsym(RTLD_DEFAULT). */
++int hwdisp_restore(void) {
++    if (g_drm_fd < 0 || g_drm_fb_id == 0) return -1;
++    struct drm_mode_crtc cc;
++    memset(&cc, 0, sizeof cc);
++    cc.crtc_id = g_drm_crtc_id;
++    cc.fb_id = g_drm_fb_id;
++    cc.x = 0; cc.y = 0;
++    cc.mode_valid = 1;
++    cc.mode = g_drm_modeinfo;
++    cc.set_connectors_ptr = (uintptr_t)&g_drm_conn_id;
++    cc.count_connectors = 1;
++    int rc = ioctl(g_drm_fd, DRM_IOCTL_MODE_SETCRTC, &cc);
++    hwdisp_fslog("hwdisp_restore: SETCRTC fb=%u rc=%d errno=%d", g_drm_fb_id, rc, errno);
++    return rc == 0 ? 0 : -1;
++}
++
+ int hwdisp_init(void) {
+     extern void sf3000_dump_fb_state(const char *);
+     if (g_active) return 0;
+diff --git a/libpicofe/menu.c b/libpicofe/menu.c
+index 93b3ac0..bbc1786 100644
+--- a/libpicofe/menu.c
++++ b/libpicofe/menu.c
+@@ -926,7 +926,7 @@ static int me_loop_d(menu_entry *menu, int *menu_sel, void (*draw_prep)(void), v
+ 
+ 		me_draw(menu, sel, draw_more);
+ 		inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT|
+-			PBTN_MOK|PBTN_MBACK|PBTN_MENU|PBTN_L|PBTN_R, NULL, 70);
++			PBTN_MOK|PBTN_MBACK|PBTN_MENU|PBTN_L|PBTN_R, NULL, 500);
+ 		if (inp & (PBTN_MENU|PBTN_MBACK))
+ 			break;
+ 
+@@ -1050,7 +1050,7 @@ static void do_delete(const char *fpath, const char *fname)
+ 	menu_draw_end();
+ 
+ 	while (in_menu_wait_any(NULL, 50) & (PBTN_MENU|PBTN_MA2));
+-	inp = in_menu_wait(PBTN_MA3|PBTN_MBACK, NULL, 100);
++	inp = in_menu_wait(PBTN_MA3|PBTN_MBACK, NULL, 500);
+ 	if (inp & PBTN_MA3)
+ 		remove(fpath);
+ }
+@@ -1293,7 +1293,7 @@ rescan:
+ 		draw_dirlist(curr_path, namelist, n, sel, show_help);
+ 		inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT
+ 			| PBTN_L|PBTN_R|PBTN_MA2|PBTN_MA3|PBTN_MOK|PBTN_MBACK
+-			| PBTN_MENU|PBTN_CHAR, &cinp, 33);
++			| PBTN_MENU|PBTN_CHAR, &cinp, 500);
+ 		if (inp & PBTN_MA3)   {
+ 			g_menu_filter_off = !g_menu_filter_off;
+ 			snprintf(sel_fname, sizeof(sel_fname), "%s",
+@@ -1513,7 +1513,7 @@ static int menu_loop_savestate(int is_loading)
+ 	for (;;)
+ 	{
+ 		draw_savestate_menu(menu_sel, is_loading);
+-		inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_MOK|PBTN_MBACK, NULL, 100);
++		inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_MOK|PBTN_MBACK, NULL, 500);
+ 		if (inp & PBTN_UP) {
+ 			do {
+ 				menu_sel--;
+@@ -1712,7 +1712,7 @@ static void key_config_loop(const me_bind_action *opts, int opt_cnt, int player_
+ 	{
+ 		draw_key_config(opts, opt_cnt, player_idx, sel, dev_id, dev_count, 0);
+ 		mkey = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT
+-				|PBTN_MBACK|PBTN_MOK|PBTN_MA2, NULL, 100);
++				|PBTN_MBACK|PBTN_MOK|PBTN_MA2, NULL, 500);
+ 		switch (mkey) {
+ 			case PBTN_UP:   sel--; if (sel < 0) sel = menu_sel_max; continue;
+ 			case PBTN_DOWN: sel++; if (sel > menu_sel_max) sel = 0; continue;
+diff --git a/main.c b/main.c
+index 0366317..1536200 100644
+--- a/main.c
++++ b/main.c
+@@ -164,38 +164,9 @@ void dbg_log(const char *fmt, ...) {
+ 	fsync(fileno(lf));   /* debug: persist each line (survives crash/power-cut) */
+ }
+ 
+-static void sig_hex(char *b, int *n, unsigned long v) {
+-	b[(*n)++] = '0'; b[(*n)++] = 'x';
+-	for (int i = 28; i >= 0; i -= 4) {
+-		int d = (v >> i) & 0xf;
+-		b[(*n)++] = d < 10 ? ('0' + d) : ('a' + d - 10);
+-	}
+-}
+-
+-static void sigsegv_handler(int sig, siginfo_t *si, void *ucv) {
+-	/* async-signal-safe: write() + manual formatting only */
+-	char buf[160];
+-	int n = 0;
+-	buf[n++] = 'S'; buf[n++] = 'I'; buf[n++] = 'G'; buf[n++] = '=';
+-	if (sig >= 10) buf[n++] = '0' + sig / 10;
+-	buf[n++] = '0' + sig % 10;
+-	buf[n++] = ' '; buf[n++] = 'f';
+-	int f = g_debug_frame;
+-	if (f >= 1000) buf[n++] = '0' + f / 1000;
+-	if (f >= 100)  buf[n++] = '0' + (f / 100) % 10;
+-	if (f >= 10)   buf[n++] = '0' + (f / 10) % 10;
+-	buf[n++] = '0' + f % 10;
+-	const char *as = " addr="; for (const char *p = as; *p; p++) buf[n++] = *p;
+-	sig_hex(buf, &n, si ? (unsigned long)si->si_addr : 0);
+-	const char *ps = " pc="; for (const char *p = ps; *p; p++) buf[n++] = *p;
+-	unsigned long pc = 0;
+-	if (ucv) pc = (unsigned long)((ucontext_t *)ucv)->uc_mcontext.pc;
+-	sig_hex(buf, &n, pc);
+-	buf[n++] = '\n';
+-	write(2, buf, n);
+-	signal(sig, SIG_DFL);
+-	raise(sig);
+-}
++/* (crash signal handling moved to core.c pa_crash_install() — writes a full
++ * backtrace to /mnt/sdcard/crash.log and one stderr line; installed in main()
++ * before any core work so dlopen-time crashes are captured too.) */
+ 
+ static uint32_t vsyncs;
+ static uint32_t renders;
+@@ -888,16 +859,11 @@ int main(int argc, char **argv) {
+ 		}
+ 	}
+ 	{
+-		struct sigaction sa;
+-		memset(&sa, 0, sizeof sa);
+-		sa.sa_sigaction = sigsegv_handler;
+-		sa.sa_flags = SA_SIGINFO;
+-		sigemptyset(&sa.sa_mask);
+-		sigaction(SIGSEGV, &sa, NULL);
+-		sigaction(SIGBUS,  &sa, NULL);
+-		sigaction(SIGABRT, &sa, NULL);
+-		sigaction(SIGILL,  &sa, NULL);
+-		sigaction(SIGFPE,  &sa, NULL);
++		/* Full crash-log handler (backtrace -> /mnt/sdcard/crash.log) installed
++		 * at the very start so even a dlopen-time crash is captured. core_load()
++		 * re-installs the same handler (harmless). */
++		extern void pa_crash_install(void);
++		pa_crash_install();
+ 	}
+ #ifdef PLATFORM_SF3000
+ 	dbg_log("DBG picoarch start: text~%p (hi if 0x2x) argv1=%s next-bin=%s\n",
+diff --git a/menu.c b/menu.c
+index cdd9e76..8adb2d9 100644
+--- a/menu.c
++++ b/menu.c
+@@ -903,7 +903,9 @@ static int minui_main_loop(menu_entry *menu, int *menu_sel) {
+ 
+ 	for (;;) {
+ 		minui_draw_main(menu, sel);
+-		inp = in_menu_wait(PBTN_UP | PBTN_DOWN | PBTN_MOK | PBTN_MBACK | PBTN_MENU, NULL, 70);
++		/* v8.6: 70->500ms auto-repeat -- 70ms made a normal press (100-200ms hold)
++	 * fire 2 menu steps ("按一下漂移1.5-2格"). First press stays immediate. */
++	inp = in_menu_wait(PBTN_UP | PBTN_DOWN | PBTN_MOK | PBTN_MBACK | PBTN_MENU, NULL, 500);
+ 		if (inp & (PBTN_MENU | PBTN_MBACK))
+ 			break;
+ 		if (inp & PBTN_UP) {
+diff --git a/plat_sdl.c b/plat_sdl.c
+index 1a0bc9a..ccbf7a9 100644
+--- a/plat_sdl.c
++++ b/plat_sdl.c
+@@ -1113,7 +1113,11 @@ static void *sf3000_audio_thread_fn(void *unused)
+ 
+ static void plat_sound_finish_alsa(void);
+ 
+-static void plat_sound_finish(void)
++/* v8.5: exported (non-static) so the front-end (frogui_libretro.so, dlopen'd
++ * into this process) can dlsym(RTLD_DEFAULT) it and close the UI process's
++ * ALSA PCM BEFORE forking a game child — otherwise the child's snd_pcm_open
++ * fails EBUSY ("ALSA init failed, falling back to SDL audio" -> no sound). */
++void plat_sound_finish(void)
+ {
+ #ifdef PLATFORM_SF3000
+ 	/* RK3036G has no stock driver.so audio -> SDL/ALSA path below. */
+@@ -1189,9 +1193,16 @@ static int plat_sound_init_alsa(void) {
+     void *pcm = NULL;
+     /* stream 0 = SND_PCM_STREAM_PLAYBACK. (2 was wrong -> device log
+      * "snd_pcm_hw_open invalid stream 2"; playback is what cores need.) */
+-    if (p_snd_pcm_open(&pcm, "default", 0 /*SND_PCM_STREAM_PLAYBACK*/, 0) < 0 || !pcm) {
+-        if (pcm) p_snd_pcm_close(pcm);
+-        dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++    /* v8.5: retry the open — the UI process normally closes its PCM just
++     * before fork (plat_sound_finish via dlsym); the child starts racing
++     * that close, so EBUSY right after fork is expected. Retry for ~1s. */
++    int tried = 0;
++    while (p_snd_pcm_open(&pcm, "default", 0 /*SND_PCM_STREAM_PLAYBACK*/, 0) < 0 || !pcm) {
++        if (pcm) { p_snd_pcm_close(pcm); pcm = NULL; }
++        if (++tried >= 7) {
++            dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++        }
++        usleep(150000);
+     }
+     /* set_params(pcm, S16_LE=2, RW_INTERLEAVED=3, 2ch, 44100, soft_resample=1, 50ms) */
+     if (p_snd_pcm_set_params(pcm, 2, 3, 2, 44100, 1, 50000) < 0) {
+@@ -1497,14 +1508,23 @@ int plat_init(void)
+     g_menubg_src_h  = SCREEN_HEIGHT;
+     g_menubg_src_pp = SCREEN_WIDTH;
+ 
+-    if (in_sdl_init(&in_sdl_platform_data, plat_sdl_event_handler)) {
+-        PA_ERROR("SF3000 SDL input failed to init: %s\n", SDL_GetError());
+-        return -1;
++    /* RK3036G (v8.6): skip the SDL joystick driver entirely — with the dummy
++     * video driver SDL registers every gamepad (and the gpio "key" device)
++     * as sdl:* joysticks ON TOP of the evdev copies: the same pad becomes
++     * 2-4 duplicate input devices and the in-game pause menu fires multiple
++     * edges per press ("按一下漂移1.5-2格"). On RK3036G ALL input arrives via
++     * /dev/input, so evdev alone is complete; SDL is only kept for video. */
++    extern int sf3000_is_rk3036(void);
++    if (!sf3000_is_rk3036()) {
++        if (in_sdl_init(&in_sdl_platform_data, plat_sdl_event_handler)) {
++            PA_ERROR("SF3000 SDL input failed to init: %s\n", SDL_GetError());
++            return -1;
++        }
+     }
+ #ifdef PLATFORM_SF3000
+-    /* Generic evdev gamepad backend (see plat_sf3000.c). SDL keeps driving
+-     * the built-in panel; evdev auto-supports any standard HID USB gamepad
+-     * via BTN_* / ABS_* codes -- no per-device profile required. */
++    /* Generic evdev gamepad backend (see plat_sf3000.c). evdev auto-supports
++     * any standard HID USB gamepad via BTN_* / ABS_* codes -- no per-device
++     * profile required. */
+     in_evdev_init(&in_evdev_platform_data);
+ #endif
+     in_probe();

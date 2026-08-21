@@ -1,0 +1,150 @@
+diff --git a/frogui_libretro.c b/frogui_libretro.c
+index 7b9dbf2..e75e7c5 100644
+--- a/frogui_libretro.c
++++ b/frogui_libretro.c
+@@ -19,6 +19,7 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ #include <stdbool.h>
++#include <dlfcn.h>   /* v8.6: dlsym picoarch's plat_sound_finish / hwdisp_restore */
+ 
+ #include "libretro.h"
+ #include "font.h"
+@@ -334,6 +335,77 @@ static const char* get_basename(const char *path) {
+ 
+ #define SETTINGS_ENTRY_NAME ">> Settings"
+ 
++/* ---------------------------------------------------------------------------
++ * /tmp file scan cache (v8.6)
++ * scan_directory's SD walk (stat() per entry, sorting) is the slow menu
++ * delay. The in-memory re-entry cache only helps WITHIN one process, but a
++ * new frogui process starts after every game exit (retro_init re-scans).
++ * /tmp is tmpfs (RAM): a cache file there survives across processes, so the
++ * list is instant after the first visit. Section format:
++ *   === <path>
++ *   <mtime>|<size>|<count>
++ *   <name>|<is_dir>            x count
++ * ------------------------------------------------------------------------- */
++#define SCAN_CACHE "/tmp/frogui_scan.dat"
++#define SCAN_CACHE_MAX 65536
++
++static int scan_cache_load(const char *path) {
++    struct stat st0;
++    if (stat(path, &st0) != 0) return -1;
++    FILE *f = fopen(SCAN_CACHE, "r");
++    if (!f) return -1;
++    char line[600];
++    int found = 0;
++    while (fgets(line, sizeof line, f)) {
++        line[strcspn(line, "\r\n")] = 0;
++        if (strncmp(line, "===", 3) == 0) {
++            if (found) break;
++            if (strcmp(line + 4, path) == 0) found = 1;
++        } else if (found) {
++            long mt = 0, sz = 0; int cnt = 0;
++            if (sscanf(line, "%ld|%ld|%d", &mt, &sz, &cnt) == 3 &&
++                mt == (long)st0.st_mtime && sz == (long)st0.st_size && cnt >= 0) {
++                entry_count = 0;
++                for (int i = 0; i < cnt && fgets(line, sizeof line, f); i++) {
++                    line[strcspn(line, "\r\n")] = 0;
++                    char *sep = strrchr(line, '|');
++                    if (!sep) break;
++                    *sep = 0;
++                    if (entry_count >= entry_capacity) {
++                        entry_capacity = entry_capacity ? entry_capacity * 2 : INITIAL_ENTRIES_CAPACITY;
++                        entries = realloc(entries, entry_capacity * sizeof(DirEntry));
++                        if (!entries) { entry_count = 0; fclose(f); return -1; }
++                    }
++                    strncpy(entries[entry_count].name, line, 255);
++                    entries[entry_count].name[255] = 0;
++                    entries[entry_count].is_dir = (sep[1] == '1');
++                    entry_count++;
++                }
++                fclose(f);
++                return 0;
++            }
++            break;   /* dir present but stale -> rescan */
++        }
++    }
++    fclose(f);
++    return -1;
++}
++
++static void scan_cache_save(const char *path) {
++    struct stat st0;
++    if (stat(path, &st0) != 0) return;
++    /* bound the file: rewrite from scratch once it grows past the cap */
++    struct stat cs;
++    if (stat(SCAN_CACHE, &cs) == 0 && cs.st_size > SCAN_CACHE_MAX)
++        remove(SCAN_CACHE);
++    FILE *f = fopen(SCAN_CACHE, "a");
++    if (!f) return;
++    fprintf(f, "=== %s\n%ld|%ld|%d\n", path, (long)st0.st_mtime, (long)st0.st_size, entry_count);
++    for (int i = 0; i < entry_count; i++)
++        fprintf(f, "%s|%d\n", entries[i].name, entries[i].is_dir ? 1 : 0);
++    fclose(f);
++}
++
+ static char g_scan_path[512] = "";
+ static long g_scan_mtime = -1, g_scan_size = -1;
+ static void scan_directory(const char *path) {
+@@ -347,6 +419,8 @@ static void scan_directory(const char *path) {
+     strncpy(g_scan_path, path, sizeof(g_scan_path)-1);
+     g_scan_path[sizeof(g_scan_path)-1] = 0;
+     g_scan_mtime = (long)st0.st_mtime; g_scan_size = (long)st0.st_size;
++    /* v8.6: /tmp file cache (cross-process) — instant menu after first visit */
++    if (scan_cache_load(path) == 0) return;
+     DIR *dir = opendir(path);
+     if (!dir) return;
+     entry_count = 0;
+@@ -398,10 +472,18 @@ static void scan_directory(const char *path) {
+ 
+     selected_index = 0;
+     scroll_offset  = 0;
++    scan_cache_save(path);   /* v8.6: persist for the next frogui process */
+ }
+ 
+ static void request_game_launch(const char *core_path, const char *rom_path) {
+     dbg("fork picoarch");
++    /* v8.6: release the UI process's ALSA PCM BEFORE forking — the game child
++     * re-opens "default"; if the parent still holds it the child's
++     * snd_pcm_open fails EBUSY ("ALSA init failed, falling back to SDL audio"
++     * -> games silent). plat_sound_finish is exported from picoarch (-rdynamic). */
++    void (*pf)(void) = (void (*)(void))dlsym(RTLD_DEFAULT, "plat_sound_finish");
++    if (pf) pf();
++    else    dbg("plat_sound_finish not exported (audio may stay silent)");
+     pid_t pid = fork();
+     if (pid == 0) {
+         /* Child: replace with picoarch+game */
+@@ -411,6 +493,12 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
+         /* Parent: wait for game to finish, then return to frogui menu */
+         int status;
+         waitpid(pid, &status, 0);
++        /* v8.6: the game child's death releases DRM master; the kernel then
++         * blanks the connector ("no signal" after a crashed ROM, e.g. 005).
++         * Re-assert OUR dumb-buffer CRTC so the menu is visible again. */
++        int (*hr)(void) = (int (*)(void))dlsym(RTLD_DEFAULT, "hwdisp_restore");
++        if (hr) { if (hr() != 0) dbg("hwdisp_restore failed"); }
++        else    dbg("hwdisp_restore not exported");
+         dbg("game finished, returning to frogui");
+     } else {
+         dbg("fork failed");
+@@ -490,6 +578,18 @@ static void handle_input(void) {
+         if (selected_index >= scroll_offset + VISIBLE_ENTRIES)
+             scroll_offset = selected_index - VISIBLE_ENTRIES + 1;
+     }
++    /* v8.6: L/R page ±8 rows through the list */
++    if (lt && !lt_last && entry_count > 0) {
++        selected_index -= 8;
++        if (selected_index < 0) selected_index = 0;
++        if (selected_index < scroll_offset) scroll_offset = selected_index;
++    }
++    if (rt && !rt_last && entry_count > 0) {
++        selected_index += 8;
++        if (selected_index >= entry_count) selected_index = entry_count - 1;
++        if (selected_index >= scroll_offset + VISIBLE_ENTRIES)
++            scroll_offset = selected_index - VISIBLE_ENTRIES + 1;
++    }
+ 
+     a_last=a; b_last=b; up_last=up; dn_last=dn; l_last=lt; r_last=rt;
+ }

@@ -68,6 +68,12 @@ for c in /sys/devices/system/cpu/cpu*/cpufreq; do
     mx=$(cat "$c/cpuinfo_max_freq" 2>/dev/null)
     [ -n "$mx" ] && [ -w "$c/scaling_min_freq" ] && echo "$mx" > "$c/scaling_min_freq" 2>/dev/null
 done
+# cpufreq state (diagnostic: games at 1-4 fps could be a throttled CPU)
+for c in /sys/devices/system/cpu/cpu*/cpufreq; do
+    [ -e "$c/scaling_governor" ] || continue
+    echo "zhijack: cpufreq gov=$(cat "$c/scaling_governor" 2>/dev/null) cur=$(cat "$c/scaling_cur_freq" 2>/dev/null) min=$(cat "$c/scaling_min_freq" 2>/dev/null) max=$(cat "$c/cpuinfo_max_freq" 2>/dev/null)" >> "$LOG"
+done
+cat /proc/meminfo 2>/dev/null | head -6 >> "$LOG"
 
 # --- fb0 link test: full-white frame (RGB565 0xFFFF / 32-bit 0xFFFFFFFF) -------
 echo "zhijack: fb0 white-frame test..." >> "$LOG"
@@ -153,18 +159,29 @@ echo "zhijack: respawner frozen (icube pidof=$(pidof icube 2>/dev/null))" >> "$L
 # Background icube/rkgame watchdog: the main loop below only runs BETWEEN game
 # launches -- while FrogUI/game is up nothing stops the respawner, so icube
 # revives after ~10-15 min, respawns rkgame and steals DRM master back (the
-# observed half-white + stock boot logo screen). SIGSTOP + kill -9 every 2 s
-# from a detached loop (kill only, never renames anything).
-(
+# observed half-white + stock boot logo screen). SIGSTOP + kill -9 every 1 s
+# from a setsid-detached loop (kill only, never renames anything). Every 30 s
+# it logs what it sees, so the NEXT test tells us exactly who revives and
+# whether the watchdog is still alive at the half-white moment.
+setsid sh -c '
+    WD_LOG="$1"
+    i=0
     while true; do
-        kill -STOP $(pidof icube) 2>/dev/null
-        killall -9 icube 2>/dev/null
-        killall -9 rkgame 2>/dev/null
-        sleep 2
+        i=$((i+1))
+        # STOP any existing instance first (freezes its respawn thread), then
+        # kill -9 — STOP-then-kill closes the race where a fresh icube runs
+        # between our kill and the next iteration.
+        for p in $(pidof icube 2>/dev/null); do kill -STOP "$p" 2>/dev/null; done
+        for p in $(pidof rkgame 2>/dev/null); do kill -STOP "$p" 2>/dev/null; done
+        killall -9 icube rkgame 2>/dev/null
+        if [ $((i % 30)) -eq 0 ]; then
+            echo "watchdog alive@${i}s icube=$(pidof icube 2>/dev/null) rkgame=$(pidof rkgame 2>/dev/null) up=$(cat /proc/uptime 2>/dev/null | cut -d. -f1)s" >> "$WD_LOG"
+        fi
+        sleep 1
     done
-) &
+' sh "$LOG" &
 WD_PID=$!
-echo "zhijack: background icube/rkgame watchdog started (pid=$WD_PID)" >> "$LOG"
+echo "zhijack: background icube/rkgame watchdog started (pid=$WD_PID, 1s)" >> "$LOG"
 
 # Front-end launcher loop. FrogUI writes $LAUNCH (core path on line 1, ROM path
 # on line 2) when the user picks a game; we then launch picoarch with that core.
@@ -201,6 +218,10 @@ while true; do
             "$PICOARCH" "$CORE_PATH" "$ROM_PATH" >> "$LOG" 2>&1
             GRC=$?
             echo "game exited rc=$GRC" >> "$LOG"
+            # mem snapshot after the game: a silent death with no crash.log is
+            # usually the OOM killer (SIGKILL) — this shows how much was left
+            head -6 /proc/meminfo >> "$LOG"
+            [ -f /mnt/sdcard/crash.log ] && echo "crash.log EXISTS: $(tail -3 /mnt/sdcard/crash.log)" >> "$LOG"
             sync
         fi
     fi

@@ -48,6 +48,15 @@
 static volatile uint32_t *g_mask = NULL;
 static int g_down[KEY_CNT];
 
+/* v3: d-pad levels from BTN_DPAD_* key events + event-stream axis state */
+#ifndef BTN_DPAD_UP
+#define BTN_DPAD_UP    0x220
+#define BTN_DPAD_DOWN  0x221
+#define BTN_DPAD_LEFT  0x222
+#define BTN_DPAD_RIGHT 0x223
+#endif
+static int g_dpad_up = 0, g_dpad_dn = 0, g_dpad_lt = 0, g_dpad_rt = 0;
+
 static void upd(int code, int on) { if (code >= 0 && code < KEY_CNT) g_down[code] = on; }
 
 /* Direction keys (d-pad hat + analog stick): debounced level-follow.
@@ -111,13 +120,34 @@ int main(int argc, char **argv)
     }
     if (nfd == 0) { fprintf(stderr, "cubevol_bridge: no evdev devices\n"); return 1; }
 
+    /* axis state tracked from the EVENT STREAM (some drivers only update the
+     * abs state on EV_ABS events and report stale/zero via EVIOCGABS — the
+     * observed "UP/LEFT dead in UI while in-game works" class). Updated on
+     * every EV_ABS event; also polled via EVIOCGABS each cycle as a backup. */
+    static int g_axis[0x60];          /* ABS_MAX is 0x3f; 0x60 covers it */
+    int log_ev = 1;                   /* dump the first raw events to zhijack.log */
+    long ev_logged = 0;
     struct input_event ev;
     for (;;) {
         for (int i = 0; i < nfd; i++) {
             ssize_t rd;
             while ((rd = read(fds[i], &ev, sizeof(ev))) == (ssize_t)sizeof(ev)) {
-                if (ev.type == EV_KEY)
+                if (log_ev && ev_logged < 200) {
+                    fprintf(stderr, "bridge ev: type=%d code=%d val=%d\n",
+                            ev.type, ev.code, ev.value);
+                    ev_logged++;
+                    if (ev_logged >= 200) log_ev = 0;
+                }
+                if (ev.type == EV_KEY) {
                     upd(ev.code, ev.value != 0);
+                    /* d-pad reported as BTN_DPAD_* KEY events (some pads) */
+                    if (ev.code == BTN_DPAD_UP)   g_dpad_up = ev.value != 0;
+                    if (ev.code == BTN_DPAD_DOWN) g_dpad_dn = ev.value != 0;
+                    if (ev.code == BTN_DPAD_LEFT) g_dpad_lt = ev.value != 0;
+                    if (ev.code == BTN_DPAD_RIGHT)g_dpad_rt = ev.value != 0;
+                } else if (ev.type == EV_ABS && ev.code >= 0 && ev.code < 0x60) {
+                    g_axis[ev.code] = ev.value;   /* track axis from stream */
+                }
             }
             if (rd < 0 && errno != EAGAIN) { close(fds[i]); fds[i] = fds[--nfd]; i--; }
         }
@@ -133,30 +163,49 @@ int main(int argc, char **argv)
         if (g_down[BTN_BASE3])   mask |= 1u << K_SEL;
         if (g_down[BTN_BASE4])   mask |= 1u << K_START;
         /* d-pad hat + analog stick (any device). Physical levels are
-         * merged per-direction then fed through the pulse debouncer. */
-        int ph_up = 0, ph_dn = 0, ph_lt = 0, ph_rt = 0;
+         * merged per-direction then fed through the pulse debouncer.
+         * v3: axis state from BOTH the event stream (g_axis, updated above)
+         * AND EVIOCGABS polling; all HATs (0..3) + stick axes X/Y/Z/RX/RY/RZ
+         * with per-axis deadzone; BTN_DPAD_* key events (g_dpad_*) merge in. */
+        int ph_up = g_dpad_up, ph_dn = g_dpad_dn, ph_lt = g_dpad_lt, ph_rt = g_dpad_rt;
         for (int i = 0; i < nfd; i++) {
             struct input_absinfo ai;
-            if (ioctl(fds[i], EVIOCGABS(ABS_HAT0X), &ai) == 0) {
-                if (ai.value < 0) ph_lt = 1;
-                if (ai.value > 0) ph_rt = 1;
+            /* HAT0..HAT3 (a 2-in-1 pad's P2 d-pad is often HAT1) */
+            for (int hat = 0; hat < 4; hat++) {
+                if (ioctl(fds[i], EVIOCGABS(ABS_HAT0X + hat * 2), &ai) == 0) {
+                    if (ai.value < 0) ph_lt = 1;
+                    if (ai.value > 0) ph_rt = 1;
+                }
+                if (ioctl(fds[i], EVIOCGABS(ABS_HAT0Y + hat * 2), &ai) == 0) {
+                    if (ai.value < 0) ph_up = 1;
+                    if (ai.value > 0) ph_dn = 1;
+                }
             }
-            if (ioctl(fds[i], EVIOCGABS(ABS_HAT0Y), &ai) == 0) {
-                if (ai.value < 0) ph_up = 1;
-                if (ai.value > 0) ph_dn = 1;
-            }
-            /* Analog stick: require a non-zero reading — an unplugged port of
-             * a 2-in-1 pad reports ABS all-zero, and 0 < min+lz would stick
-             * LEFT/UP forever otherwise. */
-            if (ioctl(fds[i], EVIOCGABS(ABS_X), &ai) == 0 && ai.value != 0) {
-                int lz = (ai.maximum - ai.minimum) / 4;
-                if (ai.value < ai.minimum + lz) ph_lt = 1;
-                if (ai.value > ai.maximum - lz) ph_rt = 1;
-            }
-            if (ioctl(fds[i], EVIOCGABS(ABS_Y), &ai) == 0 && ai.value != 0) {
-                int lz = (ai.maximum - ai.minimum) / 4;
-                if (ai.value < ai.minimum + lz) ph_up = 1;
-                if (ai.value > ai.maximum - lz) ph_dn = 1;
+            /* event-stream axis state (some drivers don't expose hat via
+             * EVIOCGABS but DO send EV_ABS events) */
+            if (g_axis[ABS_HAT0X] < 0) ph_lt = 1;
+            if (g_axis[ABS_HAT0X] > 0) ph_rt = 1;
+            if (g_axis[ABS_HAT0Y] < 0) ph_up = 1;
+            if (g_axis[ABS_HAT0Y] > 0) ph_dn = 1;
+            if (g_axis[ABS_HAT1X] < 0) ph_lt = 1;
+            if (g_axis[ABS_HAT1X] > 0) ph_rt = 1;
+            if (g_axis[ABS_HAT1Y] < 0) ph_up = 1;
+            if (g_axis[ABS_HAT1Y] > 0) ph_dn = 1;
+            /* analog sticks: per-axis deadzone (25% of range) */
+            static const int axes[6] = { ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ };
+            for (int a = 0; a < 6; a++) {
+                if (ioctl(fds[i], EVIOCGABS(axes[a]), &ai) != 0) continue;
+                if (ai.value == 0 && g_axis[axes[a]] == 0) continue;  /* unplugged port */
+                int lo = ai.minimum + (ai.maximum - ai.minimum) / 4;
+                int hi = ai.maximum - (ai.maximum - ai.minimum) / 4;
+                int v = g_axis[axes[a]] ? g_axis[axes[a]] : ai.value;
+                if (axes[a] == ABS_X || axes[a] == ABS_RX) {
+                    if (v < lo) ph_lt = 1;
+                    if (v > hi) ph_rt = 1;
+                } else {
+                    if (v < lo) ph_up = 1;
+                    if (v > hi) ph_dn = 1;
+                }
             }
         }
         if (dir_feed(0, ph_up)) mask |= 1u << K_UP;
@@ -167,7 +216,13 @@ int main(int argc, char **argv)
         /* periodic diagnostic (every ~2 s) so zhijack.log shows which physical
          * directions the bridge sees -- use to verify UP/LEFT reach evdev */
         static long last_diag = 0;
+        static int last_up=-1, last_dn=-1, last_lt=-1, last_rt=-1;
         long now = now_ms();
+        if (ph_up!=last_up || ph_dn!=last_dn || ph_lt!=last_lt || ph_rt!=last_rt) {
+            fprintf(stderr, "bridge: dir CHANGE up=%d dn=%d lt=%d rt=%d mask=%08x\n",
+                    ph_up, ph_dn, ph_lt, ph_rt, (unsigned)mask);
+            last_up=ph_up; last_dn=ph_dn; last_lt=ph_lt; last_rt=ph_rt;
+        }
         if (now - last_diag >= 2000) {
             last_diag = now;
             fprintf(stderr, "bridge: dir up=%d dn=%d lt=%d rt=%d mask=%08x\n",
