@@ -164,6 +164,15 @@ int main(int argc, char **argv)
         if (dir_feed(2, ph_lt)) mask |= 1u << K_LEFT;
         if (dir_feed(3, ph_rt)) mask |= 1u << K_RIGHT;
         *m = mask;
+        /* periodic diagnostic (every ~2 s) so zhijack.log shows which physical
+         * directions the bridge sees -- use to verify UP/LEFT reach evdev */
+        static long last_diag = 0;
+        long now = now_ms();
+        if (now - last_diag >= 2000) {
+            last_diag = now;
+            fprintf(stderr, "bridge: dir up=%d dn=%d lt=%d rt=%d mask=%08x\n",
+                    ph_up, ph_dn, ph_lt, ph_rt, (unsigned)mask);
+        }
         usleep(10000); /* 10 ms poll */
     }
     return 0;
