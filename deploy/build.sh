@@ -250,6 +250,8 @@ if [ -f "$FROGUI_PATCH" ]; then
     if git -C FrogUI apply --ignore-whitespace --check "$FROGUI_PATCH" 2>/dev/null; then
         log "Applying FrogUI full RK3036G patch (v8.7)..."
         git -C FrogUI apply --ignore-whitespace "$FROGUI_PATCH"
+        # v8.10: fix C99 implicit declaration of mkdir_p (called before static def)
+        sed -i '/^static void map_save(void) {/i\static void mkdir_p(const char *path); /* forward decl */' FrogUI/frogui_libretro.c 2>/dev/null || true
     elif git -C FrogUI apply --ignore-whitespace -R --check "$FROGUI_PATCH" 2>/dev/null; then
         log "FrogUI full patch already applied -- skipping."
     else
