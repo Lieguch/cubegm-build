@@ -1,0 +1,26 @@
+=== CubeGM build report (bootstrap_linux.sh) ===
+date     : Sat Aug 22 16:26:15 UTC 2026
+host     : Linux runnervmec1zy 6.8.0-1064-azure #72~22.04.1-Ubuntu SMP Wed Jul 22 23:39:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+gcc      : arm-linux-gnueabihf-gcc (crosstool-NG 1.26.0) 13.2.0
+PREFIX   : /home/runner/cubegm-tc
+SYSROOT  : /home/runner/cubegm-tc/arm-linux-gnueabihf/sysroot
+sysroot glibc ceiling: GLIBC_2.17
+--- deploy/cubegm (device payload) ---
+present; top-level:
+total 492
+drwxr-xr-x 6 runner runner   4096 Aug 22 16:26 .
+drwxr-xr-x 7 runner runner   4096 Aug 22 16:26 ..
+drwxr-xr-x 2 runner runner   4096 Aug 22 16:07 MD
+-rwxr-xr-x 1 runner runner   1151 Aug 22 16:26 alias_stock_cores.sh
+-rwxr-xr-x 1 runner runner    304 Aug 22 16:07 autorun
+drwxr-xr-x 2 runner runner   4096 Aug 22 16:26 cores
+-rwxr-xr-x 1 runner runner   9720 Aug 22 16:26 cubevol_bridge
+-rwxr-xr-x 1 runner runner  17968 Aug 22 16:26 diag
+drwxr-xr-x 3 runner runner   4096 Aug 22 16:07 install_first
+drwxr-xr-x 2 runner runner   4096 Aug 22 16:26 lib
+-rwxr-xr-x 1 runner runner 422568 Aug 22 16:26 picoarch
+-rwxr-xr-x 1 runner runner  12155 Aug 22 16:07 zhijack.sh
+picoarch GLIBC req: GLIBC_2.17
+--- crosstool build log ---
+NOT FOUND (/home/runner/work/cubegm-build/cubegm-build/cubegm-build-logs/crosstool_build.log)
+--- bootstrap exit code: 0 ---
