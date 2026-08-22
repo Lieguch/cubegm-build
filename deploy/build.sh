@@ -446,6 +446,25 @@ cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
 chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
+# Direction B (charter §0.4): device-side diagnostics. diag.c answers the
+# "what are the REAL keycodes/axes/DRM/ALSA/core facts" questions ON the device
+# so fixes stop being guesses. Ships as cubegm/diag (runs: diag all | sysinfo
+# | input | display | audio | cores). libc + dl only -- no SDL/libpng.
+# DRM headers come from deploy/drm_headers/ (bundled Linux v4.4 UAPI).
+# -----------------------------------------------------------------------------
+if [ -f "$HERE/diag.c" ]; then
+    log "Building diag (device diagnostics)..."
+    if ${CROSS_COMPILE}gcc -O2 -Wall -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 \
+            -mfloat-abi=hard --sysroot="$SYSROOT" -I"$HERE/drm_headers" \
+            "$HERE/diag.c" -o "$DST/diag" -ldl -static-libgcc; then
+        ${CROSS_COMPILE}strip "$DST/diag"
+        log "diag built: $(ls -la "$DST/diag" 2>/dev/null | awk '{print $5}') bytes"
+    else
+        die "diag build failed -- fix deploy/diag.c (diagnostics are the fact base for all fixes)."
+    fi
+fi
+
+# -----------------------------------------------------------------------------
 # cubevol_bridge: emulate the stock cubevol input daemon (FrogUI reads
 # /tmp/joy_key shared memory; the stock daemon is inside rkgame, so after the
 # hijack there is NO input source). Read USB pads via evdev, write the mask.

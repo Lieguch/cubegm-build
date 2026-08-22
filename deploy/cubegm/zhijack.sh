@@ -211,6 +211,18 @@ while true; do
     # runs every boot, so a future "no crash.log" is a real no-crash, not a
     # missing feature.
     echo "=== picoarch launch iter=$ITER $(date '+%H:%M:%S' 2>/dev/null) ===" >> /mnt/sdcard/crash.log 2>/dev/null
+    # Direction B: one-shot diagnostics. Put an empty file named "diag.flag"
+    # on the SD root -> this boot runs `diag all` first (report to
+    # /mnt/sdcard/diag_report.txt), then deletes the flag so normal boot
+    # continues on the next iteration. Fact base for every fix -- see
+    # charter §0.4.
+    if [ -f /mnt/sdcard/diag.flag ] && [ -x /mnt/sdcard/cubegm/diag ]; then
+        echo "zhijack: diag.flag present -> running diag all (this boot only)" >> "$LOG"
+        /mnt/sdcard/cubegm/diag all >> "$LOG" 2>&1
+        rm -f /mnt/sdcard/diag.flag
+        sync
+        echo "zhijack: diag finished, report -> /mnt/sdcard/diag_report.txt" >> "$LOG"
+    fi
     "$PICOARCH" "$FROGUI_CORE" "$FROGUI_CORE" >> "$LOG" 2>&1
     RC=$?
     echo "frogui exited rc=$RC" >> "$LOG"
