@@ -47,6 +47,16 @@
 
 static volatile uint32_t *g_mask = NULL;
 static int g_down[KEY_CNT];
+/* v8.7: per-fd ABS capability bitmap. The old code treated "axis value == 0"
+ * as "unplugged port" (skip), which silently dropped the UP/LEFT directions:
+ * a pad pushed to the TOP/LEFT reads ABS_Y/ABS_X == 0 (minimum) and was
+ * skipped -> UP and LEFT were permanently dead while DOWN/RIGHT worked.
+ * Capability is decided ONCE at open time via EVIOCGBIT(EV_ABS), not by the
+ * live axis value. */
+static unsigned long g_absbits[16][4];   /* [fd index][word] */
+static int g_abs_ok[16];                 /* 1 if EVIOCGBIT(EV_ABS) succeeded */
+#define ABS_HAS(fd_i, axis) \
+    (g_abs_ok[fd_i] && ((g_absbits[fd_i][(axis) / (8 * sizeof(long))] >> ((axis) % (8 * sizeof(long)))) & 1))
 
 /* v3: d-pad levels from BTN_DPAD_* key events + event-stream axis state */
 #ifndef BTN_DPAD_UP
@@ -114,6 +124,10 @@ int main(int argc, char **argv)
         unsigned long evbits = 0;
         if (ioctl(fd, EVIOCGBIT(0, sizeof(evbits)), &evbits) < 0) { close(fd); continue; }
         if (evbits & (1ul << EV_KEY)) {
+            /* v8.7: record the device's ABS capability bitmap once, at open. */
+            g_abs_ok[nfd] = 0;
+            if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(g_absbits[nfd])), g_absbits[nfd]) >= 0)
+                g_abs_ok[nfd] = 1;
             fds[nfd++] = fd;
             fprintf(stderr, "cubevol_bridge: watching %s\n", path);
         } else close(fd);
@@ -123,8 +137,11 @@ int main(int argc, char **argv)
     /* axis state tracked from the EVENT STREAM (some drivers only update the
      * abs state on EV_ABS events and report stale/zero via EVIOCGABS — the
      * observed "UP/LEFT dead in UI while in-game works" class). Updated on
-     * every EV_ABS event; also polled via EVIOCGABS each cycle as a backup. */
+     * every EV_ABS event; also polled via EVIOCGABS each cycle as a backup.
+     * v8.7: g_axis_seen[] marks axes that produced an event, because value 0
+     * is a legit "pushed to minimum" (UP/LEFT) state, not "unplugged". */
     static int g_axis[0x60];          /* ABS_MAX is 0x3f; 0x60 covers it */
+    static int g_axis_seen[0x60];
     int log_ev = 1;                   /* dump the first raw events to zhijack.log */
     long ev_logged = 0;
     struct input_event ev;
@@ -147,6 +164,7 @@ int main(int argc, char **argv)
                     if (ev.code == BTN_DPAD_RIGHT)g_dpad_rt = ev.value != 0;
                 } else if (ev.type == EV_ABS && ev.code >= 0 && ev.code < 0x60) {
                     g_axis[ev.code] = ev.value;   /* track axis from stream */
+                    g_axis_seen[ev.code] = 1;     /* v8.7: value 0 is VALID (min) */
                 }
             }
             if (rd < 0 && errno != EAGAIN) { close(fds[i]); fds[i] = fds[--nfd]; i--; }
@@ -191,15 +209,28 @@ int main(int argc, char **argv)
             if (g_axis[ABS_HAT1X] > 0) ph_rt = 1;
             if (g_axis[ABS_HAT1Y] < 0) ph_up = 1;
             if (g_axis[ABS_HAT1Y] > 0) ph_dn = 1;
-            /* analog sticks: per-axis deadzone (25% of range) */
-            static const int axes[6] = { ABS_X, ABS_Y, ABS_Z, ABS_RX, ABS_RY, ABS_RZ };
-            for (int a = 0; a < 6; a++) {
-                if (ioctl(fds[i], EVIOCGABS(axes[a]), &ai) != 0) continue;
-                if (ai.value == 0 && g_axis[axes[a]] == 0) continue;  /* unplugged port */
+            /* analog sticks: per-axis deadzone (25% of range).
+             * v8.7 FIXES:
+             *  - capability decided by the EVIOCGBIT(EV_ABS) bitmap recorded at
+             *    open, NEVER by the live value. value==0 IS a valid "pushed to
+             *    minimum" state; the old `ai.value==0 && g_axis==0 -> continue`
+             *    misread UP (ABS_Y=0) and LEFT (ABS_X=0) as unplugged ports and
+             *    skipped them -> UP/LEFT permanently dead, DOWN/RIGHT fine.
+             *  - prefer the event-stream value once the axis has produced an
+             *    event (g_axis_seen), EVIOCGABS poll only before the first one.
+             *  - only X/Y/RX/RY are direction axes; Z/RZ are triggers on many
+             *    pads (Twin USB Gamepad has ABS_Z/ABS_RZ) and must not move
+             *    the cursor. */
+            static const int dir_axes[4] = { ABS_X, ABS_Y, ABS_RX, ABS_RY };
+            for (int a = 0; a < 4; a++) {
+                int ax = dir_axes[a];
+                if (!ABS_HAS(i, ax)) continue;                 /* device lacks it */
+                if (ioctl(fds[i], EVIOCGABS(ax), &ai) != 0) continue;
+                if (ai.minimum == ai.maximum) continue;        /* constant = absent */
                 int lo = ai.minimum + (ai.maximum - ai.minimum) / 4;
                 int hi = ai.maximum - (ai.maximum - ai.minimum) / 4;
-                int v = g_axis[axes[a]] ? g_axis[axes[a]] : ai.value;
-                if (axes[a] == ABS_X || axes[a] == ABS_RX) {
+                int v = g_axis_seen[ax] ? g_axis[ax] : ai.value;
+                if (ax == ABS_X || ax == ABS_RX) {
                     if (v < lo) ph_lt = 1;
                     if (v > hi) ph_rt = 1;
                 } else {

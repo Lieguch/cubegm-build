@@ -31,6 +31,10 @@ LOG=/mnt/sdcard/zhijack.log
 : > "$LOG"
 echo "=== zhijack boot [rk3036g] $(date '+%H:%M:%S' 2>/dev/null) ===" >> "$LOG"
 echo "pid=$$ cmdline=$(cat /proc/$$/cmdline 2>/dev/null)" >> "$LOG"
+# v8.7: prove the debug/crash-log path is live. picoarch appends a backtrace
+# here on SIGSEGV/SIGABRT/SIGBUS/SIGILL/SIGFPE; this header line exists so
+# "no crash.log" can be distinguished from "no crash happened" next round.
+echo "=== CubeGM debug log (crash backtraces land here) $(date '+%H:%M:%S' 2>/dev/null) ===" > /mnt/sdcard/crash.log
 sync
 
 # --- boot-chain marker: did the stock launcher really reach us? ---------------
@@ -203,6 +207,10 @@ while true; do
         sleep 5
         continue
     fi
+    # v8.7: stamp each picoarch launch into crash.log — proves the debug path
+    # runs every boot, so a future "no crash.log" is a real no-crash, not a
+    # missing feature.
+    echo "=== picoarch launch iter=$ITER $(date '+%H:%M:%S' 2>/dev/null) ===" >> /mnt/sdcard/crash.log 2>/dev/null
     "$PICOARCH" "$FROGUI_CORE" "$FROGUI_CORE" >> "$LOG" 2>&1
     RC=$?
     echo "frogui exited rc=$RC" >> "$LOG"

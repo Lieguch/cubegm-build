@@ -37,7 +37,16 @@ ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O
 # MIPS), and the PLATFORM_SF3000 define that our patch guards on.
 CFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -I./ -I./libretro-common/include/ -I$SYSROOT/usr/include/SDL -DUSE_C_SCALER -DPLATFORM_SF3000 -DRK3036G_NO_MIYOO_SCALE -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DSCREEN_BPP=2 -DCONTENT_DIR='\"/mnt/SDCARD/Roms\"' ${CFLAGS}"
 CXXFLAGS="$CFLAGS"
-LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -Wl,--gc-sections -s ${LDFLAGS}"
+# v8.7: -Wl,--export-dynamic (-rdynamic) exports the main binary's symbols to
+# the dynamic symbol table so the FrogUI launcher core (dlopen'd into this
+# process) can dlsym(NULL,"plat_sound_finish") / "hwdisp_restore". The old
+# line had "-s" and NO -rdynamic -> both dlsyms returned NULL at runtime:
+#   "plat_sound_finish not exported (audio may stay silent)"
+# and the UI process never closed its ALSA PCM before fork, so every game
+# child's snd_pcm_open("default") failed EBUSY -> games silent forever.
+# -s is dropped here too (stripping AFTER the link, via the `strip` step,
+# keeps .dynsym intact; a link-time -s is redundant).
+LDFLAGS="${ARCH_FLAGS} --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lc -ldl -lgcc -lm -lSDL -lpng12 -lz -lpthread -Wl,--gc-sections -Wl,--export-dynamic ${LDFLAGS}"
 
 log(){ printf '\033[1;32m[armhf-build]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[ERROR]\033[0m %s\n' "$*" >&2; exit 1; }

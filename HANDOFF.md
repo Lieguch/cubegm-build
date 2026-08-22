@@ -2,7 +2,28 @@
 
 > 用途：供接手的 Agent / 大模型快速接手，读完即可继续，无需从头探索。
 > 维护：每次达到版本里程碑（v0.x / v1.0）或重大变更后更新本文件与 VERSION。
-> 最近更新：2026-08-18（§31 用户铁律级需求 19 条锁定基线 + 版本语义更正：取消 vFinal 拆分，v1.0＝19 条完成＋真机验证；v0.2 仍为最新已发 tag）
+> 最近更新：2026-08-22（v0.3.1 = payload-278 实机 10 项问题根治轮：输入/音频/性能/显示根因修复 + 单全量补丁构建，CI run 待验证）
+
+## 0. 最新版本交接（v0.3.1，2026-08-22，payload-278 实机 10 项问题根治）
+
+**交接给下一位 Agent 的第一件事**：payload-278 实机报告 10 项问题（上/左失效、游戏内仅 Select+START 有效、无声、005 黑屏、列表慢、缺 L/R 翻页、3-4FPS、竖屏、002 约 1FPS、10 分钟半白屏）。本版本针对全部 10 项做了**根因级修复**（非空修复），全部依据 278 的四份实机日志（zhijack.log / picoarch_init.log / tfhijack.log / sf3000_keymap.txt）与上游源码实证：
+
+| # | 问题 | 根因（实证） | v0.3.1 修复 |
+|---|---|---|---|
+| 1 | UI 上/左失效 | cubevol_bridge.c 把摇杆推到极限(ABS_Y/X=0)误判为"未插端口"并 continue（值 0 恰是上/左） | 按 EVIOCGBIT 能力位图判定轴存在性，不再看值；排除扳机轴 Z/RZ |
+| 2 | 游戏内仅 Select+START 有效 | ①evdev 绑定表 0x120-0x12b 整体错位（物理 A=0x122 被绑成 L，SELECT=0x128 被绑成 L2 等）；②游戏输入只走 in_update（evdev/SDL），未接入 shm | 绑定表对齐原厂 profile 0810_0001_0100；pa_input_poll OR 入 sf3000_keys_to_buttons(raw)（shm 双通道，与 UI 同源）；摇杆数字化取消 abs_to_digital 门控 |
+| 3 | 无声 | build_sf3000_armhf.sh LDFLAGS 无 -rdynamic 且有 -s → frogui dlsym(plat_sound_finish) 恒失败 → fork 前 ALSA PCM 未释放 → 子进程 EBUSY | LDFLAGS 加 -Wl,--export-dynamic 去 -s；子进程重试前 snd_config_update_free_global() |
+| 4 | 005 黑屏 | frogui 005 映射 fceumm，而原厂 005.dat 由 libemu_nestopia 驱动（兼容性差异） | 005 → nestopia_libretro.so（CI 已构建） |
+| 5 | 列表慢 | 根目录扫描包含大量杂散文件 + 每项 stat | 根目录只显示目录+Settings；保留 /tmp 跨进程扫描缓存 |
+| 6 | L/R 翻页 | frogui v86 补丁把 lt/rt（左右方向键）当 L/R 用，肩键从未读取 | handle_input 读 CV_L/CV_R，翻页绑肩键；d-pad 左右恢复本职 |
+| 7 | 3-4FPS | 竖屏游戏(hw<h)90° 旋转每像素 2 次 64 位乘除（1280x720≈0.9Mpx/帧）；部分 core 32bpp 慢路径 | 竖屏旋转预计算 v_xcol/v_yrow 表（几何变化才重建） |
+| 8 | 竖屏 | 同上旋转路径慢 + 无黑边处理 | 同 7；aspect-fit 保留黑边（日志已显示 rect 1234x720+23+0 等） |
+| 9 | 002 约 1FPS | 设备上 snes9x2005_libretro.so 是未优化 core（frogui 表指向它）；CI 构建的是 snes9x2005_plus | 002 → snes9x2005_plus_libretro.so；build.sh 额外输出 snes9x2005_libretro.so 别名 |
+| 10 | 10 分钟半白屏 | fork+exec 游戏子进程继承父进程 DRM card0/fb0 fd（open 无 O_CLOEXEC），子进程退出 close → 父进程 fd 失效 → hwdisp_restore 失败 | open 加 O_CLOEXEC；fail 路径 DRM_IOCTL_MODE_RMFB 清理 fb 泄漏 |
+
+**构建变更（重要）**：picoarch/frogui 补丁改为**单一全量补丁**（patch/picoarch_rk3036g_full.patch 基于 f8ff5ba、patch/frogui_rk3036g_full.patch 基于 2f41ace），build.sh 只应用一个全量补丁（失败 die）——彻底消除旧 5 补丁叠加失配（run 277 根因）。旧补丁保留在 patch/ 作参考，不再被 build.sh 引用。
+
+**验证要求（下一轮实机）**：①四份日志里应出现 `in_evdev: key code=...`（前 40 键码，验证绑定匹配）；②`FROGUI_DBG: plat_sound_finish` 不应再报 "not exported"；③/ mnt/sdcard/crash.log 每次开机有 zhijack 头行（证明 debug 存活）；④zhijack.log 的 bridge 方向日志应出现 up=1/lt=1。
 
 ## 1. 项目目标
 为 RK3036G 掌机（R36SX / DataFrog SF3000 / SF3500 / GB350 等）做 CubeGM 固件开源替代。

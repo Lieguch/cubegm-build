@@ -1,0 +1,440 @@
+diff --git a/frogos.c b/frogos.c
+index 93ff2a5..349991f 100644
+--- a/frogos.c
++++ b/frogos.c
+@@ -33,6 +33,33 @@ static loader_func_t direct_loader = (loader_func_t)LOADER_ADDR;
+ #include "favorites.h"
+ #include "settings.h"
+ 
++// ---------------------------------------------------------------------------
++// [CubeGM / RK3036G] Build fixes for the non-SF2000 (ARM / RK3036G) build.
++// The upstream tip (commit 2f41ace) was developed for SF2000 (MIPS); the
++// unix/ARM Makefile target references symbols never declared in this TU.
++// Declare / stub them here so frogui_libretro.so compiles and links. Game
++// LAUNCHING on RK3036G (the direct_loader path) is a separate, tracked item --
++// direct_loader is a no-op here so the menu still renders.
++// ---------------------------------------------------------------------------
++#ifndef SF2000
++// Game-launch string buffers built by the menu and consumed by retro_run(),
++// which fwrite()s ptr_gs_run_game_file to /mnt/sda1/temp_launch.gba. Upstream
++// added the usages in 2f41ace but omitted these declarations.
++static char ptr_gs_run_game_file[1024];
++static char ptr_gs_run_game_name[1024];
++
++// direct_loader() jumps to the SF2000 stock loader at a fixed address; that
++// mechanism does not exist on RK3036G. Stub it (no-op) so the binary links.
++static void direct_loader(const char *path, int unused) {
++    (void)path; (void)unused;
++}
++#endif
++
++// xlog() is only defined in fbdev.c, which is NOT in the Makefile SOURCES_C,
++// so it is undefined for every Makefile-based build. Provide a local no-op.
++// Declared with varargs because callers pass printf-style format + arguments.
++static void xlog(const char *fmt, ...) { (void)fmt; }
++
+ // Console to core name mapping (from buildcoresworking.sh)
+ typedef struct {
+     const char *console_name;
+diff --git a/frogui_libretro.c b/frogui_libretro.c
+index 263d1f1..1c37a81 100644
+--- a/frogui_libretro.c
++++ b/frogui_libretro.c
+@@ -19,6 +19,7 @@
+ #include <unistd.h>
+ #include <dirent.h>
+ #include <stdbool.h>
++#include <dlfcn.h>   /* v8.6: dlsym picoarch's plat_sound_finish / hwdisp_restore */
+ 
+ #include "libretro.h"
+ #include "font.h"
+@@ -30,7 +31,23 @@
+ 
+ #define SDCARD_BASE  "/mnt/sdcard"
+ #define CORES_PATH   SDCARD_BASE "/cubegm/cores"
+-#define ROMS_PATH    SDCARD_BASE "/roms"
++/* ROM root resolved at runtime: the stock card ships "Roms" (uppercase) while
++ * the FrogUI convention is "roms". FAT mounts are usually case-insensitive,
++ * but ext4/case-sensitive mounts would leave the menu black/empty. Probe both.
++ * (Observed on the RK3036G unit: SD root shows stock files like "11.png" and
++ * the menu came up black because only /mnt/sdcard/roms was probed.) */
++#define ROMS_PATH_DEFAULT SDCARD_BASE "/roms"
++static char g_roms_path[512];
++static const char* roms_path(void) {
++    if (g_roms_path[0]) return g_roms_path;
++    /* Real-device finding: FrogUI's /roms resolved to the stock Roms/ (FAT
++     * case-insensitive) and dumped its mixed contents (003/004/PS1 + loose
++     * .bin files + SAVE + root.dat) straight into the menu. The stock card
++     * root actually carries the 000-008 category folders, so show the SD root
++     * and let the user pick a category; Roms/ remains reachable as a folder. */
++    strcpy(g_roms_path, SDCARD_BASE);
++    return g_roms_path;
++}
+ #define LAUNCH_FILE  "/tmp/frogui_launch.txt"
+ 
+ /* Console → core mapping (folder name → libretro .so)
+@@ -133,6 +150,30 @@ static const ConsoleMapping console_mappings[] = {
+     {"vapor",  CORES_PATH "/vaporspec_libretro.so"},
+     {"amiga",  CORES_PATH "/uae_libretro.so"},
+     {"atari-st", CORES_PATH "/castaway_libretro.so"},
++    /* --- RK3036G/CubeGM: stock 000-008.dat categories (stock libemu_* aliases) --- */
++    {"000",    CORES_PATH "/fbalpha2012_libretro.so"},   /* Arcade group (stock libemu_fbalpha2012) */
++    {"001",    CORES_PATH "/fceumm_libretro.so"},        /* NES/FC (stock libemu_nes) */
++    /* v8.7: 002 now points at the CI-built snes9x2005_plus (PR#76 colour-op
++     * + MIPS/ARM optimisations; the old snes9x2005_libretro.so on the card was
++     * a stock unoptimised core -> ~1 FPS on 002 games). build.sh also ships a
++     * snes9x2005_libretro.so alias so any other mapping keeps working. */
++    {"002",    CORES_PATH "/snes9x2005_plus_libretro.so"}, /* SFC (optimised) */
++    {"003",    CORES_PATH "/picodrive_libretro.so"},     /* MD (stock libemu_md) */
++    {"004",    CORES_PATH "/mgba_libretro.so"},          /* GBA (stock libemu_mgba) */
++    /* v8.7: 005 -> nestopia (the STOCK 005.dat folder was driven by
++     * libemu_nestopia; pointing it at fceumm made some 005 ROMs load to a
++     * black screen). nestopia is CI-built (CORE_TABLE entry exists). */
++    {"005",    CORES_PATH "/nestopia_libretro.so"},      /* NES variant (stock libemu_nestopia) */
++    {"006",    CORES_PATH "/gambatte_libretro.so"},      /* GB/GBC (single-screen; tgbdual defaulted to link-cable dual) */
++    {"007",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* PS1 (stock libemu_pcsx) */
++    {"008",    CORES_PATH "/stella2014_libretro.so"},    /* Atari 2600 (stock libemu_stella) */
++    {"ARCADE", CORES_PATH "/fbalpha2012_libretro.so"},   /* uppercase alias */
++    {"PS1",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* uppercase alias */
++    {"PSX",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* uppercase alias */
++    {"GB",     CORES_PATH "/tgbdual_libretro.so"},       /* uppercase alias */
++    {"GBC",    CORES_PATH "/tgbdual_libretro.so"},       /* uppercase alias */
++    {"GAMEBOY",CORES_PATH "/tgbdual_libretro.so"},       /* uppercase alias */
++    {"2600",   CORES_PATH "/stella2014_libretro.so"},    /* uppercase alias */
+     {NULL, NULL}
+ };
+ 
+@@ -143,6 +184,31 @@ static const char* get_core_for_folder(const char *folder) {
+     return NULL;
+ }
+ 
++/* RK3036G/CubeGM: fall back on file extension when a ROM sits in a folder
++ * that is not in console_mappings (e.g. .bin/.md dumped straight into the
++ * /roms root -> folder == "roms" matches nothing, so nothing happened). */
++static const char* get_core_for_file(const char *path) {
++    const char *ext = strrchr(path, '.');
++    if (!ext) return NULL;
++    if (strcasecmp(ext, ".bin") == 0 || strcasecmp(ext, ".md") == 0 ||
++        strcasecmp(ext, ".smd") == 0 || strcasecmp(ext, ".gen") == 0)
++        return CORES_PATH "/picodrive_libretro.so";
++    if (strcasecmp(ext, ".cue") == 0 || strcasecmp(ext, ".iso") == 0 ||
++        strcasecmp(ext, ".chd") == 0)
++        return CORES_PATH "/pcsx_rearmed_libretro.so";
++    if (strcasecmp(ext, ".zip") == 0)
++        return CORES_PATH "/fbalpha2012_libretro.so";
++    if (strcasecmp(ext, ".nes") == 0 || strcasecmp(ext, ".fds") == 0)
++        return CORES_PATH "/fceumm_libretro.so";
++    if (strcasecmp(ext, ".sfc") == 0 || strcasecmp(ext, ".smc") == 0)
++        return CORES_PATH "/snes9x2005_plus_libretro.so";
++    if (strcasecmp(ext, ".gba") == 0) return CORES_PATH "/mgba_libretro.so";
++    if (strcasecmp(ext, ".gb") == 0 || strcasecmp(ext, ".gbc") == 0)
++        return CORES_PATH "/tgbdual_libretro.so";
++    if (strcasecmp(ext, ".a26") == 0) return CORES_PATH "/stella2014_libretro.so";
++    return NULL;
++}
++
+ /* Libretro callbacks */
+ static retro_video_refresh_t     video_cb     = NULL;
+ static retro_environment_t       environ_cb   = NULL;
+@@ -161,7 +227,7 @@ typedef struct { char name[256]; int is_dir; } DirEntry;
+ static DirEntry *entries    = NULL;
+ static int entry_count      = 0;
+ static int entry_capacity   = 0;
+-static char current_path[MAX_PATH_LEN] = ROMS_PATH;
++static char current_path[MAX_PATH_LEN];
+ static int selected_index   = 0;
+ static int scroll_offset    = 0;
+ static uint16_t *framebuffer = NULL;
+@@ -276,22 +342,114 @@ static const char* get_basename(const char *path) {
+ 
+ #define SETTINGS_ENTRY_NAME ">> Settings"
+ 
++/* ---------------------------------------------------------------------------
++ * /tmp file scan cache (v8.6)
++ * scan_directory's SD walk (stat() per entry, sorting) is the slow menu
++ * delay. The in-memory re-entry cache only helps WITHIN one process, but a
++ * new frogui process starts after every game exit (retro_init re-scans).
++ * /tmp is tmpfs (RAM): a cache file there survives across processes, so the
++ * list is instant after the first visit. Section format:
++ *   === <path>
++ *   <mtime>|<size>|<count>
++ *   <name>|<is_dir>            x count
++ * ------------------------------------------------------------------------- */
++#define SCAN_CACHE "/tmp/frogui_scan.dat"
++#define SCAN_CACHE_MAX 65536
++
++static int scan_cache_load(const char *path) {
++    struct stat st0;
++    if (stat(path, &st0) != 0) return -1;
++    FILE *f = fopen(SCAN_CACHE, "r");
++    if (!f) return -1;
++    char line[600];
++    int found = 0;
++    while (fgets(line, sizeof line, f)) {
++        line[strcspn(line, "\r\n")] = 0;
++        if (strncmp(line, "===", 3) == 0) {
++            if (found) break;
++            if (strcmp(line + 4, path) == 0) found = 1;
++        } else if (found) {
++            long mt = 0, sz = 0; int cnt = 0;
++            if (sscanf(line, "%ld|%ld|%d", &mt, &sz, &cnt) == 3 &&
++                mt == (long)st0.st_mtime && sz == (long)st0.st_size && cnt >= 0) {
++                entry_count = 0;
++                for (int i = 0; i < cnt && fgets(line, sizeof line, f); i++) {
++                    line[strcspn(line, "\r\n")] = 0;
++                    char *sep = strrchr(line, '|');
++                    if (!sep) break;
++                    *sep = 0;
++                    if (entry_count >= entry_capacity) {
++                        entry_capacity = entry_capacity ? entry_capacity * 2 : INITIAL_ENTRIES_CAPACITY;
++                        entries = realloc(entries, entry_capacity * sizeof(DirEntry));
++                        if (!entries) { entry_count = 0; fclose(f); return -1; }
++                    }
++                    strncpy(entries[entry_count].name, line, 255);
++                    entries[entry_count].name[255] = 0;
++                    entries[entry_count].is_dir = (sep[1] == '1');
++                    entry_count++;
++                }
++                fclose(f);
++                return 0;
++            }
++            break;   /* dir present but stale -> rescan */
++        }
++    }
++    fclose(f);
++    return -1;
++}
++
++static void scan_cache_save(const char *path) {
++    struct stat st0;
++    if (stat(path, &st0) != 0) return;
++    /* bound the file: rewrite from scratch once it grows past the cap */
++    struct stat cs;
++    if (stat(SCAN_CACHE, &cs) == 0 && cs.st_size > SCAN_CACHE_MAX)
++        remove(SCAN_CACHE);
++    FILE *f = fopen(SCAN_CACHE, "a");
++    if (!f) return;
++    fprintf(f, "=== %s\n%ld|%ld|%d\n", path, (long)st0.st_mtime, (long)st0.st_size, entry_count);
++    for (int i = 0; i < entry_count; i++)
++        fprintf(f, "%s|%d\n", entries[i].name, entries[i].is_dir ? 1 : 0);
++    fclose(f);
++}
++
++static char g_scan_path[512] = "";
++static long g_scan_mtime = -1, g_scan_size = -1;
+ static void scan_directory(const char *path) {
++    /* re-entry cache: same dir + unchanged mtime/size -> reuse entries.
++     * (returning from a game re-runs retro_init -> full SD re-scan WAS the
++     * long menu delay; SD stat() is the slow part.) */
++    struct stat st0;
++    if (stat(path, &st0) == 0 && strcmp(path, g_scan_path) == 0 &&
++        (long)st0.st_mtime == g_scan_mtime && (long)st0.st_size == g_scan_size)
++        return;
++    strncpy(g_scan_path, path, sizeof(g_scan_path)-1);
++    g_scan_path[sizeof(g_scan_path)-1] = 0;
++    g_scan_mtime = (long)st0.st_mtime; g_scan_size = (long)st0.st_size;
++    /* v8.6: /tmp file cache (cross-process) — instant menu after first visit */
++    if (scan_cache_load(path) == 0) return;
+     DIR *dir = opendir(path);
+     if (!dir) return;
+     entry_count = 0;
+     struct dirent *e;
+     while ((e = readdir(dir)) != NULL) {
+         if (e->d_name[0] == '.') continue;
++        /* stock system dir / file noise: cubegm/ holds the front-end itself */
++        if (strcmp(e->d_name, "cubegm") == 0) continue;
+         struct stat st;
+         char full[MAX_PATH_LEN];
+         snprintf(full, sizeof(full), "%s/%s", path, e->d_name);
+         if (stat(full, &st) != 0) continue;
+         if (!S_ISDIR(st.st_mode)) {
+             const char *ext = strrchr(e->d_name, '.');
++            /* v8.7: at the ROOT level show directories only (plus Settings) —
++             * loose root files (sav/log/bak noise) are never navigable there;
++             * skipping them removes the per-entry stat() cost of the first
++             * menu and keeps the root list instant. */
++            if (strcmp(path, roms_path()) == 0) continue;
+             if (ext && (strcasecmp(ext,".csv")==0 || strcasecmp(ext,".txt")==0 ||
+                         strcasecmp(ext,".xml")==0 || strcasecmp(ext,".jpg")==0 ||
+-                        strcasecmp(ext,".png")==0)) continue;
++                        strcasecmp(ext,".png")==0 || strcasecmp(ext,".dat")==0)) continue;
+         }
+         if (entry_count >= entry_capacity) {
+             entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
+@@ -313,7 +471,7 @@ static void scan_directory(const char *path) {
+                 DirEntry tmp = entries[i]; entries[i] = entries[j]; entries[j] = tmp;
+             }
+     /* Append Settings shortcut at root level */
+-    if (strcmp(path, ROMS_PATH) == 0) {
++    if (strcmp(path, roms_path()) == 0) {
+         if (entry_count >= entry_capacity) {
+             entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
+             entries = realloc(entries, entry_capacity * sizeof(DirEntry));
+@@ -326,10 +484,18 @@ static void scan_directory(const char *path) {
+ 
+     selected_index = 0;
+     scroll_offset  = 0;
++    scan_cache_save(path);   /* v8.6: persist for the next frogui process */
+ }
+ 
+ static void request_game_launch(const char *core_path, const char *rom_path) {
+     dbg("fork picoarch");
++    /* v8.6: release the UI process's ALSA PCM BEFORE forking — the game child
++     * re-opens "default"; if the parent still holds it the child's
++     * snd_pcm_open fails EBUSY ("ALSA init failed, falling back to SDL audio"
++     * -> games silent). plat_sound_finish is exported from picoarch (-rdynamic). */
++    void (*pf)(void) = (void (*)(void))dlsym(NULL, "plat_sound_finish");
++    if (pf) pf();
++    else    dbg("plat_sound_finish not exported (audio may stay silent)");
+     pid_t pid = fork();
+     if (pid == 0) {
+         /* Child: replace with picoarch+game */
+@@ -339,6 +505,12 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
+         /* Parent: wait for game to finish, then return to frogui menu */
+         int status;
+         waitpid(pid, &status, 0);
++        /* v8.6: the game child's death releases DRM master; the kernel then
++         * blanks the connector ("no signal" after a crashed ROM, e.g. 005).
++         * Re-assert OUR dumb-buffer CRTC so the menu is visible again. */
++        int (*hr)(void) = (int (*)(void))dlsym(NULL, "hwdisp_restore");
++        if (hr) { if (hr() != 0) dbg("hwdisp_restore failed"); }
++        else    dbg("hwdisp_restore not exported");
+         dbg("game finished, returning to frogui");
+     } else {
+         dbg("fork failed");
+@@ -347,6 +519,11 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
+ 
+ static void handle_input(void) {
+     static bool a_last=false, b_last=false, up_last=false, dn_last=false;
++    /* v8.7: split the two pairs — lt/rt are the d-pad LEFT/RIGHT (used by the
++     * settings screen), lk/rk are the shoulder L/R (used to page the list).
++     * The old code reused l_last/r_last for BOTH, so the list pager was wired
++     * to d-pad LEFT/RIGHT instead of the shoulder keys (and L/R never worked). */
++    static bool lt_last=false, rt_last=false;
+     static bool l_last=false, r_last=false;
+ 
+     uint32_t keys = cv_read();
+@@ -356,13 +533,15 @@ static void handle_input(void) {
+     bool dn = cv_btn(keys, CV_DOWN);
+     bool lt = cv_btn(keys, CV_LEFT);
+     bool rt = cv_btn(keys, CV_RIGHT);
++    bool lk = cv_btn(keys, CV_L);   /* v8.7: shoulder L */
++    bool rk = cv_btn(keys, CV_R);   /* v8.7: shoulder R */
+ 
+     if (settings_menu_active) {
+         extern const int theme_count;
+         if (up && !up_last) settings_menu_idx = (settings_menu_idx - 1 + SETTINGS_ROW_COUNT) % SETTINGS_ROW_COUNT;
+         if (dn && !dn_last) settings_menu_idx = (settings_menu_idx + 1) % SETTINGS_ROW_COUNT;
+-        if ((lt && !l_last) || (rt && !r_last)) {
+-            int delta = (rt && !r_last) ? 1 : -1;
++        if ((lt && !lt_last) || (rt && !rt_last)) {
++            int delta = (rt && !rt_last) ? 1 : -1;
+             if (settings_menu_idx == 0) {
+                 settings_theme_idx = (settings_theme_idx + delta + theme_count) % theme_count;
+             } else {
+@@ -374,7 +553,7 @@ static void handle_input(void) {
+             settings_save_file();
+             settings_menu_active = false;
+         }
+-        a_last=a; b_last=b; up_last=up; dn_last=dn; l_last=lt; r_last=rt;
++        a_last=a; b_last=b; up_last=up; dn_last=dn; lt_last=lt; rt_last=rt; l_last=lk; r_last=rk;
+         return;
+     }
+ 
+@@ -391,32 +570,49 @@ static void handle_input(void) {
+                 settings_menu_idx = 0;
+             } else {
+                 const char *folder = get_basename(current_path);
+-                const char *core   = get_core_for_folder(folder);
++                char rom_path[MAX_PATH_LEN];
++                snprintf(rom_path, sizeof(rom_path), "%s/%s", current_path, entries[selected_index].name);
++                const char *core = get_core_for_folder(folder);
++                if (!core) core = get_core_for_file(rom_path);
+                 if (core) {
+-                    char rom_path[MAX_PATH_LEN];
+-                    snprintf(rom_path, sizeof(rom_path), "%s/%s", current_path, entries[selected_index].name);
+                     request_game_launch(core, rom_path);
+                 }
+             }
+         }
+     }
+ 
+-    if (b && !b_last && strcmp(current_path, ROMS_PATH) != 0) {
++    if (b && !b_last && strcmp(current_path, roms_path()) != 0) {
+         char *slash = strrchr(current_path, '/');
+         if (slash) { *slash = '\0'; scan_directory(current_path); }
+     }
+ 
+-    if (up && !up_last && selected_index > 0) {
+-        selected_index--;
++    if (up && !up_last) {                       /* wrap at top -> last entry */
++        if (selected_index > 0) selected_index--;
++        else selected_index = (entry_count > 0) ? entry_count - 1 : 0;
++        if (selected_index < scroll_offset) scroll_offset = selected_index;
++    }
++    if (dn && !dn_last) {                       /* wrap at bottom -> first entry */
++        if (selected_index < entry_count-1) selected_index++;
++        else selected_index = 0;
++        if (selected_index >= scroll_offset + VISIBLE_ENTRIES)
++            scroll_offset = selected_index - VISIBLE_ENTRIES + 1;
++    }
++    /* v8.7: L/R SHOULDER keys page ±8 rows through the list (previously wired
++     * to d-pad LEFT/RIGHT — shoulder keys were never read, and the d-pad L/R
++     * got hijacked for paging instead of their normal function). */
++    if (lk && !l_last && entry_count > 0) {
++        selected_index -= 8;
++        if (selected_index < 0) selected_index = 0;
+         if (selected_index < scroll_offset) scroll_offset = selected_index;
+     }
+-    if (dn && !dn_last && selected_index < entry_count-1) {
+-        selected_index++;
++    if (rk && !r_last && entry_count > 0) {
++        selected_index += 8;
++        if (selected_index >= entry_count) selected_index = entry_count - 1;
+         if (selected_index >= scroll_offset + VISIBLE_ENTRIES)
+             scroll_offset = selected_index - VISIBLE_ENTRIES + 1;
+     }
+ 
+-    a_last=a; b_last=b; up_last=up; dn_last=dn; l_last=lt; r_last=rt;
++    a_last=a; b_last=b; up_last=up; dn_last=dn; lt_last=lt; rt_last=rt; l_last=lk; r_last=rk;
+ }
+ 
+ /* ---- libretro API ---- */
+@@ -477,6 +673,9 @@ void retro_init(void) {
+     dbg("calloc done");
+     render_init(framebuffer);
+     dbg("render_init done");
++    strncpy(current_path, roms_path(), MAX_PATH_LEN-1);
++    current_path[MAX_PATH_LEN-1] = '\0';
++    dbg(current_path);
+     scan_directory(current_path);
+     dbg("scan_directory done");
+     shutdown_requested = false;
+@@ -528,13 +727,16 @@ void retro_run(void) {
+         render_settings_menu();
+     } else {
+         render_clear_screen(framebuffer);
+-        const char *title = (strcmp(current_path, ROMS_PATH) == 0)
++        const char *title = (strcmp(current_path, roms_path()) == 0)
+                             ? "TREEFROGUI: SYSTEMS" : get_basename(current_path);
+         render_header(framebuffer, title);
+         int visible = min(entry_count - scroll_offset, VISIBLE_ENTRIES);
+         for (int i = 0; i < visible; i++) {
+             int idx = scroll_offset + i;
+-            render_menu_item(framebuffer, i, entries[idx].name, entries[idx].is_dir,
++            /* pass the GLOBAL idx: render_menu_item subtracts scroll_offset
++             * itself (visible_index = idx - scroll_offset); passing i made the
++             * list vanish after scrolling (index became negative). */
++            render_menu_item(framebuffer, idx, entries[idx].name, entries[idx].is_dir,
+                              (idx == selected_index), scroll_offset, 0);
+         }
+         render_legend(framebuffer, LEGEND_X_NONE);
+@@ -544,7 +746,7 @@ void retro_run(void) {
+         video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
+ }
+ 
+-void retro_reset(void) { scan_directory(ROMS_PATH); strncpy(current_path, ROMS_PATH, MAX_PATH_LEN-1); }
++void retro_reset(void) { strncpy(current_path, roms_path(), MAX_PATH_LEN-1); current_path[MAX_PATH_LEN-1]=0; scan_directory(current_path); }
+ 
+ unsigned retro_get_region(void)                                    { return RETRO_REGION_NTSC; }
+ size_t   retro_serialize_size(void)                                { return 0; }

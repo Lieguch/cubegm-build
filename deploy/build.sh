@@ -168,79 +168,32 @@ if [ ! -f picoarch/libretro-common/include/libretro.h ] \
     ( cd picoarch && git submodule update --init --recursive ) \
         || log "WARN: submodule init failed; run manually: cd picoarch && git submodule update --init libretro-common"
 fi
-# Apply the 5-edit patch (RTC + evdev gamepad) if a clean checkout and patch present.
-if [ -f "$HERE/../patch/picoarch_5edits.patch" ]; then
-    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_5edits.patch" 2>/dev/null; then
-        log "Applying 5-edit patch (RTC + evdev gamepad)..."
-        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_5edits.patch"
+# v8.7: apply ONE full patch (authored against the pinned commit f8ff5ba).
+# It contains the ENTIRE RK3036G port delta: 5-edit (RTC+evdev), DRM display
+# path + RGB565 dumb buffer + aspect-fit + portrait rotation + hwdisp_restore,
+# crash backtrace logging, gamepad keycode/hat input, sf3000 shm game-input
+# injection, ALSA pre-fork release + global-config reset, CLOEXEC on DRM/fb0
+# fds (fixes the "half-white screen" fd-inheritance bug), portrait pixel-map
+# tables. A single patch kills the old 5-patch stacking risk (run 277:
+# "display patch NOT applicable" when upstream moved).
+PICO_PATCH="$HERE/../patch/picoarch_rk3036g_full.patch"
+if [ -f "$PICO_PATCH" ]; then
+    if git -C picoarch apply --ignore-whitespace --check "$PICO_PATCH" 2>/dev/null; then
+        log "Applying picoarch full RK3036G patch (v8.7)..."
+        git -C picoarch apply --ignore-whitespace "$PICO_PATCH"
+    elif git -C picoarch apply --ignore-whitespace -R --check "$PICO_PATCH" 2>/dev/null; then
+        log "picoarch full patch already applied -- skipping."
     else
-        log "5-edit patch already applied or not applicable -- skipping."
+        die "picoarch full RK3036G patch NOT applicable and NOT applied -- refusing to ship a broken build. Abort."
     fi
+else
+    die "picoarch_rk3036g_full.patch missing -- cannot build."
 fi
-# Apply the RK3036G display patch (fb0 direct-drive; fixes black screen on
-# RK3036G which has no /dev/dis + no stock driver.so). MUST run AFTER the
-# 5-edit patch above (both touch plat_sdl.c but in non-overlapping regions).
-if [ -f "$HERE/../patch/picoarch_rk3036g_display.patch" ]; then
-    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
-        log "Applying RK3036G display patch (fb0 direct-drive)..."
-        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_rk3036g_display.patch"
-    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/picoarch_rk3036g_display.patch" 2>/dev/null; then
-        log "RK3036G display patch already applied -- skipping."
-    else
-        die "RK3036G display patch NOT applicable and NOT already applied -- would ship black-screen binary. Abort."
-    fi
-fi
-# DRM UAPI headers for the RK3036G HDMI modeset path (hwdisp_drm in the display
-# patch #includes <drm/drm.h>). The crosstool glibc-2.17 sysroot ships no DRM
-# headers, so bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
+# DRM UAPI headers for the RK3036G HDMI modeset path (hwdisp_drm #includes
+# <drm/drm.h>). The crosstool glibc-2.17 sysroot ships no DRM headers, so
+# bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
 mkdir -p picoarch/include/drm
 cp -f "$HERE/drm_headers/drm/"*.h picoarch/include/drm/ 2>/dev/null || log "WARN: drm headers not copied (hwdisp_drm won't compile!)"
-# Crash backtrace logging (SIGSEGV/SIGABRT -> /mnt/sdcard/crash.log).
-# Applies to core.c AFTER 5-edit + display (its core.c hunks are based on that
-# state). Build with -rdynamic (added above) so backtrace shows symbol names.
-if [ -f "$HERE/../patch/core_rk3036g_crashlog.patch" ]; then
-    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/core_rk3036g_crashlog.patch" 2>/dev/null; then
-        log "Applying RK3036G crashlog patch (backtrace on SIGSEGV)..."
-        git -C picoarch apply --ignore-whitespace "$HERE/../patch/core_rk3036g_crashlog.patch"
-    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/core_rk3036g_crashlog.patch" 2>/dev/null; then
-        log "RK3036G crashlog patch already applied -- skipping."
-    else
-        log "WARN: RK3036G crashlog patch NOT applicable."
-    fi
-fi
-# RK3036G input patch (gamepad): PSX-style keycodes in evdev defbinds + d-pad
-# hat handling. MUST run after the display patch (both touch plat_sf3000.c?
-# no -- input touches plat_sf3000.c + libpicofe/linux/in_evdev.c; display
-# touches hwdisp.c/plat_sdl.c/plat.h, so no overlap).
-if [ -f "$HERE/../patch/picoarch_rk3036g_input.patch" ]; then
-    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_rk3036g_input.patch" 2>/dev/null; then
-        log "Applying RK3036G input patch (gamepad keycodes + hat)..."
-        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_rk3036g_input.patch"
-    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/picoarch_rk3036g_input.patch" 2>/dev/null; then
-        log "RK3036G input patch already applied -- skipping."
-    else
-        log "WARN: RK3036G input patch NOT applicable and NOT applied -- gamepad may not work."
-    fi
-fi
-# RK3036G v8.6 patch (applied LAST, on top of input/display/crashlog):
-#   - hwdisp.c: RGB565 dumb buffer (halves per-frame write volume -> FPS),
-#     aspect-fit letterbox for game frames, 90° rotation row-pointer bug fix,
-#     cvt565 LUT, per-frame present timing log, exported hwdisp_restore()
-#   - plat_sdl.c: exported plat_sound_finish(), ALSA open retry, skip SDL
-#     joystick on RK3036G (duplicate devices -> menu drift)
-#   - core.c/main.c: crash-log handler installed at startup, SIGBUS/ILL/FPE
-#     covered, ROM path in crash.log
-#   - menu.c/libpicofe/menu.c: pause-menu auto-repeat 70/100ms -> 500ms
-if [ -f "$HERE/../patch/picoarch_rk3036g_v86.patch" ]; then
-    if git -C picoarch apply --ignore-whitespace --check "$HERE/../patch/picoarch_rk3036g_v86.patch" 2>/dev/null; then
-        log "Applying RK3036G v8.6 patch (FPS/menu/audio/crashlog/display-restore)..."
-        git -C picoarch apply --ignore-whitespace "$HERE/../patch/picoarch_rk3036g_v86.patch"
-    elif git -C picoarch apply --ignore-whitespace -R --check "$HERE/../patch/picoarch_rk3036g_v86.patch" 2>/dev/null; then
-        log "RK3036G v8.6 patch already applied -- skipping."
-    else
-        log "WARN: RK3036G v8.6 patch NOT applicable and NOT applied."
-    fi
-fi
 # v8.6.2: pin FrogUI too (upstream tip moves and frogui patches are
 # context-based; all are authored against 2f41ace).
 if [ -d FrogUI ]; then
@@ -284,73 +237,28 @@ log "picoarch built."
 # -----------------------------------------------------------------------------
 # STAGE 6 -- build FrogUI launcher core
 # -----------------------------------------------------------------------------
-# Apply the RK3036G build fix BEFORE compiling. The upstream FrogUI tip
-# (commit 2f41ace) was developed for SF2000 (MIPS); the unix/ARM Makefile
-# target references three symbols it never declares, so frogui_libretro.so
-# fails to compile/link and the payload cannot boot (zhijack.sh requires it).
-# This patch declares the game-launch buffers and stubs direct_loader/xlog.
+# v8.7: apply ONE full FrogUI patch (authored against pinned 2f41ace). It
+# contains the whole RK3036G delta: ARM build fix (declare buffers + stub
+# direct_loader/xlog), 000-008 folder table (002 -> snes9x2005_plus for speed,
+# 005 -> nestopia for compatibility), extension fallback, roms/Roms path probe,
+# /tmp scan cache + root-level dirs-only (fast first menu), L/R SHOULDER-key
+# paging, ALSA pre-fork release (dlsym plat_sound_finish) and display
+# re-assert after the game child (dlsym hwdisp_restore).
 # A failed/already-applied check is fatal: shipping without it = no menu.
-if [ -f "$HERE/../patch/frogui_rk3036g_build.patch" ]; then
-    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_rk3036g_build.patch" 2>/dev/null; then
-        log "Applying RK3036G FrogUI build fix (declare buffers + stub direct_loader/xlog)..."
-        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_rk3036g_build.patch"
-    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_rk3036g_build.patch" 2>/dev/null; then
-        log "RK3036G FrogUI build fix already applied -- skipping."
+FROGUI_PATCH="$HERE/../patch/frogui_rk3036g_full.patch"
+if [ -f "$FROGUI_PATCH" ]; then
+    if git -C FrogUI apply --ignore-whitespace --check "$FROGUI_PATCH" 2>/dev/null; then
+        log "Applying FrogUI full RK3036G patch (v8.7)..."
+        git -C FrogUI apply --ignore-whitespace "$FROGUI_PATCH"
+    elif git -C FrogUI apply --ignore-whitespace -R --check "$FROGUI_PATCH" 2>/dev/null; then
+        log "FrogUI full patch already applied -- skipping."
     else
-        die "RK3036G FrogUI build fix NOT applicable and NOT already applied -- FrogUI would fail to build. Abort."
+        die "FrogUI full RK3036G patch NOT applicable and NOT applied -- refusing to ship a fake menu. Abort."
     fi
+else
+    die "frogui_rk3036g_full.patch missing -- cannot build."
 fi
 log "Building FrogUI (frogui_libretro.so)..."
-# Apply the RK3036G 000-008 folder-table patch (stock-core aliases + arcade/PS1)
-if [ -f "$HERE/../patch/frogui_table_000_008.patch" ]; then
-    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_table_000_008.patch" 2>/dev/null; then
-        log "Applying RK3036G FrogUI 000-008 folder table patch..."
-        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_table_000_008.patch"
-    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_table_000_008.patch" 2>/dev/null; then
-        log "RK3036G FrogUI 000-008 table already applied -- skipping."
-    else
-        log "WARN: frogui 000-008 table patch NOT applicable -- arcade/PS1 folders will not resolve."
-    fi
-fi
-# Extension fallback: ROMs dropped straight into /roms root (folder name not in
-# console_mappings -> previously nothing happened on select). Maps by file ext.
-if [ -f "$HERE/../patch/frogui_ext_fallback.patch" ]; then
-    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_ext_fallback.patch" 2>/dev/null; then
-        log "Applying FrogUI extension-fallback patch (root .bin/.md/.nes/... resolvable)..."
-        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_ext_fallback.patch"
-    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_ext_fallback.patch" 2>/dev/null; then
-        log "FrogUI ext-fallback already applied -- skipping."
-    else
-        log "WARN: FrogUI ext-fallback patch NOT applicable -- root ROMs will not resolve."
-    fi
-fi
-# ROMS_PATH runtime probe (roms vs stock Roms): fixes black/empty menu when the
-# card is mounted case-sensitively (stock card ships Roms/).
-if [ -f "$HERE/../patch/frogui_roms_path.patch" ]; then
-    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_roms_path.patch" 2>/dev/null; then
-        log "Applying FrogUI roms-path probe patch (roms/Roms)..."
-        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_roms_path.patch"
-    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_roms_path.patch" 2>/dev/null; then
-        log "FrogUI roms-path patch already applied -- skipping."
-    else
-        log "WARN: FrogUI roms-path patch NOT applicable."
-    fi
-fi
-# FrogUI v8.6 patch (applied LAST, on top of roms_path): /tmp file scan cache
-# (cross-process, fixes slow menu), L/R paging in the file list, ALSA release
-# before the game fork (dlsym plat_sound_finish -> game sound), and display
-# re-assert after the game child exits (dlsym hwdisp_restore -> no black screen
-# after a crashed ROM).
-if [ -f "$HERE/../patch/frogui_v86.patch" ]; then
-    if git -C FrogUI apply --ignore-whitespace --check "$HERE/../patch/frogui_v86.patch" 2>/dev/null; then
-        log "Applying FrogUI v8.6 patch (scan cache / L-R paging / audio pre-fork / display restore)..."
-        git -C FrogUI apply --ignore-whitespace "$HERE/../patch/frogui_v86.patch"
-    elif git -C FrogUI apply --ignore-whitespace -R --check "$HERE/../patch/frogui_v86.patch" 2>/dev/null; then
-        log "FrogUI v8.6 patch already applied -- skipping."
-    else
-        log "WARN: FrogUI v8.6 patch NOT applicable and NOT applied."
-    fi
-fi
 pushd FrogUI >/dev/null
 # Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
 # LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
@@ -525,6 +433,13 @@ mkdir -p "$DST" "$DST/cores" "$DST/lib"
 cp -f picoarch/picoarch               "$DST/" 2>/dev/null || true
 cp -f FrogUI/frogui_libretro.so        "$DST/cores/" 2>/dev/null || true
 cp -f "$CORE_OUT"/*.so                  "$DST/cores/" 2>/dev/null || true
+# v8.7: alias snes9x2005_plus -> snes9x2005 (any old mapping / launch.txt that
+# references the non-plus name still resolves to the OPTIMISED core; the stock
+# snes9x2005 on the card was unoptimised -> ~1 FPS on 002 games).
+if [ -f "$CORE_OUT/snes9x2005_plus_libretro.so" ]; then
+    cp -f "$CORE_OUT/snes9x2005_plus_libretro.so" "$DST/cores/snes9x2005_libretro.so" \
+        && log "  snes9x2005_libretro.so <- snes9x2005_plus (optimised alias)"
+fi
 cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
