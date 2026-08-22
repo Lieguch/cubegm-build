@@ -455,7 +455,7 @@ chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
 if [ -f "$HERE/diag.c" ]; then
     log "Building diag (device diagnostics)..."
     if ${CROSS_COMPILE}gcc -O2 -Wall -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 \
-            -mfloat-abi=hard --sysroot="$SYSROOT" -I"$HERE/drm_headers" \
+            -mfloat-abi=hard --sysroot="$SYSROOT" -I"$HERE/drm_headers" -I"$SYSROOT/usr/include" \
             "$HERE/diag.c" -o "$DST/diag" -ldl -static-libgcc; then
         ${CROSS_COMPILE}strip "$DST/diag"
         log "diag built: $(ls -la "$DST/diag" 2>/dev/null | awk '{print $5}') bytes"

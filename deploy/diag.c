@@ -44,8 +44,16 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <linux/input.h>
+/* User-space DRM usage: the kernel UAPI headers annotate pointers with
+ * __user (address-space). It is not defined for userspace builds, so define
+ * it away BEFORE including <drm/drm.h> (run 281: drm.h:133 "expected ':'
+ * before '*' token" — char __user *name). */
+#ifndef __user
+#define __user
+#endif
 #include <drm/drm.h>
 #include <drm/drm_mode.h>
+#include <drm/drm_fourcc.h>   /* DRM_FORMAT_RGB565 (run 281: undeclared) */
 
 #define REPORT "/mnt/sdcard/diag_report.txt"
 static FILE *g_out = NULL;
