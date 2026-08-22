@@ -492,8 +492,13 @@ mkdir -p "$DST/lib"
 READELF="${CROSS_COMPILE}readelf"
 # base libs the device rootfs always provides -- do NOT bundle these
 BASE_LIBS="libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 libgcc_s.so.1 \
-           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.17.so \
-           libstdc++.so.6 libatomic.so.1"
+           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.17.so"
+# v8.8: libstdc++.so.6/libatomic.so.1 removed from BASE_LIBS and forced into the
+# bundle. diag-285 on-device cores scan showed nestopia/snes9x/vice_x64 failing
+# with "GLIBCXX_3.4.32 not found": the device's /usr/lib/libstdc++.so.6 is too
+# old for cores built with the modern GCC toolchain. The sysroot's newer
+# libstdc++.so.6 is bundled into cubegm/lib and zhijack sets LD_LIBRARY_PATH
+# there first, so C++ cores resolve against it.
 is_base() { for b in $BASE_LIBS; do [ "$1" = "$b" ] && return 0; done; return 1; }
 declare -A _seen=()
 _queue=()
@@ -504,6 +509,19 @@ for _b in picoarch/picoarch FrogUI/frogui_libretro.so; do
             < <("$READELF" -d "$_b" 2>/dev/null | awk -F'[][]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
     fi
 done
+# v8.8: also scan every built C++ core for its NEEDED libs (libstdc++.so.6,
+# libatomic.so.1) -- they run in the same process and the device libs are too
+# old (GLIBCXX_3.4.32 diag failure).
+for _so in "$CORE_OUT"/*_libretro.so; do
+    [ -f "$_so" ] || continue
+    if command -v "$READELF" >/dev/null 2>&1; then
+        while IFS= read -r _l; do [ -n "$_l" ] && _queue+=("$_l"); done \
+            < <("$READELF" -d "$_so" 2>/dev/null | awk -F'[][]' '/NEEDED/ {gsub(/[ \t]/,"",$2); print $2}')
+    fi
+done
+# v8.8: force the C++ runtime into the bundle even if no core declares it as a
+# direct NEEDED (it may be loaded via DT_NEEDED of another bundled lib).
+_queue+=("libstdc++.so.6" "libatomic.so.1")
 # fallback: if readelf was unavailable, seed the known direct deps
 if [ ${#_queue[@]} -eq 0 ]; then
     _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2)

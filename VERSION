@@ -3,7 +3,7 @@
 # 1.0 之前全为测试版；首个完整绿构建 = v0.1，之后 v0.2、v0.3...（每次实质进展递增）
 # 整构建首绿且真机功能验收通过 -> 打 v1.0 tag + 维护 stable 分支。
 
-当前：0.3.1-dev
+当前：0.4.0-dev
 状态：v0.1 已打 tag（首个全绿构建，run #145 HEAD 05ee252，前端+5核 ABI 全 PASS）；v0.2 已打 tag（run #153 HEAD 377ac862208a，含全量测试门禁：STAGE8 ABI + STAGE8.5 符号 + STAGE9.5 完整性，34 核全绿）；v0.3 进行中（MD 策略存档写权限加固 #162/#166，run #166 HEAD cb065b23）。
 2026-08-18 修复+验证：STAGE9 打包 SDL/libpng12/zlib 运行时库进 cubegm/lib（run #150 全绿，lib/ 三个库 symlink 链完整，6 产物 ABI 全 PASS，release payload-150 已发布）。
 2026-08-18 datasheet：RK3036G SoC Max output 1920x1080（HDMI 1.4a），1280x720 维持。
@@ -16,3 +16,15 @@
   - 核心映射：002→snes9x2005_plus（CI 优化版，替代设备上未优化 core 的 1FPS）；005→nestopia（原厂 005 用 libemu_nestopia，fceumm 黑屏修复）。
   - 诊断：zhijack.sh 每次启动写 crash.log 头行（证明 debug 路径存活）；in_evdev 打印前 40 个按键码（下次实机验证绑定匹配）。
   - 构建：picoarch/frogui 改为单一全量补丁（picoarch_rk3036g_full.patch / frogui_rk3036g_full.patch），消除多补丁叠加失配（run 277 根因）。
+
+2026-08-22 v0.4.0 决策性修复（基于 payload-285 diag 实机事实，run #285 后）：
+- 黑屏根因：RK3036G 上 fb0（32bpp 1280x720）才是 HDMI 可见通道（zhijack 白帧实测可见）；
+  DRM RGB565 dumb buffer SETCRTC 成功但 VOP 不扫描 -> 黑屏。hwdisp RK3036G 分支改为
+  fb0-direct 优先，DRM 仅 fallback。
+- 输入根因：设备上报 KEY_* 键码 0-15（sf3000_keymap.txt 原厂表 + sysfs KEY=fff bit0-11），
+  旧绑定表用 BTN_*(0x120-0x12b) 永不匹配 -> UI/游戏输入全失效。cubevol_bridge + plat_sf3000
+  in_evdev_defbinds/key_map 全部按原厂键码 0-15 重写。
+- core 加载：nestopia/snes9x/vice 设备报 GLIBCXX_3.4.32 not found（设备 libstdc++ 太老）；
+  build.sh 强制打包 sysroot libstdc++.so.6/libatomic.so.1 进 cubegm/lib（从 BASE_LIBS 移除 +
+  扫描全部 core NEEDED）。005 暂时改映射 quicknes（diag 实测 OK），002 改回 snes9x2005_libretro.so
+  （diag 实测存在；v8.7 的 _plus 映射指向不存在的文件 -> 002 全挂）。

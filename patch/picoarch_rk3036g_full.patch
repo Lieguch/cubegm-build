@@ -144,7 +144,7 @@ index 25221d8..697a03e 100644
  	}
  	DBG("DBG M5c: retro_load_game returned\n");
 diff --git a/hwdisp.c b/hwdisp.c
-index 5367b21..c996c8a 100644
+index 5367b21..14f1adf 100644
 --- a/hwdisp.c
 +++ b/hwdisp.c
 @@ -19,12 +19,35 @@
@@ -335,7 +335,7 @@ index 5367b21..c996c8a 100644
      static int xmap[2048];
      static int last_w = -1, last_fbw = -1;
      if (w != last_w || g_fbw != last_fbw) {
-@@ -161,16 +258,403 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -161,16 +258,410 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
      for (int dy = 0; dy < g_fbh; dy++) {
          int sy = dy * h / g_fbh;
          const uint16_t *srow = s + sy * sp;
@@ -707,11 +707,29 @@ index 5367b21..c996c8a 100644
      extern void sf3000_dump_fb_state(const char *);
      if (g_active) return 0;
 +
-+    /* RK3036G: no working driver.so / /dev/dis — HDMI needs a DRM modeset
-+     * (fb0 is NOT the HDMI source; device log: HDMI-A-1 connected+enabled). */
++    /* RK3036G: payload-285 device logs (zhijack fb0 white-frame test +
++     * picoarch_init "fb0=0x0 ... drm=1" black screen) PROVED that fb0 is the
++     * ONLY visible HDMI path: zhijack writes /dev/fb0 -> white flash visible;
++     * picoarch's RGB565 DRM dumb-buffer present runs at 50 FPS yet the screen
++     * stays BLACK (VOP does not scan the dumb buffer). So fb0-direct FIRST,
++     * DRM modeset only as fallback (some HDMI dongles need a modeset to
++     * unblank, but pixels MUST go to fb0). */
 +    extern int sf3000_is_rk3036(void);
 +    if (sf3000_is_rk3036()) {
-+        hwdisp_fslog("hwdisp_init: RK3036G branch (DT compatible), trying DRM modeset first");
++        hwdisp_fslog("hwdisp_init: RK3036G branch, fb0-direct FIRST (proven visible)");
++        hwdisp_fb_open();
++        if (g_fbmem && g_fbw > 0 && g_fbh > 0) {
++            g_active = 1;
++            g_fb_only = 1;
++            g_drm_mode = 0;
++            hwdisp_fslog("hwdisp_init: g_fb_only=1 fb0-direct ACTIVE %dx%d bpp=%d stride=%d",
++                         g_fbw, g_fbh, g_fbbpp, g_fbstride);
++            fprintf(stderr, "hwdisp: RK3036G fb0-direct active %dx%d bpp=%d\n",
++                    g_fbw, g_fbh, g_fbbpp);
++            return 0;
++        }
++        hwdisp_fslog("hwdisp_init: fb0 open FAILED (fbmem=%p fbw=%d fbh=%d), trying DRM modeset",
++                     (void*)g_fbmem, g_fbw, g_fbh);
 +        if (hwdisp_drm_init() == 0) {
 +            g_active = 1;
 +            g_fb_only = 1;
@@ -721,18 +739,7 @@ index 5367b21..c996c8a 100644
 +            fprintf(stderr, "hwdisp: RK3036G DRM modeset active %dx%d\n", g_drm_w, g_drm_h);
 +            return 0;
 +        }
-+        hwdisp_fslog("hwdisp_init: DRM modeset failed, falling back to fb0-direct");
-+        hwdisp_fb_open();
-+        if (g_fbmem && g_fbw > 0 && g_fbh > 0) {
-+            g_active = 1;
-+            g_fb_only = 1;
-+            hwdisp_fslog("hwdisp_init: g_fb_only=1 fb0-direct ACTIVE %dx%d bpp=%d stride=%d",
-+                         g_fbw, g_fbh, g_fbbpp, g_fbstride);
-+            fprintf(stderr, "hwdisp: RK3036G fb0-direct active %dx%d bpp=%d\n",
-+                    g_fbw, g_fbh, g_fbbpp);
-+            return 0;
-+        }
-+        hwdisp_fslog("hwdisp_init: RK3036G fb0 open FAILED (fbmem=%p fbw=%d fbh=%d) errno=%d",
++        hwdisp_fslog("hwdisp_init: RK3036G both fb0 and DRM FAILED (fbmem=%p fbw=%d fbh=%d) errno=%d",
 +                     (void*)g_fbmem, g_fbw, g_fbh, errno);
 +        fprintf(stderr, "hwdisp: RK3036G fb0 open failed\n");
 +        return -1;
@@ -741,7 +748,7 @@ index 5367b21..c996c8a 100644
      sf3000_dump_fb_state("hwdisp_init/pre");
  
      /* Device-specific driver: each device ships its own driver.so build (panel
-@@ -546,7 +1030,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
+@@ -546,7 +1037,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
      static int s_n = 0;
      int lg = (s_n < 8);
      s_n++;
@@ -753,7 +760,7 @@ index 5367b21..c996c8a 100644
      /* disp_frame HW-scales src→panel; the driver's fullscreen flag
       * (fbdev_video_aspect_ratio, like stock) picks fill vs aspect-fit. So:
       *   full   → flag=fill, pass src straight → GE distort-fills in HW (fast).
-@@ -621,6 +1108,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
+@@ -621,6 +1115,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
                  s_n, src, w, h, pitch_bytes, g_active, (void*)p_disp,
                  g_filter_nearest, g_aspect_num, g_aspect_den, HW_W, HW_H);
      if (!g_active || !src) { if (lg) DBG("DBG present#%d: EARLY-RET\n", s_n); return; }
@@ -761,7 +768,7 @@ index 5367b21..c996c8a 100644
      if (!p_disp) { if (lg) DBG("DBG present#%d: no p_disp\n", s_n); return; }
      int rv;
      /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
-@@ -785,6 +1273,8 @@ void hwdisp_deinit(void) {
+@@ -785,6 +1280,8 @@ void hwdisp_deinit(void) {
      sf3000_dump_fb_state("hwdisp_deinit/post-p_deinit");
      if (g_fbmem) { munmap(g_fbmem, g_fbsize); g_fbmem = NULL; }
      if (g_fbfd >= 0) { close(g_fbfd); g_fbfd = -1; }
@@ -1511,7 +1518,7 @@ index 9978411..b0c98e6 100644
          return;
      }
 diff --git a/plat_sf3000.c b/plat_sf3000.c
-index 994921d..a5dce9e 100644
+index 994921d..02e3ce4 100644
 --- a/plat_sf3000.c
 +++ b/plat_sf3000.c
 @@ -7,6 +7,7 @@
@@ -1522,7 +1529,7 @@ index 994921d..a5dce9e 100644
  #include "plat.h"
  
  // Video system
-@@ -232,4 +233,140 @@ static const struct in_pdata in_sdl_platform_data = {
+@@ -232,4 +233,118 @@ static const struct in_pdata in_sdl_platform_data = {
      .key_names = in_sdl_key_names,
  };
  
@@ -1581,72 +1588,50 @@ index 994921d..a5dce9e 100644
 +#define KEY_RIGHT    0x6a
 +#endif
 +
-+/* evdev keycode -> libretro joypad button. D-pad buttons AND the left analog
-+ * stick (ABS_X/ABS_Y, digital-mapped by in_evdev) both reach U/D/L/R. */
++/* v8.8 ROOT-CAUSE FIX: the Twin USB Gamepad 0810:0001 reports KEY_* keycodes
++ * 0..15 (stock sf3000_keymap.txt + diag sysfs "KEY=fff" bit0-11), NOT
++ * BTN_TRIGGER..BTN_BASE4 (0x120-0x129). The v8.7 table bound 0x120+ which the
++ * pad never sends -> in-game every button was dead (only SELECT+START worked
++ * because they reach sf3000_keys_to_buttons via the shm raw channel).
++ * Stock keymap (sf3000_keymap.txt / cubevol K_* bits):
++ *   SELECT=0 START=3 UP=4 RIGHT=5 DOWN=6 LEFT=7 L2=8 R2=9 L=10 R=11
++ *   X=12 A=13 B=14 Y=15
++ * evdev keycode N maps straight to shm bit N and to the retro button whose
++ * stock bit is N. */
 +static const struct in_default_bind in_evdev_defbinds[] = {
-+    { BTN_DPAD_UP,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP },
-+    { BTN_DPAD_DOWN,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN },
-+    { BTN_DPAD_LEFT,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT },
-+    { BTN_DPAD_RIGHT, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
-+    { BTN_A,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B },
-+    { BTN_B,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A },
-+    { BTN_X,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y },
-+    { BTN_Y,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X },
-+    { BTN_TL,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L },
-+    { BTN_TR,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R },
-+    { BTN_TL2,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2 },
-+    { BTN_TR2,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2 },
-+    { BTN_THUMBL,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L3 },
-+    { BTN_THUMBR,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R3 },
-+    { BTN_SELECT,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
-+    { BTN_START,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START },
-+    /* Guide button opens the pause menu (matches handheld SELECT+START) */
-+    { BTN_MODE,       IN_BINDTYPE_EMU, EACTION_MENU },
-+    /* Arrow keys (d-pad hat mapped to these by in_evdev) */
++    { 4,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP },
++    { 6,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN },
++    { 7,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT },
++    { 5,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
++    { 13, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A },
++    { 14, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B },
++    { 12, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X },
++    { 15, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y },
++    { 10, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L },
++    { 11, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R },
++    { 8,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2 },
++    { 9,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2 },
++    { 0,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
++    { 3,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START },
++    /* keep keyboard-arrow fallback (d-pad hat mapped to these by in_evdev) */
 +    { KEY_UP,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP },
 +    { KEY_DOWN,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN },
 +    { KEY_LEFT,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT },
 +    { KEY_RIGHT,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
-+    /* PSX-style pad buttons (Twin USB Gamepad 0810:0001 rev 0110). Keycodes
-+     * 0x120..0x129 are the 10 buttons usbhid reports (BTN_TRIGGER..BTN_BASE4)
-+     * in the order the pad's HID descriptor declares them. The device-side
-+     * cubevol_bridge maps them per the STOCK profile 0810_0001_0100:
-+     *   btn0(0x120)=Y btn1(0x121)=B btn2(0x122)=A btn3(0x123)=X
-+     *   btn4(0x124)=L1 btn5(0x125)=R1 btn6(0x126)=L2 btn7(0x127)=R2
-+     *   btn8(0x128)=SELECT btn9(0x129)=START
-+     * v8.7: the previous table shifted every button (0x120=A, 0x122=L,
-+     * 0x128=L2, 0x129=R2, and 0x12a/0x12b which this pad never sends were
-+     * SELECT/START) — in-game every face button fired the WRONG retro button
-+     * and SELECT/START (mapped to L2/R2) appeared dead. Aligned with the
-+     * stock profile so evdev and the shm bridge agree. */
-+    { BTN_TRIGGER,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y },
-+    { BTN_THUMB,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B },
-+    { BTN_THUMB2,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A },
-+    { BTN_TOP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X },
-+    { BTN_TOP2,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L },
-+    { BTN_PINKIE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R },
-+    { BTN_BASE,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2 },
-+    { BTN_BASE2,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2 },
-+    { BTN_BASE3,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
-+    { BTN_BASE4,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START },
-+    /* 0x12a/0x12b (BTN_BASE5/BTN_BASE6) are not present on this pad. */
 +    { 0, 0, 0 }
 +};
 +
-+/* evdev keycode -> unified PBTN (menu navigation) */
++/* evdev keycode -> unified PBTN (menu navigation). v8.8: stock KEY_* 0..15
++ * (see in_evdev_defbinds above); A(13)=confirm B(14)=back START(3)=menu. */
 +const struct menu_keymap in_evdev_key_map[] = {
-+    { BTN_DPAD_UP,    PBTN_UP },
-+    { BTN_DPAD_DOWN,  PBTN_DOWN },
-+    { BTN_DPAD_LEFT,  PBTN_LEFT },
-+    { BTN_DPAD_RIGHT, PBTN_RIGHT },
-+    { BTN_A,          PBTN_MOK },
-+    { BTN_B,          PBTN_MBACK },
-+    { BTN_MODE,       PBTN_MENU },
-+    /* PSX pad (v8.7, aligned with in_evdev_defbinds): A(0x122)=confirm,
-+     * B(0x121)=back, START(0x129)=menu. */
-+    { BTN_THUMB2,     PBTN_MOK },
-+    { BTN_THUMB,      PBTN_MBACK },
-+    { BTN_BASE4,      PBTN_MENU },
++    { 4,  PBTN_UP },
++    { 6,  PBTN_DOWN },
++    { 7,  PBTN_LEFT },
++    { 5,  PBTN_RIGHT },
++    { 13, PBTN_MOK },
++    { 14, PBTN_MBACK },
++    { 3,  PBTN_MENU },
++    /* keep keyboard-arrow fallback (d-pad hat mapped to these by in_evdev) */
 +    { KEY_UP,         PBTN_UP },
 +    { KEY_DOWN,       PBTN_DOWN },
 +    { KEY_LEFT,       PBTN_LEFT },

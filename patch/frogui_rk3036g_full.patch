@@ -37,7 +37,7 @@ index 93ff2a5..349991f 100644
  typedef struct {
      const char *console_name;
 diff --git a/frogui_libretro.c b/frogui_libretro.c
-index 263d1f1..1c37a81 100644
+index 263d1f1..5360d32 100644
 --- a/frogui_libretro.c
 +++ b/frogui_libretro.c
 @@ -19,6 +19,7 @@
@@ -73,7 +73,23 @@ index 263d1f1..1c37a81 100644
  #define LAUNCH_FILE  "/tmp/frogui_launch.txt"
  
  /* Console → core mapping (folder name → libretro .so)
-@@ -133,6 +150,30 @@ static const ConsoleMapping console_mappings[] = {
+@@ -43,10 +60,12 @@ static const ConsoleMapping console_mappings[] = {
+     {"nest",   CORES_PATH "/nestopia_libretro.so"},
+     {"FC",     CORES_PATH "/fceumm_libretro.so"},
+     {"NES",    CORES_PATH "/quicknes_libretro.so"},
+-    /* SNES */
+-    {"snes",   CORES_PATH "/snes9x2005_plus_libretro.so"},
++    /* SNES (v8.8: diag-285 shows the device has snes9x2005_libretro.so and
++     * it dlopens OK; snes9x2005_plus_libretro.so does NOT exist on the card
++     * -- pointing 002 at it made every SFC game fail to launch) */
++    {"snes",   CORES_PATH "/snes9x2005_libretro.so"},
+     {"snes02", CORES_PATH "/snes9x2002_libretro.so"},
+-    {"SFC",    CORES_PATH "/snes9x2005_plus_libretro.so"},
++    {"SFC",    CORES_PATH "/snes9x2005_libretro.so"},
+     /* Game Boy */
+     {"gb",     CORES_PATH "/gambatte_libretro.so"},
+     {"gbgb",   CORES_PATH "/gearboy_libretro.so"},
+@@ -133,6 +152,31 @@ static const ConsoleMapping console_mappings[] = {
      {"vapor",  CORES_PATH "/vaporspec_libretro.so"},
      {"amiga",  CORES_PATH "/uae_libretro.so"},
      {"atari-st", CORES_PATH "/castaway_libretro.so"},
@@ -87,10 +103,11 @@ index 263d1f1..1c37a81 100644
 +    {"002",    CORES_PATH "/snes9x2005_plus_libretro.so"}, /* SFC (optimised) */
 +    {"003",    CORES_PATH "/picodrive_libretro.so"},     /* MD (stock libemu_md) */
 +    {"004",    CORES_PATH "/mgba_libretro.so"},          /* GBA (stock libemu_mgba) */
-+    /* v8.7: 005 -> nestopia (the STOCK 005.dat folder was driven by
-+     * libemu_nestopia; pointing it at fceumm made some 005 ROMs load to a
-+     * black screen). nestopia is CI-built (CORE_TABLE entry exists). */
-+    {"005",    CORES_PATH "/nestopia_libretro.so"},      /* NES variant (stock libemu_nestopia) */
++    /* v8.8: 005 -> quicknes. diag-285 shows nestopia_libretro.so FAILS to
++     * dlopen on this device (GLIBCXX_3.4.32 not found -- device libstdc++
++     * too old; the bundled libstdc++ lands in a later payload). quicknes is
++     * verified loading (diag OK) and handles the NES variant ROMs. */
++    {"005",    CORES_PATH "/quicknes_libretro.so"},      /* NES variant (stock libemu_nestopia) */
 +    {"006",    CORES_PATH "/gambatte_libretro.so"},      /* GB/GBC (single-screen; tgbdual defaulted to link-cable dual) */
 +    {"007",    CORES_PATH "/pcsx_rearmed_libretro.so"},  /* PS1 (stock libemu_pcsx) */
 +    {"008",    CORES_PATH "/stella2014_libretro.so"},    /* Atari 2600 (stock libemu_stella) */
@@ -104,7 +121,7 @@ index 263d1f1..1c37a81 100644
      {NULL, NULL}
  };
  
-@@ -143,6 +184,31 @@ static const char* get_core_for_folder(const char *folder) {
+@@ -143,6 +187,31 @@ static const char* get_core_for_folder(const char *folder) {
      return NULL;
  }
  
@@ -136,7 +153,7 @@ index 263d1f1..1c37a81 100644
  /* Libretro callbacks */
  static retro_video_refresh_t     video_cb     = NULL;
  static retro_environment_t       environ_cb   = NULL;
-@@ -161,7 +227,7 @@ typedef struct { char name[256]; int is_dir; } DirEntry;
+@@ -161,7 +230,7 @@ typedef struct { char name[256]; int is_dir; } DirEntry;
  static DirEntry *entries    = NULL;
  static int entry_count      = 0;
  static int entry_capacity   = 0;
@@ -145,7 +162,7 @@ index 263d1f1..1c37a81 100644
  static int selected_index   = 0;
  static int scroll_offset    = 0;
  static uint16_t *framebuffer = NULL;
-@@ -276,22 +342,114 @@ static const char* get_basename(const char *path) {
+@@ -276,22 +345,114 @@ static const char* get_basename(const char *path) {
  
  #define SETTINGS_ENTRY_NAME ">> Settings"
  
@@ -261,7 +278,7 @@ index 263d1f1..1c37a81 100644
          }
          if (entry_count >= entry_capacity) {
              entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
-@@ -313,7 +471,7 @@ static void scan_directory(const char *path) {
+@@ -313,7 +474,7 @@ static void scan_directory(const char *path) {
                  DirEntry tmp = entries[i]; entries[i] = entries[j]; entries[j] = tmp;
              }
      /* Append Settings shortcut at root level */
@@ -270,7 +287,7 @@ index 263d1f1..1c37a81 100644
          if (entry_count >= entry_capacity) {
              entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
              entries = realloc(entries, entry_capacity * sizeof(DirEntry));
-@@ -326,10 +484,18 @@ static void scan_directory(const char *path) {
+@@ -326,10 +487,18 @@ static void scan_directory(const char *path) {
  
      selected_index = 0;
      scroll_offset  = 0;
@@ -289,7 +306,7 @@ index 263d1f1..1c37a81 100644
      pid_t pid = fork();
      if (pid == 0) {
          /* Child: replace with picoarch+game */
-@@ -339,6 +505,12 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
+@@ -339,6 +508,12 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
          /* Parent: wait for game to finish, then return to frogui menu */
          int status;
          waitpid(pid, &status, 0);
@@ -302,7 +319,7 @@ index 263d1f1..1c37a81 100644
          dbg("game finished, returning to frogui");
      } else {
          dbg("fork failed");
-@@ -347,6 +519,11 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
+@@ -347,6 +522,11 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
  
  static void handle_input(void) {
      static bool a_last=false, b_last=false, up_last=false, dn_last=false;
@@ -314,7 +331,7 @@ index 263d1f1..1c37a81 100644
      static bool l_last=false, r_last=false;
  
      uint32_t keys = cv_read();
-@@ -356,13 +533,15 @@ static void handle_input(void) {
+@@ -356,13 +536,15 @@ static void handle_input(void) {
      bool dn = cv_btn(keys, CV_DOWN);
      bool lt = cv_btn(keys, CV_LEFT);
      bool rt = cv_btn(keys, CV_RIGHT);
@@ -332,7 +349,7 @@ index 263d1f1..1c37a81 100644
              if (settings_menu_idx == 0) {
                  settings_theme_idx = (settings_theme_idx + delta + theme_count) % theme_count;
              } else {
-@@ -374,7 +553,7 @@ static void handle_input(void) {
+@@ -374,7 +556,7 @@ static void handle_input(void) {
              settings_save_file();
              settings_menu_active = false;
          }
@@ -341,7 +358,7 @@ index 263d1f1..1c37a81 100644
          return;
      }
  
-@@ -391,32 +570,49 @@ static void handle_input(void) {
+@@ -391,32 +573,49 @@ static void handle_input(void) {
                  settings_menu_idx = 0;
              } else {
                  const char *folder = get_basename(current_path);
@@ -400,7 +417,7 @@ index 263d1f1..1c37a81 100644
  }
  
  /* ---- libretro API ---- */
-@@ -477,6 +673,9 @@ void retro_init(void) {
+@@ -477,6 +676,9 @@ void retro_init(void) {
      dbg("calloc done");
      render_init(framebuffer);
      dbg("render_init done");
@@ -410,7 +427,7 @@ index 263d1f1..1c37a81 100644
      scan_directory(current_path);
      dbg("scan_directory done");
      shutdown_requested = false;
-@@ -528,13 +727,16 @@ void retro_run(void) {
+@@ -528,13 +730,16 @@ void retro_run(void) {
          render_settings_menu();
      } else {
          render_clear_screen(framebuffer);
@@ -429,7 +446,7 @@ index 263d1f1..1c37a81 100644
                               (idx == selected_index), scroll_offset, 0);
          }
          render_legend(framebuffer, LEGEND_X_NONE);
-@@ -544,7 +746,7 @@ void retro_run(void) {
+@@ -544,7 +749,7 @@ void retro_run(void) {
          video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
  }
  

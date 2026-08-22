@@ -170,16 +170,28 @@ int main(int argc, char **argv)
             if (rd < 0 && errno != EAGAIN) { close(fds[i]); fds[i] = fds[--nfd]; i--; }
         }
         uint32_t mask = 0;
-        if (g_down[BTN_TRIGGER]) mask |= 1u << K_Y;   /* btn0 = Y */
-        if (g_down[BTN_THUMB])   mask |= 1u << K_B;
-        if (g_down[BTN_THUMB2])  mask |= 1u << K_A;
-        if (g_down[BTN_TOP])     mask |= 1u << K_X;
-        if (g_down[BTN_TOP2])    mask |= 1u << K_L;
-        if (g_down[BTN_PINKIE])  mask |= 1u << K_R;
-        if (g_down[BTN_BASE])    mask |= 1u << K_L2;
-        if (g_down[BTN_BASE2])   mask |= 1u << K_R2;
-        if (g_down[BTN_BASE3])   mask |= 1u << K_SEL;
-        if (g_down[BTN_BASE4])   mask |= 1u << K_START;
+        /* v8.8 ROOT-CAUSE FIX: the Twin USB Gamepad 0810:0001 reports KEY_*
+         * keycodes 0..15 (sf3000_keymap.txt + diag "KEY=fff" bit0-11), NOT
+         * BTN_TRIGGER..BTN_BASE4 (0x120-0x129). The old g_down[BTN_*] table
+         * never matched -> mask stayed 0 -> UI and games saw NO input at all.
+         * Direct keycode->mask mapping per the STOCK keymap:
+         *   SELECT=0 START=3 UP=4 RIGHT=5 DOWN=6 LEFT=7 L2=8 R2=9 L=10 R=11
+         *   X=12 A=13 B=14 Y=15
+         * Also keep the ABS/HAT direction handling below for stick/hat pads. */
+        if (g_down[4])  mask |= 1u << K_UP;
+        if (g_down[6])  mask |= 1u << K_DOWN;
+        if (g_down[7])  mask |= 1u << K_LEFT;
+        if (g_down[5])  mask |= 1u << K_RIGHT;
+        if (g_down[13]) mask |= 1u << K_A;
+        if (g_down[14]) mask |= 1u << K_B;
+        if (g_down[12]) mask |= 1u << K_X;
+        if (g_down[15]) mask |= 1u << K_Y;
+        if (g_down[10]) mask |= 1u << K_L;
+        if (g_down[11]) mask |= 1u << K_R;
+        if (g_down[8])  mask |= 1u << K_L2;
+        if (g_down[9])  mask |= 1u << K_R2;
+        if (g_down[0])  mask |= 1u << K_SEL;
+        if (g_down[3])  mask |= 1u << K_START;
         /* d-pad hat + analog stick (any device). Physical levels are
          * merged per-direction then fed through the pulse debouncer.
          * v3: axis state from BOTH the event stream (g_axis, updated above)
