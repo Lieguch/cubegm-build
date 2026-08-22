@@ -36,6 +36,27 @@
 - 显示：标准 Linux DRM/KMS；音频：ALSA；输入：evdev。无需重写硬件驱动层。
 - 工具链前缀 arm-linux-gnueabihf-；CFLAGS=-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2。禁用 aarch64 / arm-linux-gnueabi(soft-float)。
 
+## 0.5 架构重构交接（A+B+C · 2026-08-22 用户批准 · 取代补丁路线）
+
+> **封存点**：commit `39f0c28`（v0.3.1，CI run 279）= 补丁路线的最后版本，已打包归档（`CubeGM_v0.3.1_archive.zip`，含全部源码/补丁/文档/记忆/踩坑历史）。**任何 Agent 接手从本 § 开始。**
+
+**为什么停止补丁路线**（用户判定"穷举试错"）：30+ 次补丁均未达验收。根因 = **架构错位**：在 SF2000 专用代码（plat_sf3000.c/plat_sdl.c 的 cubevol shm 输入、/dev/dis 显示、专用 driver.so 音频）上用补丁强适配标准 Linux 的 RK3036G（DRM/ALSA/evdev）+ **无设备端验证手段**（键码/显示/音频全靠日志猜）。
+
+**三个方向（按此执行，禁止跳过）**：
+- **B（先做）**：设备端 `diag` 自动诊断工具（armhf 小程序，`deploy/diag/`）。开机自动输出 `diag_report.txt`：逐键按下记录真实键码/轴/HAT、显示红绿蓝白黑测试图、1kHz 测试音、逐 core 加载测试。**消灭键码/显示/音频猜测**。事实底座未就位前，禁止做任何平台层修复。
+- **A（基于 B 事实）**：新建独立 `plat_rk3036g.c` 平台层（DRM 显示 + ALSA 音频 + evdev 输入），Makefile 增 `platform=rk3036g` 分支；游戏输入走 libpicofe 原生 in_evdev（绑定可在设备菜单重绑存 config，`in_config_parse_dev` 实证）；**移除**自研 shm 输入注入；脱离 SF2000 全部专属路径。
+- **C（贯穿）**：单子系统迭代——顺序 输入→显示→音频→性能，一次只推一个子系统、独立版本、独立实机验证；不再 10 问题一锅端。
+
+**重构起点现状**（diag 工具已设计，待实现/提交）：
+- picoarch 源码在 `cubegm-work/source/TreeFrogUI_picoarch`（本地已应用全量补丁，HEAD 逻辑 = 39f0c28 产物）。
+- 上轮 v0.3.1 修复仍有效（bridge 方向轴、evdev 绑定表、-rdynamic 音频、竖屏旋转表、CLOEXEC 半白屏）——它们是**过渡**，最终被 plat_rk3036g 吸收或取代。
+- CI：run 279 构建 v0.3.1（封存版）。重构首个推送（diag 工具）触发新 run。
+
+**重构验收规则**（防回归）：
+- 每个子系统合入必须带：①diag 实机事实；②单独版本号；③verify_target_abi.sh 门禁；④用户实机反馈后才推进下一子系统。
+- 出现**同一点第二次失败** → 停手，联网查该项目官网/官方论坛/知名论坛（item 20 铁律）。
+- 涉及删除 → 先列清单确认（item 21 铁律）。
+
 ## 3. 构建流水线
 编排 deploy/bootstrap_linux.sh（CI 调它）分三段：
 - STAGE 0：apt 装构建依赖。
