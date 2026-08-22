@@ -191,6 +191,8 @@ index 263d1f1..79ab2f6 100644
 +#define KEYMAP_FILE "/mnt/sdcard/cubegm/keymap.txt"
 +static int  map_codes[14] = { 4, 6, 7, 5, 13, 14, 12, 15, 10, 11, 8, 9, 0, 3 };
 +
+static void mkdir_p(const char *path);
++
 +static void map_save(void) {
 +    mkdir_p("/mnt/sdcard/cubegm");
 +    FILE *f = fopen(KEYMAP_FILE, "w");
