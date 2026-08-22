@@ -37,10 +37,15 @@ index 93ff2a5..349991f 100644
  typedef struct {
      const char *console_name;
 diff --git a/frogui_libretro.c b/frogui_libretro.c
-index 263d1f1..5360d32 100644
+index 263d1f1..79ab2f6 100644
 --- a/frogui_libretro.c
 +++ b/frogui_libretro.c
-@@ -19,6 +19,7 @@
+@@ -16,9 +16,12 @@
+ #include <sys/ipc.h>
+ #include <sys/shm.h>
+ #include <sys/wait.h>
++#include <fcntl.h>   /* v8.9 item 18: open /dev/input/event* for key capture */
++#include <linux/input.h>
  #include <unistd.h>
  #include <dirent.h>
  #include <stdbool.h>
@@ -48,7 +53,7 @@ index 263d1f1..5360d32 100644
  
  #include "libretro.h"
  #include "font.h"
-@@ -30,7 +31,23 @@
+@@ -30,7 +33,23 @@
  
  #define SDCARD_BASE  "/mnt/sdcard"
  #define CORES_PATH   SDCARD_BASE "/cubegm/cores"
@@ -73,7 +78,7 @@ index 263d1f1..5360d32 100644
  #define LAUNCH_FILE  "/tmp/frogui_launch.txt"
  
  /* Console → core mapping (folder name → libretro .so)
-@@ -43,10 +60,12 @@ static const ConsoleMapping console_mappings[] = {
+@@ -43,10 +62,12 @@ static const ConsoleMapping console_mappings[] = {
      {"nest",   CORES_PATH "/nestopia_libretro.so"},
      {"FC",     CORES_PATH "/fceumm_libretro.so"},
      {"NES",    CORES_PATH "/quicknes_libretro.so"},
@@ -89,7 +94,7 @@ index 263d1f1..5360d32 100644
      /* Game Boy */
      {"gb",     CORES_PATH "/gambatte_libretro.so"},
      {"gbgb",   CORES_PATH "/gearboy_libretro.so"},
-@@ -133,6 +152,31 @@ static const ConsoleMapping console_mappings[] = {
+@@ -133,6 +154,31 @@ static const ConsoleMapping console_mappings[] = {
      {"vapor",  CORES_PATH "/vaporspec_libretro.so"},
      {"amiga",  CORES_PATH "/uae_libretro.so"},
      {"atari-st", CORES_PATH "/castaway_libretro.so"},
@@ -121,7 +126,7 @@ index 263d1f1..5360d32 100644
      {NULL, NULL}
  };
  
-@@ -143,6 +187,31 @@ static const char* get_core_for_folder(const char *folder) {
+@@ -143,6 +189,31 @@ static const char* get_core_for_folder(const char *folder) {
      return NULL;
  }
  
@@ -153,7 +158,7 @@ index 263d1f1..5360d32 100644
  /* Libretro callbacks */
  static retro_video_refresh_t     video_cb     = NULL;
  static retro_environment_t       environ_cb   = NULL;
-@@ -161,7 +230,7 @@ typedef struct { char name[256]; int is_dir; } DirEntry;
+@@ -161,7 +232,7 @@ typedef struct { char name[256]; int is_dir; } DirEntry;
  static DirEntry *entries    = NULL;
  static int entry_count      = 0;
  static int entry_capacity   = 0;
@@ -162,7 +167,42 @@ index 263d1f1..5360d32 100644
  static int selected_index   = 0;
  static int scroll_offset    = 0;
  static uint16_t *framebuffer = NULL;
-@@ -276,22 +345,114 @@ static const char* get_basename(const char *path) {
+@@ -216,10 +287,32 @@ static const char *font_names[] = {"GamePocket", "Monogram"};
+ #define FONT_COUNT 2
+ 
+ static bool settings_menu_active = false;
+-static int settings_menu_idx = 0;       /* which row: 0=theme, 1=font */
++static int settings_menu_idx = 0;       /* which row: 0=theme, 1=font, 2=map */
+ static int settings_theme_idx = 0;
+ static int settings_font_idx = 0;
+-#define SETTINGS_ROW_COUNT 2
++#define SETTINGS_ROW_COUNT 3
++
++/* v8.9 (item 18): button remap capture. When the user picks "Map buttons"
++ * we step through the 14 actions; the next physical key/hat press is bound to
++ * the action and written to /mnt/sdcard/cubegm/keymap.txt (bridge reloads it
++ * at startup; format is the stock "ACTION code" lines). */
++static bool map_capture_active = false;
++static int  map_capture_idx = 0;        /* 0..13 which action we are binding */
++static const char *map_actions[14] = {
++    "UP", "DOWN", "LEFT", "RIGHT", "A", "B", "X", "Y",
++    "L", "R", "L2", "R2", "SELECT", "START"
++};
++#define KEYMAP_FILE "/mnt/sdcard/cubegm/keymap.txt"
++static int  map_codes[14] = { 4, 6, 7, 5, 13, 14, 12, 15, 10, 11, 8, 9, 0, 3 };
++
++static void map_save(void) {
++    mkdir_p("/mnt/sdcard/cubegm");
++    FILE *f = fopen(KEYMAP_FILE, "w");
++    if (!f) { dbg("keymap save: fopen failed"); return; }
++    for (int i = 0; i < 14; i++)
++        fprintf(f, "%s %d\n", map_actions[i], map_codes[i]);
++    fclose(f);
++}
+ 
+ static void mkdir_p(const char *path) {
+     char cmd[300];
+@@ -276,22 +369,114 @@ static const char* get_basename(const char *path) {
  
  #define SETTINGS_ENTRY_NAME ">> Settings"
  
@@ -278,7 +318,7 @@ index 263d1f1..5360d32 100644
          }
          if (entry_count >= entry_capacity) {
              entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
-@@ -313,7 +474,7 @@ static void scan_directory(const char *path) {
+@@ -313,7 +498,7 @@ static void scan_directory(const char *path) {
                  DirEntry tmp = entries[i]; entries[i] = entries[j]; entries[j] = tmp;
              }
      /* Append Settings shortcut at root level */
@@ -287,7 +327,7 @@ index 263d1f1..5360d32 100644
          if (entry_count >= entry_capacity) {
              entry_capacity = entry_capacity ? entry_capacity*2 : INITIAL_ENTRIES_CAPACITY;
              entries = realloc(entries, entry_capacity * sizeof(DirEntry));
-@@ -326,10 +487,18 @@ static void scan_directory(const char *path) {
+@@ -326,10 +511,18 @@ static void scan_directory(const char *path) {
  
      selected_index = 0;
      scroll_offset  = 0;
@@ -306,7 +346,7 @@ index 263d1f1..5360d32 100644
      pid_t pid = fork();
      if (pid == 0) {
          /* Child: replace with picoarch+game */
-@@ -339,6 +508,12 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
+@@ -339,6 +532,12 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
          /* Parent: wait for game to finish, then return to frogui menu */
          int status;
          waitpid(pid, &status, 0);
@@ -319,7 +359,7 @@ index 263d1f1..5360d32 100644
          dbg("game finished, returning to frogui");
      } else {
          dbg("fork failed");
-@@ -347,6 +522,11 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
+@@ -347,6 +546,11 @@ static void request_game_launch(const char *core_path, const char *rom_path) {
  
  static void handle_input(void) {
      static bool a_last=false, b_last=false, up_last=false, dn_last=false;
@@ -331,7 +371,7 @@ index 263d1f1..5360d32 100644
      static bool l_last=false, r_last=false;
  
      uint32_t keys = cv_read();
-@@ -356,13 +536,15 @@ static void handle_input(void) {
+@@ -356,25 +560,64 @@ static void handle_input(void) {
      bool dn = cv_btn(keys, CV_DOWN);
      bool lt = cv_btn(keys, CV_LEFT);
      bool rt = cv_btn(keys, CV_RIGHT);
@@ -340,6 +380,35 @@ index 263d1f1..5360d32 100644
  
      if (settings_menu_active) {
          extern const int theme_count;
++        if (map_capture_active) {
++            /* capture mode (v8.9 item 18): wait for the NEXT physical
++             * keycode from any evdev device and bind it to the current
++             * action. We read raw /dev/input/event* so the captured value is
++             * the real keycode, not the mapped shm bit. */
++            int kc = -1;
++            for (int e = 0; e < 16 && kc < 0; e++) {
++                char p[64]; snprintf(p, sizeof(p), "/dev/input/event%d", e);
++                int fd = open(p, O_RDONLY | O_NONBLOCK);
++                if (fd < 0) continue;
++                struct input_event ev;
++                ssize_t rd;
++                while ((rd = read(fd, &ev, sizeof(ev))) == (ssize_t)sizeof(ev)) {
++                    if (ev.type == EV_KEY && ev.value == 1) { kc = ev.code; break; }
++                }
++                close(fd);
++            }
++            if (kc >= 0) {
++                map_codes[map_capture_idx] = kc;
++                map_capture_idx++;
++                if (map_capture_idx >= 14) {
++                    map_save();
++                    map_capture_active = false;
++                    map_capture_idx = 0;
++                }
++            }
++            a_last=a; b_last=b; up_last=up; dn_last=dn; lt_last=lt; rt_last=rt; l_last=lk; r_last=rk;
++            return;
++        }
          if (up && !up_last) settings_menu_idx = (settings_menu_idx - 1 + SETTINGS_ROW_COUNT) % SETTINGS_ROW_COUNT;
          if (dn && !dn_last) settings_menu_idx = (settings_menu_idx + 1) % SETTINGS_ROW_COUNT;
 -        if ((lt && !l_last) || (rt && !r_last)) {
@@ -348,8 +417,22 @@ index 263d1f1..5360d32 100644
 +            int delta = (rt && !rt_last) ? 1 : -1;
              if (settings_menu_idx == 0) {
                  settings_theme_idx = (settings_theme_idx + delta + theme_count) % theme_count;
-             } else {
-@@ -374,7 +556,7 @@ static void handle_input(void) {
+-            } else {
++            } else if (settings_menu_idx == 1) {
+                 settings_font_idx = (settings_font_idx + delta + FONT_COUNT) % FONT_COUNT;
+             }
+             settings_apply();
+         }
+-        if ((a && !a_last) || (b && !b_last)) {
++        if (a && !a_last) {
++            if (settings_menu_idx == 2) {          /* Map buttons -> capture */
++                map_capture_active = true;
++                map_capture_idx = 0;
++            } else {
++                settings_save_file();
++                settings_menu_active = false;
++            }
++        } else if (b && !b_last) {
              settings_save_file();
              settings_menu_active = false;
          }
@@ -358,7 +441,7 @@ index 263d1f1..5360d32 100644
          return;
      }
  
-@@ -391,32 +573,49 @@ static void handle_input(void) {
+@@ -391,32 +634,49 @@ static void handle_input(void) {
                  settings_menu_idx = 0;
              } else {
                  const char *folder = get_basename(current_path);
@@ -387,8 +470,10 @@ index 263d1f1..5360d32 100644
 +    if (up && !up_last) {                       /* wrap at top -> last entry */
 +        if (selected_index > 0) selected_index--;
 +        else selected_index = (entry_count > 0) ? entry_count - 1 : 0;
-+        if (selected_index < scroll_offset) scroll_offset = selected_index;
-+    }
+         if (selected_index < scroll_offset) scroll_offset = selected_index;
+     }
+-    if (dn && !dn_last && selected_index < entry_count-1) {
+-        selected_index++;
 +    if (dn && !dn_last) {                       /* wrap at bottom -> first entry */
 +        if (selected_index < entry_count-1) selected_index++;
 +        else selected_index = 0;
@@ -401,10 +486,8 @@ index 263d1f1..5360d32 100644
 +    if (lk && !l_last && entry_count > 0) {
 +        selected_index -= 8;
 +        if (selected_index < 0) selected_index = 0;
-         if (selected_index < scroll_offset) scroll_offset = selected_index;
-     }
--    if (dn && !dn_last && selected_index < entry_count-1) {
--        selected_index++;
++        if (selected_index < scroll_offset) scroll_offset = selected_index;
++    }
 +    if (rk && !r_last && entry_count > 0) {
 +        selected_index += 8;
 +        if (selected_index >= entry_count) selected_index = entry_count - 1;
@@ -417,7 +500,7 @@ index 263d1f1..5360d32 100644
  }
  
  /* ---- libretro API ---- */
-@@ -477,6 +676,9 @@ void retro_init(void) {
+@@ -477,6 +737,9 @@ void retro_init(void) {
      dbg("calloc done");
      render_init(framebuffer);
      dbg("render_init done");
@@ -427,7 +510,44 @@ index 263d1f1..5360d32 100644
      scan_directory(current_path);
      dbg("scan_directory done");
      shutdown_requested = false;
-@@ -528,13 +730,16 @@ void retro_run(void) {
+@@ -501,6 +764,21 @@ static void render_settings_menu(void) {
+     render_clear_screen(framebuffer);
+     render_header(framebuffer, "SETTINGS");
+ 
++    if (map_capture_active) {
++        /* capture prompt: which action to bind + current progress */
++        char line[128];
++        snprintf(line, sizeof(line), "Map [%s]: press a button",
++                 map_actions[map_capture_idx]);
++        render_text_pillbox(framebuffer, PADDING, START_Y, line,
++                            COLOR_SELECT_BG, COLOR_SELECT_TEXT, 7);
++        snprintf(line, sizeof(line), "(%d/14 done -- B to cancel)",
++                 map_capture_idx);
++        font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT,
++                       PADDING, START_Y + ITEM_HEIGHT, line, COLOR_TEXT);
++        render_legend(framebuffer, LEGEND_X_NONE);
++        return;
++    }
++
+     char line[128];
+     int y0 = START_Y;
+     /* Theme row */
+@@ -518,6 +796,14 @@ static void render_settings_menu(void) {
+     } else {
+         font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, y1, line, COLOR_TEXT);
+     }
++    /* Map buttons row (v8.9 item 18) */
++    snprintf(line, sizeof(line), "Map buttons: A to start");
++    int y2 = y1 + ITEM_HEIGHT;
++    if (settings_menu_idx == 2) {
++        render_text_pillbox(framebuffer, PADDING, y2, line, COLOR_SELECT_BG, COLOR_SELECT_TEXT, 7);
++    } else {
++        font_draw_text(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, PADDING, y2, line, COLOR_TEXT);
++    }
+     render_legend(framebuffer, LEGEND_X_NONE);
+ }
+ 
+@@ -528,13 +814,16 @@ void retro_run(void) {
          render_settings_menu();
      } else {
          render_clear_screen(framebuffer);
@@ -446,7 +566,7 @@ index 263d1f1..5360d32 100644
                               (idx == selected_index), scroll_offset, 0);
          }
          render_legend(framebuffer, LEGEND_X_NONE);
-@@ -544,7 +749,7 @@ void retro_run(void) {
+@@ -544,7 +833,7 @@ void retro_run(void) {
          video_cb(framebuffer, SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH * sizeof(uint16_t));
  }
  

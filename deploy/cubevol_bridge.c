@@ -47,6 +47,47 @@
 
 static volatile uint32_t *g_mask = NULL;
 static int g_down[KEY_CNT];
+/* v8.9 (item 18): custom remap table, loaded from
+ * /mnt/sdcard/cubegm/keymap.txt (same "ACTION code" format as the stock
+ * sf3000_keymap.txt). Missing file / missing entry = stock mapping. This is
+ * how ANY pad (not just 0810:0001) can be adapted without recompiling. */
+#define KEYMAP_FILE "/mnt/sdcard/cubegm/keymap.txt"
+/* action -> evdev keycode; -1 = unset (use stock). Indexed by K_* bit. */
+static int g_remap[16];
+static void remap_load(void) {
+    for (int i = 0; i < 16; i++) g_remap[i] = -1;
+    FILE *f = fopen(KEYMAP_FILE, "r");
+    if (!f) { fprintf(stderr, "cubevol_bridge: no %s, using stock keymap\n", KEYMAP_FILE); return; }
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        char act[24]; int code = -1;
+        if (sscanf(line, "%23s %d", act, &code) != 2) continue;
+        int bit = -1;
+        if      (!strcasecmp(act, "UP"))     bit = K_UP;
+        else if (!strcasecmp(act, "DOWN"))   bit = K_DOWN;
+        else if (!strcasecmp(act, "LEFT"))   bit = K_LEFT;
+        else if (!strcasecmp(act, "RIGHT"))  bit = K_RIGHT;
+        else if (!strcasecmp(act, "A"))      bit = K_A;
+        else if (!strcasecmp(act, "B"))      bit = K_B;
+        else if (!strcasecmp(act, "X"))      bit = K_X;
+        else if (!strcasecmp(act, "Y"))      bit = K_Y;
+        else if (!strcasecmp(act, "L"))      bit = K_L;
+        else if (!strcasecmp(act, "R"))      bit = K_R;
+        else if (!strcasecmp(act, "L2"))     bit = K_L2;
+        else if (!strcasecmp(act, "R2"))     bit = K_R2;
+        else if (!strcasecmp(act, "SELECT")) bit = K_SEL;
+        else if (!strcasecmp(act, "START"))  bit = K_START;
+        if (bit >= 0 && code >= 0 && code < KEY_CNT) g_remap[bit] = code;
+    }
+    fclose(f);
+    fprintf(stderr, "cubevol_bridge: keymap loaded from %s\n", KEYMAP_FILE);
+}
+/* stock keycode for a K_* bit, or the custom remap if set */
+static int keycode_for(int bit) {
+    static const int stock[16] = { K_SEL, -1, -1, K_START, K_UP, K_RIGHT,
+        K_DOWN, K_LEFT, K_L2, K_R2, K_L, K_R, K_X, K_A, K_B, K_Y };
+    return (g_remap[bit] >= 0) ? g_remap[bit] : stock[bit];
+}
 /* v8.7: per-fd ABS capability bitmap. The old code treated "axis value == 0"
  * as "unplugged port" (skip), which silently dropped the UP/LEFT directions:
  * a pad pushed to the TOP/LEFT reads ABS_Y/ABS_X == 0 (minimum) and was
@@ -113,6 +154,7 @@ int main(int argc, char **argv)
     *m = 0;
     g_mask = m;
     fprintf(stderr, "cubevol_bridge: shm OK key=%d id=%d\n", (int)key, shmid);
+    remap_load();   /* v8.9 item 18: custom keymap from /mnt/sdcard/cubegm/keymap.txt */
 
     /* open all evdev devices that report EV_KEY */
     int fds[16]; int nfd = 0;
@@ -177,21 +219,15 @@ int main(int argc, char **argv)
          * Direct keycode->mask mapping per the STOCK keymap:
          *   SELECT=0 START=3 UP=4 RIGHT=5 DOWN=6 LEFT=7 L2=8 R2=9 L=10 R=11
          *   X=12 A=13 B=14 Y=15
+         * v8.9 (item 18): each K_* bit resolves through keycode_for(), which
+         * honours /mnt/sdcard/cubegm/keymap.txt (custom remap for ANY pad).
          * Also keep the ABS/HAT direction handling below for stick/hat pads. */
-        if (g_down[4])  mask |= 1u << K_UP;
-        if (g_down[6])  mask |= 1u << K_DOWN;
-        if (g_down[7])  mask |= 1u << K_LEFT;
-        if (g_down[5])  mask |= 1u << K_RIGHT;
-        if (g_down[13]) mask |= 1u << K_A;
-        if (g_down[14]) mask |= 1u << K_B;
-        if (g_down[12]) mask |= 1u << K_X;
-        if (g_down[15]) mask |= 1u << K_Y;
-        if (g_down[10]) mask |= 1u << K_L;
-        if (g_down[11]) mask |= 1u << K_R;
-        if (g_down[8])  mask |= 1u << K_L2;
-        if (g_down[9])  mask |= 1u << K_R2;
-        if (g_down[0])  mask |= 1u << K_SEL;
-        if (g_down[3])  mask |= 1u << K_START;
+        static const int all_bits[14] = { K_UP, K_DOWN, K_LEFT, K_RIGHT,
+            K_A, K_B, K_X, K_Y, K_L, K_R, K_L2, K_R2, K_SEL, K_START };
+        for (int b = 0; b < 14; b++) {
+            int kc = keycode_for(all_bits[b]);
+            if (kc >= 0 && g_down[kc]) mask |= 1u << all_bits[b];
+        }
         /* d-pad hat + analog stick (any device). Physical levels are
          * merged per-direction then fed through the pulse debouncer.
          * v3: axis state from BOTH the event stream (g_axis, updated above)
