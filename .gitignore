@@ -1,1 +1,33 @@
 /file/
+
+# ---- 调试 / 临时产物（不进入版本库；本地诊断用）----
+.workbuddy/
+_diag/
+_repro/
+_repro2/
+_elfcheck.py
+_syms.py
+arts.json
+joblog.txt
+jobs*.json
+run*.json
+runs.json
+boot*.log
+bootstrap.log
+rel*.json
+
+# ---- 构建 / 打包产物 ----
+*.zip
+*.tar.xz
+report*/
+payload*/
+buildroot/
+cubegm-build-logs/
+
+# ---- 工具链 / 交叉编译中间产物 ----
+toolchain/
+*.o
+*.a
+*.so
+*.pyc
+__pycache__/
