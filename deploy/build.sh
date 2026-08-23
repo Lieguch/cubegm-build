@@ -189,6 +189,20 @@ if [ -f "$PICO_PATCH" ]; then
 else
     die "picoarch_rk3036g_full.patch missing -- cannot build."
 fi
+# Direction-A platform layer (plat_rk3036g.c + Makefile rk3036g branch).
+# Applies on top of the full patch; adds files + a platform branch + a guard
+# extension only -- it does NOT change the platform=sf3000 build path.
+PICO_A1_PATCH="$HERE/../patch/picoarch_rk3036g_platform.patch"
+if [ -f "$PICO_A1_PATCH" ]; then
+    if git -C picoarch apply --ignore-whitespace --check "$PICO_A1_PATCH" 2>/dev/null; then
+        log "Applying picoarch rk3036g platform patch (A1)..."
+        git -C picoarch apply --ignore-whitespace "$PICO_A1_PATCH"
+    elif git -C picoarch apply --ignore-whitespace -R --check "$PICO_A1_PATCH" 2>/dev/null; then
+        log "picoarch rk3036g platform patch already applied -- skipping."
+    else
+        log "WARN: picoarch rk3036g platform patch (A1) NOT applicable -- continuing with sf3000 build."
+    fi
+fi
 # DRM UAPI headers for the RK3036G HDMI modeset path (hwdisp_drm #includes
 # <drm/drm.h>). The crosstool glibc-2.29 sysroot ships no DRM headers, so
 # bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
