@@ -71,15 +71,23 @@ echo "$TO_DOWNLOAD" | while IFS= read -r core; do
         tmpfile="$(mktemp)"
         # 下载（带重试）
         if curl -fsSL --max-time 60 --retry 3 --retry-delay 2 -o "$tmpfile" "$url" 2>/dev/null; then
-            # 解压（确保 .so 在顶层目录）
+            # 解压 .so
             unzip -q -o -j "$tmpfile" "*_libretro.so" -d "$CORE_OUT/" 2>/dev/null || \
                 unzip -q -o -j "$tmpfile" "*.so" -d "$CORE_OUT/" 2>/dev/null || true
             rm -f "$tmpfile"
             if [ -f "$CORE_OUT/${core}_libretro.so" ]; then
-                chmod +x "$CORE_OUT/${core}_libretro.so"
-                echo "[download]   OK  $core (from ${platform##*/latest/})"
-                DOWNLOADED=$((DOWNLOADED+1))
-                break
+                # ABI 验证：确保是 32-bit ARM（EI_CLASS=1, E_MACHINE=40）
+                elfclass=$(od -An -t u1 -j4 -N1 "$CORE_OUT/${core}_libretro.so" 2>/dev/null | tr -d ' ')
+                elfarch=$(od -An -t u2 -j18 -N2 "$CORE_OUT/${core}_libretro.so" 2>/dev/null | tr -d ' ')
+                if [ "$elfclass" = "1" ] && [ "$elfarch" = "40" ]; then
+                    chmod +x "$CORE_OUT/${core}_libretro.so"
+                    echo "[download]   OK  $core (from ${platform##*/latest/})"
+                    DOWNLOADED=$((DOWNLOADED+1))
+                    break
+                else
+                    echo "[download]   WARN $core from ${platform##*/latest/} is not 32-bit ARM (class=$elfclass arch=$elfarch) -- removing"
+                    rm -f "$CORE_OUT/${core}_libretro.so"
+                fi
             fi
         fi
         rm -f "$tmpfile"
