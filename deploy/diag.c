@@ -216,10 +216,17 @@ static void cmd_display(void) {
     struct drm_mode_card_res res; memset(&res, 0, sizeof res);
     if (ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
         logf("  GETRESOURCES FAILED: %s\n", strerror(errno)); close(fd); return; }
+    /* Two-pass protocol: ALL FOUR id pointers must be valid — the kernel
+     * put_user()s into every one whose count >= actual (NULL fb_id_ptr /
+     * encoder_id_ptr with non-zero count = EFAULT "Bad address"). */
     uint32_t *conns = calloc(res.count_connectors ? res.count_connectors : 1, 4);
     uint32_t *crtcs = calloc(res.count_crtcs ? res.count_crtcs : 1, 4);
-    res.connector_id_ptr = (uintptr_t)conns; res.crtc_id_ptr = (uintptr_t)crtcs;
-    res.count_connectors = res.count_connectors; res.count_crtcs = res.count_crtcs;
+    uint32_t *encs  = calloc(res.count_encoders ? res.count_encoders : 1, 4);
+    uint32_t *fbs   = calloc(res.count_fbs ? res.count_fbs : 1, 4);
+    res.connector_id_ptr = (uintptr_t)conns;
+    res.crtc_id_ptr      = (uintptr_t)crtcs;
+    res.encoder_id_ptr   = (uintptr_t)encs;
+    res.fb_id_ptr        = (uintptr_t)fbs;
     if (ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
         logf("  GETRESOURCES(2) FAILED: %s\n", strerror(errno)); close(fd); return; }
     int conn_id = -1, crtc_id = -1;

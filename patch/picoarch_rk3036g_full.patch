@@ -707,16 +707,33 @@ index 5367b21..14f1adf 100644
      extern void sf3000_dump_fb_state(const char *);
      if (g_active) return 0;
 +
-+    /* RK3036G: payload-285 device logs (zhijack fb0 white-frame test +
-+     * picoarch_init "fb0=0x0 ... drm=1" black screen) PROVED that fb0 is the
-+     * ONLY visible HDMI path: zhijack writes /dev/fb0 -> white flash visible;
-+     * picoarch's RGB565 DRM dumb-buffer present runs at 50 FPS yet the screen
-+     * stays BLACK (VOP does not scan the dumb buffer). So fb0-direct FIRST,
-+     * DRM modeset only as fallback (some HDMI dongles need a modeset to
-+     * unblank, but pixels MUST go to fb0). */
++    /* RK3036G: payload-305 device logs REVERSED the payload-285 conclusion.
++     * payload-285 saw "fb0 white flash visible" (a FIXED log string, not a real
++     * measurement) and picoarch's DRM dumb-buffer present at 50 FPS but black
++     * screen -> concluded "fb0 is the only visible path". WRONG.
++     *
++     * payload-305 diag proves the opposite: HDMI output lives on DRM/KMS
++     * (card0-HDMI-A-1 status=connected enabled=enabled, 6 modes incl.
++     * 1280x720p60). /dev/fb0 is a legacy emulation that does NOT drive the HDMI
++     * scanout (writing it leaves the screen black). The earlier "fb0 white
++     * flash" was rc=0 of the shell write (head|tr>/dev/fb0), NOT a visual
++     * confirmation.
++     *
++     * So: DRM dumb-buffer + SETCRTC FIRST (this is the real HDMI path), fb0
++     * direct-write only as a last-resort fallback. */
 +    extern int sf3000_is_rk3036(void);
 +    if (sf3000_is_rk3036()) {
-+        hwdisp_fslog("hwdisp_init: RK3036G branch, fb0-direct FIRST (proven visible)");
++        hwdisp_fslog("hwdisp_init: RK3036G branch, DRM modeset FIRST (HDMI is DRM/KMS)");
++        if (hwdisp_drm_init() == 0) {
++            g_active = 1;
++            g_fb_only = 1;
++            g_drm_mode = 1;
++            hwdisp_fslog("hwdisp_init: DRM modeset ACTIVE %dx%d (dumb-buffer present)",
++                         g_drm_w, g_drm_h);
++            fprintf(stderr, "hwdisp: RK3036G DRM modeset active %dx%d\n", g_drm_w, g_drm_h);
++            return 0;
++        }
++        hwdisp_fslog("hwdisp_init: DRM modeset failed, falling back to fb0-direct");
 +        hwdisp_fb_open();
 +        if (g_fbmem && g_fbw > 0 && g_fbh > 0) {
 +            g_active = 1;
@@ -728,20 +745,9 @@ index 5367b21..14f1adf 100644
 +                    g_fbw, g_fbh, g_fbbpp);
 +            return 0;
 +        }
-+        hwdisp_fslog("hwdisp_init: fb0 open FAILED (fbmem=%p fbw=%d fbh=%d), trying DRM modeset",
-+                     (void*)g_fbmem, g_fbw, g_fbh);
-+        if (hwdisp_drm_init() == 0) {
-+            g_active = 1;
-+            g_fb_only = 1;
-+            g_drm_mode = 1;
-+            hwdisp_fslog("hwdisp_init: DRM modeset ACTIVE %dx%d (dumb-buffer present)",
-+                         g_drm_w, g_drm_h);
-+            fprintf(stderr, "hwdisp: RK3036G DRM modeset active %dx%d\n", g_drm_w, g_drm_h);
-+            return 0;
-+        }
-+        hwdisp_fslog("hwdisp_init: RK3036G both fb0 and DRM FAILED (fbmem=%p fbw=%d fbh=%d) errno=%d",
++        hwdisp_fslog("hwdisp_init: RK3036G both DRM and fb0 FAILED (fbmem=%p fbw=%d fbh=%d) errno=%d",
 +                     (void*)g_fbmem, g_fbw, g_fbh, errno);
-+        fprintf(stderr, "hwdisp: RK3036G fb0 open failed\n");
++        fprintf(stderr, "hwdisp: RK3036G both DRM and fb0 failed\n");
 +        return -1;
 +    }
 +
