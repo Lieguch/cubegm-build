@@ -7,11 +7,11 @@
 #  via the autorun hijack; stock rkgame/icube/driver.so and root.dat are left
 #  untouched, so the device will NOT report "sdcard is damaged".
 #
-#  All produced binaries are linked against glibc <= 2.17 (the device ceiling,
+#  All produced binaries are linked against glibc <= 2.29 (the device ceiling,
 #  measured on the 20 device cores) and verified by verify_target_abi.sh.
 #
 #  USAGE
-#    ./build.sh                 # full build (auto-builds glibc-2.17 sysroot)
+#    ./build.sh                 # full build (auto-builds glibc-2.29 sysroot)
 #    SYSROOT=/path/to/sysroot ./build.sh
 #    ARM_GNU=/opt/arm-gnu-13.2 ./build.sh
 #    CORES="mgba snes9x fceumm" ./build.sh   # build only these libretro cores
@@ -99,17 +99,17 @@ export CROSS_COMPILE="${TARGET}-"
 export CC CXX
 
 # -----------------------------------------------------------------------------
-# STAGE 2 -- glibc-2.17 sysroot (the device ceiling)
+# STAGE 2 -- glibc-2.29 sysroot (the device ceiling)
 # -----------------------------------------------------------------------------
 if [ -z "$SYSROOT" ]; then
     if [ "$SKIP_SYSROOT" = "1" ]; then
         die "SKIP_SYSROOT=1 but no SYSROOT provided."
     fi
-    SYSROOT="$WORKDIR/sysroot-glibc217"
+    SYSROOT="$WORKDIR/sysroot-glibc229"
     if [ -d "$SYSROOT/usr/lib" ]; then
         log "Reusing existing sysroot: $SYSROOT"
     else
-        log "Building glibc-2.17 sysroot with crosstool-NG (one-time, ~20-60 min)..."
+        log "Building glibc-2.29 sysroot with crosstool-NG (one-time, ~20-60 min)..."
         bash "$HERE/toolchain/build_sysroot_ctng.sh" "$SYSROOT"
     fi
 fi
@@ -190,7 +190,7 @@ else
     die "picoarch_rk3036g_full.patch missing -- cannot build."
 fi
 # DRM UAPI headers for the RK3036G HDMI modeset path (hwdisp_drm #includes
-# <drm/drm.h>). The crosstool glibc-2.17 sysroot ships no DRM headers, so
+# <drm/drm.h>). The crosstool glibc-2.29 sysroot ships no DRM headers, so
 # bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
 mkdir -p picoarch/include/drm
 cp -f "$HERE/drm_headers/drm/"*.h picoarch/include/drm/ 2>/dev/null || log "WARN: drm headers not copied (hwdisp_drm won't compile!)"
@@ -210,7 +210,7 @@ fi
 #   HARDCODED to MIPS (-mips32r2). Our device is ARM (RK3036G), so use the
 #   provided ARM template build_sf3000_armhf.sh. It rewrites the Makefile's
 #   MIPS flags to ARM and expects SDL1.2 + libpng12 (armhf, linked against the
-#   2.17 sysroot) to be present in $SYSROOT. The minimal crosstool-NG sysroot
+#   2.29 sysroot) to be present in $SYSROOT. The minimal crosstool-NG sysroot
 #   does NOT include SDL/libpng -- cross-build them first (see HANDOFF.md).
 #   Also note: the Makefile reads lowercase 'platform'; passing PLATFORM=...
 #   is a no-op and silently builds the 'unix' target.
@@ -420,7 +420,7 @@ done <<< "$CORE_TABLE"
 
 # STAGE 8 -- ABI gate
 # -----------------------------------------------------------------------------
-log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.17)..."
+log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.29)..."
 bash "$HERE/toolchain/verify_target_abi.sh" \
     picoarch/picoarch \
     FrogUI/frogui_libretro.so \
@@ -494,7 +494,7 @@ mkdir -p "$DST/lib"
 READELF="${CROSS_COMPILE}readelf"
 # base libs the device rootfs always provides -- do NOT bundle these
 BASE_LIBS="libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 libgcc_s.so.1 \
-           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.17.so"
+           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.29.so"
 # v8.8: libstdc++.so.6/libatomic.so.1 removed from BASE_LIBS and forced into the
 # bundle. diag-285 on-device cores scan showed nestopia/snes9x/vice_x64 failing
 # with "GLIBCXX_3.4.32 not found": the device's /usr/lib/libstdc++.so.6 is too

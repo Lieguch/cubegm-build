@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# build_sysroot_ctng.sh -- 用 crosstool-NG 自举 RK3036G 的 glibc-2.17 ARMv7 hard-float sysroot
+# build_sysroot_ctng.sh -- 用 crosstool-NG 自举 RK3036G 的 glibc-2.29 ARMv7 hard-float sysroot
 #
 # 为什么需要它：
 #   picoarch 通过 dlopen(core.c:720) 把 libemu_*.so 加载进【同一进程】，必须与设备 core
-#   共用 glibc。设备全二进制天花板 = GLIBC_2.17（libemu_fbalpha.so 拉高；其余仅 2.4-2.7）。
+#   共用 glibc。设备全二进制天花板 = GLIBC_2.29（org.bin rootfs libc-2.29.so 实证，2026-08-22 解包确认）。
 #   现代 ARM GNU 13.2 工具链自带 glibc 2.38，直接链接会在设备运行期报 GLIBC_2.xx not found。
 #   静态链接也被否决（同进程双 glibc 冲突崩溃）。
-#   -> 链接目标必须是 glibc <= 2.17 的 sysroot。本脚本从公开上游源码构建一份等价的 2.17 sysroot。
+#   -> 链接目标必须是 glibc <= 2.29 的 sysroot。本脚本从公开上游源码构建一份等价的 2.29 sysroot。
 #
 # 版本组合（armv7-rpi2-linux-gnueabihf 样本默认，已在 crosstool-NG 1.26.0 核实；与本机参考工具链
-#           ARM GNU 13.2 同代，目标 sysroot 锁 glibc 2.17 以满足设备 GLIBC_2.17 天花板）：
-#   glibc   2.17     (CT_GLIBC_V_2_17；packages/glibc/2.17)
+#           ARM GNU 13.2 同代，目标 sysroot 锁 glibc 2.29 以满足设备 GLIBC_2.29 天花板）：
+#   glibc   2.29     (CT_GLIBC_V_2_29；packages/glibc/2.29)
 #   gcc     13.2.0   (样本默认；与参考工具链 ARM GNU 13.2 同代)
 #   binutils 2.40    (样本默认)
 #   linux   6.4      (内核头不影响产物 glibc 天花板)
 #   gmp/mpfr/mpc/isl 样本默认 (6.2.1 / 4.2.1 / 1.2.1 / 0.26)
 # 注：早期曾尝试把 gcc 钉到 9.5.0 / binutils 2.28.1，但与样本 choice 冲突被 kconfig 丢弃、回退默认；
-#     经验证默认组合（gcc 13.2 + glibc 2.17）可正常构建且匹配设备参考工具链，故直接采用样本默认。
+#     经验证默认组合（gcc 13.2 + glibc 2.29）可正常构建且匹配设备参考工具链，故直接采用样本默认。
 #
 # 运行环境：x86_64 Linux 构建机（需 git/make/autotools/gcc/g++/libncurses-dev/libtool 等 ct-ng 依赖）。
 # 耗时：约 30-90 分钟（首次下载并编译 gcc/glibc/binutils）。
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 PREFIX="${1:-/opt/cubegm-toolchain}"
-CTNG_VER="1.26.0"            # 已知可构建 glibc 2.17 的 crosstool-NG 版本
+CTNG_VER="1.26.0"            # 已知可构建 glibc 2.29 的 crosstool-NG 版本
 JOBS="$(nproc)"
 
 # ---- 日志：全程 tee 到文件，供 Agent 通过 build-output 分支取回诊断 ----
@@ -53,16 +53,16 @@ CTNG_DIR="$(cd crosstool-NG && pwd)"
 echo "== 2) 生成 armv7-rpi2-linux-gnueabihf 基础配置（ARMv7 hard-float；ct-ng 1.26.0 样本）=="
 ./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" armv7-rpi2-linux-gnueabihf
 
-echo "== 3) 固定版本组合（glibc 2.17；gcc/binutils 等采用样本默认）=="
-# 思路：kconfig 的版本选择是 choice。glibc 2.17 是设备天花板，显式钉死；
+echo "== 3) 固定版本组合（glibc 2.29；gcc/binutils 等采用样本默认）=="
+# 思路：kconfig 的版本选择是 choice。glibc 2.29 是设备天花板，显式钉死；
 # gcc 13.2.0 / binutils 2.40 等直接采用 armv7-rpi2 样本默认（与参考工具链 ARM GNU 13.2 同代），
 # 不再手动钉旧版本——早期钉 9.5.0/2.28.1 因与样本 choice 冲突被 kconfig 丢弃、回退默认，徒劳且误导。
 # 钉死 glibc：先把已选中的 =y 行注释掉，再写目标 =y，删残留 "not set" 注释，最后 olddefconfig 校验。
 
-# ---- glibc 2.17（设备 GLIBC_2.17 天花板，必须钉死）----
+# ---- glibc 2.29（设备 GLIBC_2.29 天花板，必须钉死）----
 sed -i -E 's/^CT_GLIBC_V_[0-9_]+\=y/# & (disabled)/' .config
-sed -i -E '/^# CT_GLIBC_V_2_17 is not set/d' .config
-grep -q '^CT_GLIBC_V_2_17=y' .config || echo 'CT_GLIBC_V_2_17=y' >> .config
+sed -i -E '/^# CT_GLIBC_V_2_29 is not set/d' .config
+grep -q '^CT_GLIBC_V_2_29=y' .config || echo 'CT_GLIBC_V_2_29=y' >> .config
 
 # ---- gcc / binutils / mpfr / isl / gmp / mpc：样本默认（gcc 13.2.0 / binutils 2.40 / mpfr 4.2.1
 #      / isl 0.26 / gmp 6.2.1 / mpc 1.2.1），不手动覆盖，避免与 choice 冲突被丢弃。----
@@ -133,7 +133,7 @@ mkdir -p "$TB_DIR" "${HOME}/.build/tarballs"
 # 每个 tarball 的期望 sha256（与样本默认一致；linux 已对照 kernel.org 官方校验和核实）
 declare -A TB_SHA=(
   [linux-6.4.tar.xz]=8fa0588f0c2ceca44cac77a0e39ba48c9f00a6b9dc69761c02a5d3efac8da7f3
-  [glibc-2.17.tar.bz2]=80f5acd0bbc573ad80579ae98c789143c75f13fb39e4dbd2449c086774b8315c
+  [glibc-2.29.tar.bz2]=c5ae49f682fc251d2781fcabc48231d390fe12cbffeb68a767f964ead1de6dab
   [gcc-13.2.0.tar.xz]=e275e76442a6067341a27f04c5c6b83d8613144004c0413528863dc6b5c743da
   [binutils-2.40.tar.xz]=0f8a4c272d7f17f369ded10a4aca28b8e304828e95526da482b0ccc4dfc9d8e1
   [gmp-6.2.1.tar.xz]=fd4829912cddd12f84181c3451cc752be224643e87fac497b69edddadc49b4f2
@@ -174,9 +174,9 @@ fetch_one linux-6.4.tar.xz \
   https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.4.tar.xz \
   https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/linux-6.4.tar.xz || true
 
-fetch_one glibc-2.17.tar.bz2 \
-  https://ftp.gnu.org/gnu/glibc/glibc-2.17.tar.bz2 \
-  https://ftpmirror.gnu.org/glibc/glibc-2.17.tar.bz2 || true
+fetch_one glibc-2.29.tar.bz2 \
+  https://ftp.gnu.org/gnu/glibc/glibc-2.29.tar.bz2 \
+  https://ftpmirror.gnu.org/glibc/glibc-2.29.tar.bz2 || true
 
 fetch_one gcc-13.2.0.tar.xz \
   https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz \
@@ -246,7 +246,7 @@ fetch_ncurses || { echo "  [FATAL] ncurses-6.4.tar.gz 预置失败，停止构�
 
 # 全部成功才算数；任一缺失则硬退出，避免静默交给 crosstool 不可靠自下载
 missing=0
-for f in linux-6.4.tar.xz glibc-2.17.tar.bz2 gcc-13.2.0.tar.xz binutils-2.40.tar.xz \
+for f in linux-6.4.tar.xz glibc-2.29.tar.bz2 gcc-13.2.0.tar.xz binutils-2.40.tar.xz \
         gmp-6.2.1.tar.xz mpfr-4.2.1.tar.xz mpc-1.2.1.tar.gz isl-0.26.tar.xz; do
   if [ ! -s "$TB_DIR/$f" ]; then echo "  [ERROR] $f 预置失败（所有镜像均不可用）"; missing=1; fi
 done
@@ -262,7 +262,7 @@ echo "== 5) 产出与校验 =="
 SYSROOT="$PREFIX/arm-linux-gnueabihf/sysroot"
 ls -l "$SYSROOT/lib/libc.so.6" "$SYSROOT/usr/include/stdio.h"
 echo
-echo "# 校验 glibc 版本：必须含 2.17 且没有 >2.17"
+echo "# 校验 glibc 版本：必须含 2.29 且没有 >2.29"
 strings "$SYSROOT/lib/libc.so.6" | grep -o 'GLIBC_2\.[0-9]*' | sort -V | uniq | tail -3
 echo
 echo "# 在 Makefile / 构建命令中使用："
@@ -270,4 +270,4 @@ echo "export PATH=\"$PREFIX/bin:\$PATH\""
 echo "export CC=arm-linux-gnueabihf-gcc"
 echo "export CFLAGS=\"--sysroot=$SYSROOT -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2\""
 echo
-echo "DONE. 之后对每个产物跑 verify_target_abi.sh 做 ABI 门禁（EM_ARM / 0x5000400 / <=GLIBC_2.17）。"
+echo "DONE. 之后对每个产物跑 verify_target_abi.sh 做 ABI 门禁（EM_ARM / 0x5000400 / <=GLIBC_2.29）。"

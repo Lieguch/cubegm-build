@@ -7,9 +7,9 @@
 #  build end-to-end:
 #
 #    STAGE 0  apt install build dependencies (Ubuntu/Debian only)
-#    STAGE 1  crosstool-NG: self-build a glibc-2.17 ARM sysroot + gcc
+#    STAGE 1  crosstool-NG: self-build a glibc-2.29 ARM sysroot + gcc
 #             (the device ceililing -- picoarch dlopen's cores in-process, so
-#              it MUST share glibc 2.17; this is NOT optional)
+#              it MUST share glibc 2.29; this is NOT optional)
 #    STAGE 2  cross-build libpng12 + alsa-lib + SDL1.2 into that sysroot
 #             (picoarch links -lSDL -lpng12; RISKIEST stage, see build_sdl_libpng.sh)
 #    STAGE 3  deploy/build.sh: clone r36sx + libretro-common submodule + apply
@@ -156,14 +156,14 @@ else
 fi
 
 # =============================================================================
-# STAGE 1 -- glibc-2.17 sysroot + gcc (crosstool-NG)
+# STAGE 1 -- glibc-2.29 sysroot + gcc (crosstool-NG)
 # =============================================================================
 if [ -z "$SYSROOT" ]; then
     SYSROOT="$PREFIX/arm-linux-gnueabihf/sysroot"
     if [ -f "$SYSROOT/lib/libc.so.6" ]; then
         log "STAGE 1: reusing existing sysroot at $SYSROOT"
     else
-        log "STAGE 1: building glibc-2.17 sysroot + gcc via crosstool-NG (~30-90 min) ..."
+        log "STAGE 1: building glibc-2.29 sysroot + gcc via crosstool-NG (~30-90 min) ..."
         bash "$HERE/../build/toolchain/build_sysroot_ctng.sh" "$PREFIX"
         [ -f "$SYSROOT/lib/libc.so.6" ] || die "STAGE 1: sysroot not produced at $SYSROOT"
         log "STAGE 1: sysroot ready. glibc ceiling check:"

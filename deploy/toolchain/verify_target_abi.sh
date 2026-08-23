@@ -2,7 +2,7 @@
 # verify_target_abi.sh <binary> [<binary> ...]
 #   Assert every binary matches the RK3036G device ABI, determined empirically
 #   from the 20 device cores (tools/probe_device_abi.py):
-#     32-bit ELF, EM_ARM, E_FLAGS=0x5000400 (armhf + EABIv5), max GLIBC_2.17.
+#     32-bit ELF, EM_ARM, E_FLAGS=0x5000400 (armhf + EABIv5), max GLIBC_2.29.
 #   Run this on EVERY built binary before shipping to the device.
 #   Exits 0 only if ALL binaries pass; exits 1 if any fail; exits 2 on usage.
 set -u
@@ -43,11 +43,11 @@ else:
         v = tuple(int(x) for x in g.decode().split('_')[1].split('.'))
         if maxv is None or v > maxv:
             maxv = v
-    if maxv and maxv > (2, 17):
-        fail("requires GLIBC_2.%d.%d > device ceiling 2.17" % maxv)
+    if maxv and maxv > (2, 29):
+        fail("requires GLIBC_2.%d.%d > device ceiling 2.29" % maxv)
     else:
         s = " (max GLIBC_2.%d.%d)" % maxv if maxv else " (no GLIBC version need)"
-        print("  OK   GLIBC ceiling <= 2.17" + s)
+        print("  OK   GLIBC ceiling <= 2.29" + s)
 
 if ok:
     print("RESULT: PASS  %s" % f)

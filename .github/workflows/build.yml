@@ -2,7 +2,7 @@ name: Build CubeGM firmware (RK3036G)
 
 # =====================================================================
 #  任意推送 / 手动触发，都会在 GitHub 免费 x86_64 Linux runner 上自动完成：
-#    crosstool 自举 glibc-2.17 sysroot -> 交叉编 SDL/libpng/alsa
+#    crosstool 自举 glibc-2.29 sysroot -> 交叉编 SDL/libpng/alsa
 #    -> 克隆 r36sx + 子模块 + 打 5 处补丁 -> 编 picoarch/FrogUI/cores
 #    -> ABI 门禁 -> 产出 deploy/cubegm/ 设备烧录包
 #  产物交付：
@@ -40,9 +40,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /home/runner/cubegm-tc
-          key: tc-glibc217-${{ hashFiles('build/toolchain/build_sysroot_ctng.sh', 'deploy/build_sdl_libpng.sh') }}
+          key: tc-glibc229-${{ hashFiles('build/toolchain/build_sysroot_ctng.sh', 'deploy/build_sdl_libpng.sh') }}
           restore-keys: |
-            tc-glibc217-
+            tc-glibc229-
 
       - name: Run bootstrap (full build)
         working-directory: deploy
