@@ -41,7 +41,7 @@ ALSA_LIB_REPO="https://github.com/alsa-project/alsa-lib.git"
 # Each is built from github.com/libretro/<NAME> with the libretro common Makefile.
 # Game-able core set: FBA2012 (000 arcade group), FBNeo, MD, PS1 (lightrec),
 # GBA/NES/SNES/Atari/GBC etc. fbalpha2012_* build fast; pcsx/mgba slower.
-DEFAULT_CORES="fceumm snes9x2005_plus picodrive stella2014 mgba nestopia vba_next tgbdual gpsp prosystem mame2000 mame2003_plus fbalpha2012 fbalpha2012_cps1 fbalpha2012_cps2 fbalpha2012_cps3 fbalpha2012_neogeo fbneo pcsx_rearmed"
+DEFAULT_CORES="fceumm snes9x2005_plus snes9x2002 snes9x2010 picodrive stella2014 mgba nestopia vba_next tgbdual gpsp prosystem mame2000 mame2003_plus fbalpha2012 fbalpha2012_cps1 fbalpha2012_cps2 fbalpha2012_cps3 fbalpha2012_neogeo fbneo pcsx_rearmed gambatte 81 a5200 ardens arduous atari800 bluemsx cannonball cap32 castaway ecwolf fake08 freechaf freeintv frodo fuse gearboy gearcoleco gearsystem genesis_plus_gx geolith gme gong gpsp_multicore gw handy jumpnbump lowresnx mednafen_lynx mednafen_pce_fast mednafen_pcfx mednafen_supergrafx mednafen_vb mednafen_wswan nxengine o2em pocketcdg pokemini potator prboom quasi88 quicknes race reminiscence retro8 snes9x2005 theodore tic80 tyrquake uae vecx vice_x64 vice_xvic vitaquake2 x68k xrick"
 CORES="${CORES:-$DEFAULT_CORES}"
 
 log(){ printf '\033[1;32m[build]\033[0m %s\n' "$*"; }
@@ -292,7 +292,19 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# STAGE 6.5 -- download prebuilt cores from libretro buildbot
+#   Saves ~40 min CI time per run. Buildbot provides armv7-neon-hf (ARMv7+NEON+HF)
+#   and armhf (fallback, more cores) prebuilt binaries. All tested cores have
+#   GLIBC <= 2.15 and GLIBCXX <= 3.4.21, compatible with the device glibc 2.29.
+#   Cores not in buildbot fall through to STAGE 7 (source compilation).
+# -----------------------------------------------------------------------------
+log "Downloading prebuilt cores from libretro buildbot..."
+bash "$HERE/download_prebuilt_cores.sh" "$CORE_OUT" $CORES || true
+log "Prebuilt cores in $CORE_OUT: $(ls "$CORE_OUT"/*.so 2>/dev/null | wc -l) .so files"
+
+# -----------------------------------------------------------------------------
 # STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
+#   Cores already downloaded from buildbot (STAGE 6.5) are skipped by build_core().
 CORE_TABLE="
 fceumm|https://github.com/tzubertowski/libretro-fceumm|.|-f Makefile.libretro||arm
 snes9x2005_plus|https://github.com/tzubertowski/snes9x2005|.|-||arm
@@ -316,6 +328,62 @@ fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-f makefile.
 fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-|CFLAGS=-DAT_HWCAP2=26 LDFLAGS=__LDFLAGS_S__|fba
 pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=ari64 HAVE_NEON=1 BUILTIN_GPU=unai LDFLAGS=__LDFLAGS_S__ HAVE_PHYSICAL_CDROM=0|arm
 nestopia|https://github.com/libretro/nestopia|libretro|||arm
+81|https://github.com/libretro/81-libretro|.|-||arm|
+a5200|https://github.com/libretro/a5200|.|-||arm|
+ardens|https://github.com/tiberiusbrown/Ardens|.|-||arm|
+arduous|https://github.com/libretro/arduous|.|-||arm|
+atari800|https://github.com/libretro/libretro-atari800|.|-||arm|
+bluemsx|https://github.com/tzubertowski/libretro-blueMSX|.|-||arm|
+cannonball|https://github.com/libretro/cannonball|.|-||arm|
+cap32|https://github.com/libretro/libretro-cap32|.|-||arm|
+castaway|https://github.com/angree/sf2000-atarist-emulator|.|-||arm|
+ecwolf|https://github.com/libretro/ecwolf|.|-||arm|
+fake08|https://github.com/tzubertowski/fake-08|.|-||arm|sf3000
+freechaf|https://github.com/libretro/FreeChaF|.|-||arm|
+freeintv|https://github.com/libretro/FreeIntv|.|-||arm|
+frodo|https://github.com/tzubertowski/libretro-frodo|.|-||arm|
+fuse|https://github.com/libretro/fuse-libretro|.|-||arm|
+gearboy|https://github.com/drhelius/Gearboy|.|-||arm|
+gearcoleco|https://github.com/drhelius/Gearcoleco|.|-||arm|
+gearsystem|https://github.com/drhelius/Gearsystem|.|-||arm|
+genesis_plus_gx|https://github.com/libretro/Genesis-Plus-GX|.|-||arm|
+geolith|https://github.com/libretro/geolith-libretro|.|-||arm|
+gme|https://github.com/libretro/libretro-gme|.|-||arm|
+gong|https://github.com/libretro/gong|.|-||arm|
+gpsp_multicore|https://github.com/tzubertowski/gpsp_multicore|.|-||arm|
+gw|https://github.com/libretro/gw-libretro|.|-||arm|
+handy|https://github.com/libretro/libretro-handy|.|-||arm|
+jaxe|https://github.com/libretro/jaxe|.|-||arm|
+jumpnbump|https://github.com/libretro/jumpnbump-libretro|.|-||arm|
+lowresnx|https://github.com/timoinutilis/lowres-nx|.|-||arm|
+mednafen_lynx|https://github.com/libretro/beetle-lynx-libretro|.|-||arm|
+mednafen_pce_fast|https://github.com/libretro/beetle-pce-fast-libretro|.|-||arm|
+mednafen_pcfx|https://github.com/libretro/beetle-pcfx-libretro|.|-||arm|
+mednafen_supergrafx|https://github.com/libretro/beetle-supergrafx-libretro|.|-||arm|
+mednafen_vb|https://github.com/libretro/beetle-vb-libretro|.|-||arm|
+mednafen_wswan|https://github.com/libretro/beetle-wswan-libretro|.|-||arm|
+nxengine|https://github.com/libretro/nxengine-libretro|.|-||arm|
+o2em|https://github.com/libretro/libretro-o2em|.|-||arm|
+pocketcdg|https://github.com/libretro/libretro-pocketcdg|.|-||arm|
+pokemini|https://github.com/libretro/PokeMini|.|-||arm|
+potator|https://github.com/libretro/potator|.|-||arm|
+prboom|https://github.com/libretro/libretro-prboom|.|-||arm|
+quasi88|https://github.com/libretro/quasi88-libretro|.|-||arm|
+quicknes|https://github.com/libretro/QuickNES_Core|.|-||arm|
+race|https://github.com/libretro/RACE|.|-||arm|
+reminiscence|https://github.com/libretro/REminiscence|.|-||arm|
+retro8|https://github.com/libretro/retro8|.|-||arm|
+theodore|https://github.com/Zlika/theodore|.|-||arm|
+tic80|https://github.com/nesbox/TIC-80|.|-||arm|
+tyrquake|https://github.com/libretro/tyrquake|.|-||arm|
+uae|https://github.com/angree/sf2000-uae-amiga-emulator|.|-||arm|
+vaporspec|https://github.com/libretro/vaporspec|.|-||arm|
+vecx|https://github.com/libretro/libretro-vecx|.|-||arm|
+vice_x64|https://github.com/libretro/vice-libretro|.|-||arm|
+vice_xvic|https://github.com/libretro/vice-libretro|.|-||arm|
+vitaquake2|https://github.com/tzubertowski/treefrogui_vitaquake2|.|-||arm|
+x68k|https://github.com/libretro/xmil-libretro|.|-||arm|
+xrick|https://github.com/libretro/xrick-libretro|.|-||arm|
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
@@ -337,6 +405,11 @@ chmod +x "$WORKDIR/.toolchain/arm-gcc" "$WORKDIR/.toolchain/arm-g++" "$WORKDIR/.
 LDFLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -L$SYSROOT/usr/lib -lm -lc -Wl,-Bstatic -lstdc++ -Wl,-Bdynamic -lpthread -static-libstdc++ -static-libgcc -rdynamic"
 LDFLAGS_S="-shared -Wl,--no-undefined $LDFLAGS"
 build_core() {
+    # Skip if already downloaded from buildbot (STAGE 6.5)
+    if [ -f "$CORE_OUT/${1}_libretro.so" ]; then
+        log "  SKIP $1 (already downloaded from buildbot)"
+        return
+    fi
     local name="$1" repo="$2" bdir="$3" mk="$4" extra="$5" wrap="${6:-arm}" branch="${7:-}"
     local d="$WORKDIR/libretro-$name"
     if [ ! -d "$d/.git" ]; then
