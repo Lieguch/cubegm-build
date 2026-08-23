@@ -56,6 +56,12 @@ jobs:
           chmod +x ../build/toolchain/*.sh
           ./bootstrap_linux.sh
 
+      - name: Save crosstool cache on failure (avoid losing 40-min toolchain build)
+        if: failure() && steps.cache-tc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/cubegm-tc
+          key: ${{ steps.cache-tc.outputs.cache-primary-key }}
       - name: Upload device payload (deploy/cubegm)
         if: always()
         uses: actions/upload-artifact@v4
