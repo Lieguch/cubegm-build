@@ -1,0 +1,39 @@
+diff --git a/core/core_delegate.h b/core/core_delegate.h
+index aa6af3b..a55b6e4 100644
+--- a/core/core_delegate.h
++++ b/core/core_delegate.h
+@@ -22,7 +22,7 @@
+ #define core_delegate_h
+ 
+ #include "data_manager.h"
+-#include "error.h"
++#include "interpreter/error.h"
+ 
+ struct Core;
+ 
+diff --git a/core/core_stats.h b/core/core_stats.h
+index 979b976..34719aa 100644
+--- a/core/core_stats.h
++++ b/core/core_stats.h
+@@ -22,7 +22,7 @@
+ #define core_stats_h
+ 
+ #include <stdio.h>
+-#include "error.h"
++#include "interpreter/error.h"
+ #include "tokenizer.h"
+ #include "data_manager.h"
+ 
+diff --git a/core/datamanager/data_manager.h b/core/datamanager/data_manager.h
+index 3a59d7b..725a794 100644
+--- a/core/datamanager/data_manager.h
++++ b/core/datamanager/data_manager.h
+@@ -24,7 +24,7 @@
+ #include <stdio.h>
+ #include <stdbool.h>
+ #include <stdint.h>
+-#include "error.h"
++#include "interpreter/error.h"
+ 
+ #define MAX_ENTRIES 16
+ #define DATA_SIZE 0x8000
