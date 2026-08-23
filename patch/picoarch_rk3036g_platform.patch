@@ -126,10 +126,42 @@ index 0000000..be51201
 +
 +#include "plat_sdl.c"
 diff --git a/plat_sdl.c b/plat_sdl.c
-index b0c98e6..c2a6d8d 100644
+index b0c98e6..8218379 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
-@@ -1534,10 +1534,10 @@ int plat_init(void)
+@@ -172,7 +172,7 @@ static void sf3000_text_native(int px, int py, const char *text, uint32_t color,
+ #endif
+ 
+ // begin miyoo hardware scaling support
+-#ifndef PLATFORM_SF3000
++#if !defined(PLATFORM_SF3000) && !defined(PLATFORM_RK3036G)
+ // loosely based on eggs' picogpsp gfx.c
+ #include <mi_sys.h>
+ #include <mi_gfx.h>
+@@ -492,6 +492,22 @@ static void buffer_scale(unsigned w, unsigned h, size_t pitch, const void *src)
+ 
+ #endif // end miyoo hardware scaling support
+ 
++/* RK3036G: the miyoo HW-scaling block above is excluded (no mi_sys/mi_gfx
++ * SDK), but the generic SDL framebuffer path below still needs the 'buffer'
++ * global + its GFX_Buffer type. Declare them here (phyAddr omitted — it
++ * comes from <mi_sys.h> which is excluded, and the generic path never
++ * touches it). */
++#ifdef PLATFORM_RK3036G
++struct GFX_Buffer {
++	void*		virAddr;
++	int 		width;
++	int 		height;
++	int 		depth;
++	int 		pitch;
++	uint32_t 	size;
++};
++static struct GFX_Buffer buffer;
++#endif
+ 
+ //begin PLATFORM_SF3000
+ 
+@@ -1534,10 +1550,10 @@ int plat_init(void)
              return -1;
          }
      }
@@ -144,7 +176,7 @@ index b0c98e6..c2a6d8d 100644
      in_evdev_init(&in_evdev_platform_data);
  #endif
      in_probe();
-@@ -1610,8 +1610,8 @@ dbg_log("DBG M3: sound init done\n");
+@@ -1610,8 +1626,8 @@ dbg_log("DBG M3: sound init done\n");
  		PA_ERROR("SDL input failed to init: %s\n", SDL_GetError());
  		return -1;
  	}
