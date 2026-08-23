@@ -133,8 +133,13 @@ if [ -f "$SYSROOT/usr/lib/libasound.so" ]; then
     log "libasound already in sysroot -- skip"
 else
     log "Building alsa-lib 1.2.10 ..."
+    # 主源：官方 alsa-project.org（稳定）；备用：GitHub codeload v1.2.10 tag。
+    # 原 GitHub release URL (releases/download/v1.2.10/alsa-lib-1.2.10.tar.bz2) 已 404。
+    # 两源压缩格式不同（.tar.bz2 vs .tar.gz），GNU tar 用 -xf 可自动检测，无需区分。
     rm -rf alsa-lib-1.2.10 && curl -fL -o al.tar.bz2 \
-        "https://github.com/alsa-project/alsa-lib/releases/download/v1.2.10/alsa-lib-1.2.10.tar.bz2"
+        "https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.10.tar.bz2" \
+        || curl -fL -o al.tar.bz2 \
+        "https://codeload.github.com/alsa-project/alsa-lib/tar.gz/refs/tags/v1.2.10"
     tar -xf al.tar.bz2 && cd alsa-lib-1.2.10
     ./configure --host=$TARGET --prefix=$SYSROOT/usr --disable-python --with-pcm-plugins=all
     make -j"$NPROC"
