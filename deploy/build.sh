@@ -299,8 +299,10 @@ fi
 #   Cores not in buildbot fall through to STAGE 7 (source compilation).
 # -----------------------------------------------------------------------------
 log "Downloading prebuilt cores from libretro buildbot..."
-bash "$HERE/download_prebuilt_cores.sh" "$CORE_OUT" $CORES || true
-log "Prebuilt cores in $CORE_OUT: $(ls "$CORE_OUT"/*.so 2>/dev/null | wc -l) .so files"
+CORE_OUT_STAGE65="$WORKDIR/cores"
+mkdir -p "$CORE_OUT_STAGE65"
+bash "$HERE/download_prebuilt_cores.sh" "$CORE_OUT_STAGE65" $CORES || true
+log "Prebuilt cores in $CORE_OUT_STAGE65: $(ls "$CORE_OUT_STAGE65"/*.so 2>/dev/null | wc -l) .so files"
 
 # -----------------------------------------------------------------------------
 # STAGE 7 -- build libretro cores (table-driven; builddir+mk from treefrog-ui build_all.sh)
