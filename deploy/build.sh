@@ -315,7 +315,7 @@ fbalpha2012_cps3|https://github.com/libretro/fbalpha2012_cps3|svn-current/trunk|
 fbalpha2012_neogeo|https://github.com/libretro/fbalpha2012_neogeo|.|-f makefile.libretro||fba
 fbneo|https://github.com/libretro/FBNeo|src/burner/libretro|-|CFLAGS=-DAT_HWCAP2=26 LDFLAGS=__LDFLAGS_S__|fba
 pcsx_rearmed|https://github.com/libretro/pcsx_rearmed|.|-f Makefile.libretro|ARCH=arm DYNAREC=ari64 HAVE_NEON=1 BUILTIN_GPU=unai LDFLAGS=__LDFLAGS_S__ HAVE_PHYSICAL_CDROM=0|arm
-nestopia|https://github.com/libretro/nestopia|libretro||arm
+nestopia|https://github.com/libretro/nestopia|libretro|||arm
 "
 CORE_OUT="$WORKDIR/cores"
 mkdir -p "$CORE_OUT" "$WORKDIR/.toolchain"
