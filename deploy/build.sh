@@ -356,8 +356,8 @@ gpsp_multicore|https://github.com/tzubertowski/gpsp_multicore|.|-||arm|
 gw|https://github.com/libretro/gw-libretro|.|-||arm|
 handy|https://github.com/libretro/libretro-handy|.|-||arm|
 jaxe|https://github.com/libretro/jaxe|.|-||arm|
-jumpnbump|https://github.com/libretro/jumpnbump-libretro|.|-||arm|
-lowresnx|https://github.com/timoinutilis/lowres-nx|.|-||arm|
+jumpnbump|https://github.com/libretro/jumpnbump-libretro|.|-|LDFLAGS=__LDFLAGS_S__|arm|
+lowresnx|https://github.com/timoinutilis/lowres-nx|platform/LibRetro|-||arm|
 mednafen_lynx|https://github.com/libretro/beetle-lynx-libretro|.|-||arm|
 mednafen_pce_fast|https://github.com/libretro/beetle-pce-fast-libretro|.|-||arm|
 mednafen_pcfx|https://github.com/libretro/beetle-pcfx-libretro|.|-||arm|
