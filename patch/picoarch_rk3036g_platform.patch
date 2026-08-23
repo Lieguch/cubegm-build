@@ -28,10 +28,10 @@ index 599031e..ab190cf 100644
  	$(CC) $(CFLAGS) -c -o $@ $<
 diff --git a/plat_rk3036g.c b/plat_rk3036g.c
 new file mode 100644
-index 0000000..b5325e1
+index 0000000..be51201
 --- /dev/null
 +++ b/plat_rk3036g.c
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,93 @@
 +/*
 + * plat_rk3036g.c -- RK3036G (ARM Cortex-A7, HDMI-only) platform layer.
 + *
@@ -65,35 +65,37 @@ index 0000000..b5325e1
 +
 +/* Gamepad button bindings -> libretro joypad IDs.
 + *
-+ * The "Twin USB Gamepad" reports buttons as BTN_TRIGGER..BTN_BASE4
-+ * (Linux input codes 288..297) plus ABS_X/ABS_Y for the dpad. The exact
-+ * physical-button <-> BTN_code mapping must be confirmed with the device's
-+ * one-key-at-a-time diag capture (direction B). These are the standard
-+ * Linux gamepad defaults; A2 calibrates them against the diag keymap.
++ * Twin USB Gamepad (VID:0810 PID:0001) — authoritative mapping from the
++ * stock profile 0810_0001_0110 (see cubevol_bridge.c header, verified
++ * against payload-307 device diag keycodes):
++ *   btn0=Y btn1=B btn2=A btn3=X btn4=L1 btn5=R1 btn6=L2 btn7=R2
++ *   btn8=SELECT btn9=START   (keycodes 0x120..0x129 = BTN_TRIGGER..BTN_BASE4)
++ * d-pad arrives as ABS_HAT0X/HAT0Y (also ABS_X/ABS_Y stick, thresholded);
++ * in_evdev's abs->digital mapping handles it, so no BTN_DPAD_* entries
++ * are needed (kept as a harmless fallback for hats that report as keys).
 + */
 +static const struct in_default_bind in_evdev_defbinds[] = {
-+	/* dpad (ABS axes are handled by in_evdev's abs->digital mapping;
-+	 * BTN_DPAD_* entries are a fallback for hats that report as keys) */
++	/* d-pad hat fallback (primary d-pad is ABS_HAT0X/Y via abs->digital) */
 +	{ BTN_DPAD_UP,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP    },
 +	{ BTN_DPAD_DOWN,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN  },
 +	{ BTN_DPAD_LEFT,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT  },
 +	{ BTN_DPAD_RIGHT, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
 +
-+	/* face buttons (standard mapping; A2 calibrates to real BTN codes) */
-+	{ BTN_A,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A      },
-+	{ BTN_B,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B      },
-+	{ BTN_X,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X      },
-+	{ BTN_Y,          IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y      },
++	/* face buttons (btn0..btn3 -> Y B A X per stock profile) */
++	{ BTN_TRIGGER,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y      },
++	{ BTN_THUMB,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B      },
++	{ BTN_THUMB2,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A      },
++	{ BTN_TOP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X      },
 +
-+	/* shoulders */
-+	{ BTN_TL,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L      },
-+	{ BTN_TR,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R      },
-+	{ BTN_TL2,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2     },
-+	{ BTN_TR2,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2     },
++	/* shoulders (btn4..btn7 -> L1 R1 L2 R2) */
++	{ BTN_TOP2,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L      },
++	{ BTN_PINKIE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R      },
++	{ BTN_BASE,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2     },
++	{ BTN_BASE2,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2     },
 +
-+	{ BTN_SELECT,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
-+	{ BTN_START,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START  },
-+	{ BTN_MODE,       IN_BINDTYPE_EMU,      EACTION_MENU                  },
++	/* btn8/btn9 -> SELECT/START */
++	{ BTN_BASE3,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
++	{ BTN_BASE4,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START  },
 +	{ 0, 0, 0 }
 +};
 +
@@ -103,9 +105,9 @@ index 0000000..b5325e1
 +	{ BTN_DPAD_DOWN,  PBTN_DOWN  },
 +	{ BTN_DPAD_LEFT,  PBTN_LEFT  },
 +	{ BTN_DPAD_RIGHT, PBTN_RIGHT },
-+	{ BTN_A,          PBTN_MOK   },
-+	{ BTN_B,          PBTN_MBACK },
-+	{ BTN_START,      PBTN_MENU  },
++	{ BTN_THUMB2,     PBTN_MOK   },   /* A = confirm */
++	{ BTN_THUMB,      PBTN_MBACK },   /* B = back */
++	{ BTN_BASE4,      PBTN_MENU  },   /* START = menu */
 +	/* keyboard-arrow fallback (dpad hats mapped to these by in_evdev) */
 +	{ KEY_UP,         PBTN_UP    },
 +	{ KEY_DOWN,       PBTN_DOWN  },
