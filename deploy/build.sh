@@ -229,18 +229,25 @@ fi
 #   Also note: the Makefile reads lowercase 'platform'; passing PLATFORM=...
 #   is a no-op and silently builds the 'unix' target.
 # -----------------------------------------------------------------------------
-log "Building picoarch (plat_sf3000, ARM)..."
-ARM_BUILD="$HERE/build_sf3000_armhf.sh"
+log "Building picoarch (plat_rk3036g, ARM) -- Direction-A platform..."
+ARM_BUILD="$HERE/build_rk3036g_armhf.sh"
 if [ -x "$ARM_BUILD" ]; then
     SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
     CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
     PICOARCH_DIR="$PWD/picoarch" \
-        bash "$ARM_BUILD"
+        bash "$ARM_BUILD" || {
+        log "WARN: rk3036g build failed -- falling back to sf3000 builder."
+        ARM_BUILD="$HERE/build_sf3000_armhf.sh"
+        SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
+        CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+        PICOARCH_DIR="$PWD/picoarch" \
+            bash "$ARM_BUILD"
+    }
 else
-    log "WARN: build_sf3000_armhf.sh missing -- fallback needs manual Makefile fix."
+    log "WARN: build_rk3036g_armhf.sh missing -- fallback needs manual Makefile fix."
     pushd picoarch >/dev/null
     make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-         platform=sf3000 SYSROOT="$SYSROOT" \
+         platform=rk3036g SYSROOT="$SYSROOT" \
          CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
          picoarch -j"$(nproc)"
     popd >/dev/null
