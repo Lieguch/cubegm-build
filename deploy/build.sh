@@ -577,6 +577,22 @@ if [ -f "$HERE/cubevol_bridge.c" ]; then
     fi
 fi
 
+# -----------------------------------------------------------------------------
+# icube_replacement: 替换原厂 icube 的启动器（S80icube 环节事前接管）。
+#   复刻 icube 职责（创建共享内存 + fork 输入桥 + supervisor 循环 exec picoarch）。
+#   相比 zhijack 事后劫持，此方案在原厂 rkgame/driver.so 起来前就接管，
+#   显示/音频由 picoarch 自己初始化，根治半白屏/无声。
+#   编译成 icube_replacement（不直接叫 icube，避免误覆盖原厂）。
+if [ -f "$HERE/icube_replacement.c" ]; then
+    log "Building icube_replacement (boot launcher)..."
+    if ${CROSS_COMPILE}gcc -O2 -Wall -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot="$SYSROOT" -I"$SYSROOT/usr/include" "$HERE/icube_replacement.c" -o "$DST/icube_replacement"; then
+        ${CROSS_COMPILE}strip "$DST/icube_replacement"
+        log "icube_replacement built: $(ls -la "$DST/icube_replacement" 2>/dev/null | awk '{print $5}') bytes"
+    else
+        log "WARN: icube_replacement build failed -- will fall back to zhijack hijack."
+    fi
+fi
+
 # STAGE 9b -- bundle runtime libs picoarch + frogui need into cubegm/lib
 #   The device rootfs does NOT ship SDL/libpng12/z/asound (see zhijack.sh:
 #   LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib). picoarch is linked against those,
