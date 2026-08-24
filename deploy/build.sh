@@ -190,18 +190,31 @@ else
     die "picoarch_rk3036g_full.patch missing -- cannot build."
 fi
 # Direction-A platform layer (plat_rk3036g.c + Makefile rk3036g branch).
-# Applies on top of the full patch; adds files + a platform branch + a guard
-# extension only -- it does NOT change the platform=sf3000 build path.
+# NOTE (2026-08-24): DISABLED. The platform patch's audio hunks delete the
+# sf3000_is_rk3036() runtime detection from plat_sound_init/plat_sound_finish
+# and replace it with a #ifdef PLATFORM_RK3036G compile-time branch. Since we
+# build with platform=sf3000 (see STAGE 5 below), that compile-time branch is
+# DEAD code -> plat_sound_init_alsa is never called -> rk3036 gets routed to
+# the SF2000 proprietary driver.so audio path -> silent device (#324 real-device
+# log: "Proprietary audio driver initialized" + "snd_pcm_start failed: -32").
+# The full patch already carries the correct sf3000_is_rk3036() runtime routing
+# (DRM/ALSA/evdev), verified on payload-307. Direction-A (platform=rk3036g) is
+# deferred until its display+audio layers are fully extracted from the SF3000
+# block; until then the platform patch must NOT be applied to the sf3000 build.
 PICO_A1_PATCH="$HERE/../patch/picoarch_rk3036g_platform.patch"
-if [ -f "$PICO_A1_PATCH" ]; then
-    if git -C picoarch apply --ignore-whitespace --check "$PICO_A1_PATCH" 2>/dev/null; then
-        log "Applying picoarch rk3036g platform patch (A1)..."
-        git -C picoarch apply --ignore-whitespace "$PICO_A1_PATCH"
-    elif git -C picoarch apply --ignore-whitespace -R --check "$PICO_A1_PATCH" 2>/dev/null; then
-        log "picoarch rk3036g platform patch already applied -- skipping."
-    else
-        log "WARN: picoarch rk3036g platform patch (A1) NOT applicable -- continuing with sf3000 build."
+if [ "$PICO_BUILD_PLATFORM" = "rk3036g" ]; then
+    if [ -f "$PICO_A1_PATCH" ]; then
+        if git -C picoarch apply --ignore-whitespace --check "$PICO_A1_PATCH" 2>/dev/null; then
+            log "Applying picoarch rk3036g platform patch (A1)..."
+            git -C picoarch apply --ignore-whitespace "$PICO_A1_PATCH"
+        elif git -C picoarch apply --ignore-whitespace -R --check "$PICO_A1_PATCH" 2>/dev/null; then
+            log "picoarch rk3036g platform patch already applied -- skipping."
+        else
+            log "WARN: picoarch rk3036g platform patch (A1) NOT applicable."
+        fi
     fi
+else
+    log "Skipping platform patch (A1): sf3000 build uses full-patch rk3036 runtime routing."
 fi
 # DRM UAPI headers for the RK3036G HDMI modeset path (hwdisp_drm #includes
 # <drm/drm.h>). The crosstool glibc-2.29 sysroot ships no DRM headers, so
