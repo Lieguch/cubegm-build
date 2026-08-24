@@ -284,6 +284,17 @@ else
 fi
 log "Building FrogUI (frogui_libretro.so)..."
 pushd FrogUI >/dev/null
+# v1.1 (2026-08-24): 集成增强模块（鼠标输入 + 键位学习 + 原厂背景图）。
+#   mouse_input.c/h   : USB 鼠标 evdev（UI 全面使用，游戏内不用）
+#   keymap_learning.c : 未知手柄键位学习（鼠标辅助 + VID_PID 保存）
+#   background.c/h    : 原厂背景图加载（复刻原厂 UI）
+#   用 sed 精确插入（保守：失败仅 WARN，不阻止旧版 FrogUI 编译）。
+if [ -f "$HERE/integrate_frogui_modules.py" ]; then
+    python3 "$HERE/integrate_frogui_modules.py" "$HERE" 2>/dev/null || \
+        log "WARN: FrogUI module integration failed -- shipping base FrogUI (no mouse/keymap/background)."
+else
+    log "NOTE: integrate_frogui_modules.py missing -- base FrogUI only."
+fi
 # Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
 # LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
 # Command-line CC/CFLAGS/SYSROOT override the MIPS hardcodes (GNU make precedence).
