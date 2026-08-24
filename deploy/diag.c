@@ -102,6 +102,22 @@ static void cat_file(const char *path) {
     fclose(f);
 }
 
+/* Dump HW register block via /dev/mem mmap */
+static void dump_mem(const char *path, uint32_t phys, size_t len) {
+    int fd = open(path, O_RDWR);
+    if (fd < 0) { logf("  open %s FAILED: %s\n", path, strerror(errno)); return; }
+    uint32_t *map = mmap(NULL, len, PROT_READ, MAP_SHARED, fd, phys);
+    if (map == MAP_FAILED) { logf("  mmap 0x%x FAILED: %s\n", phys, strerror(errno)); close(fd); return; }
+    for (size_t i = 0; i < len / 4; i++) {
+        if (i % 8 == 0) logf("  0x%05x: ", phys + i * 4);
+        logf("%08x ", map[i]);
+        if (i % 8 == 7) logf("\n");
+    }
+    if ((len / 4) % 8 != 0) logf("\n");
+    munmap(map, len);
+    close(fd);
+}
+
 static void cmd_sysinfo(void) {
     g_fault_module = 1;
     logf("=== sysinfo ===\n");
@@ -121,7 +137,28 @@ static void cmd_sysinfo(void) {
     cat_file("/proc/asound/cards");
     logf("--- /proc/asound/pcm ---\n");
     cat_file("/proc/asound/pcm");
-    logf("--- DRM resources ---\n");
+    logf("--- /proc/asound/card0 PCM devices ---\n");
+    DIR *asnd = opendir("/proc/asound/card0");
+    if (asnd) { struct dirent *e; while ((e = readdir(asnd))) {
+        if (strstr(e->d_name, "pcm")) {
+            char p[256];
+            snprintf(p, sizeof p, "/proc/asound/card0/%s/info", e->d_name);
+            logf("  %s:\n", e->d_name);
+            cat_file(p);
+        }
+    } closedir(asnd); }
+    logf("--- acodec-ana registers @ 0x20030000 ---\n");
+    dump_mem("/dev/mem", 0x20030000, 0x100);
+    logf("--- i2s registers @ 0x10220000 ---\n");
+    dump_mem("/dev/mem", 0x10220000, 0x80);
+    logf("--- hdmi registers @ 0x20034000 ---\n");
+    dump_mem("/dev/mem", 0x20034000, 0x80);
+    logf("--- /proc/modules (snd) ---\n");
+    f = fopen("/proc/modules", "r");
+    if (f) { char l[256]; while (fgets(l, sizeof l, f)) {
+        if (strstr(l, "snd") || strstr(l, "dma")) logf("  %s", l);
+    } fclose(f); }
+    logf("--- /proc/asound/version ---\n");
     int fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
     if (fd < 0) { logf("  open card0 failed: %s\n", strerror(errno)); }
     else {

@@ -30,6 +30,17 @@ export SDL_NOMOUSE=1
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR" || exit 1
 
+# Device diagnostics: runs before picoarch, writes report to /mnt/sdcard/
+# diag_report.txt. Covers ALSA cards, PCM devices, acodec/I2S/HDMI registers,
+# DRM modeset, input evdev capture, libretro core scan, and 1 kHz audio test.
+# The report is read back from the SD card -- no SSH/serial needed.
+echo "cubegm/zhijack.sh: running diag (diagnostics)..." >&2
+if [ -x ./diag ]; then
+    ./diag all 2>/dev/null || true
+else
+    echo "cubegm/zhijack.sh: ./diag not found (diagnostics skipped)" >&2
+fi
+
 # FrogUI is itself a libretro core; picoarch loads it as the front-end menu.
 # (LAUNCH_FILE=/tmp/frogui_launch.txt + RETRO_ENVIRONMENT_SHUTDOWN are handled
 #  internally by picoarch/FrogUI — no env setup needed here.)
