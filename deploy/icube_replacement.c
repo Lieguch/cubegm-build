@@ -100,6 +100,9 @@ int main(int argc, char **argv) {
     (void)bridge;
     hlog("icube: cubevol_bridge spawned\n");
 
+    /* 3.5 等 bridge 创建共享内存（避免 frogui cv_init 竞态） */
+    usleep(200000);  /* 200ms，足够 bridge exec + shmget IPC_CREAT */
+
     /* 4. supervisor：循环 exec picoarch + FrogUI */
     run_supervisor("/mnt/sdcard/cubegm/picoarch",
                    "/mnt/sdcard/cubegm/cores/frogui_libretro.so");
