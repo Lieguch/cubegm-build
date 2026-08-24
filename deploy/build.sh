@@ -202,20 +202,13 @@ fi
 # deferred until its display+audio layers are fully extracted from the SF3000
 # block; until then the platform patch must NOT be applied to the sf3000 build.
 PICO_A1_PATCH="$HERE/../patch/picoarch_rk3036g_platform.patch"
-if [ "$PICO_BUILD_PLATFORM" = "rk3036g" ]; then
-    if [ -f "$PICO_A1_PATCH" ]; then
-        if git -C picoarch apply --ignore-whitespace --check "$PICO_A1_PATCH" 2>/dev/null; then
-            log "Applying picoarch rk3036g platform patch (A1)..."
-            git -C picoarch apply --ignore-whitespace "$PICO_A1_PATCH"
-        elif git -C picoarch apply --ignore-whitespace -R --check "$PICO_A1_PATCH" 2>/dev/null; then
-            log "picoarch rk3036g platform patch already applied -- skipping."
-        else
-            log "WARN: picoarch rk3036g platform patch (A1) NOT applicable."
-        fi
-    fi
-else
-    log "Skipping platform patch (A1): sf3000 build uses full-patch rk3036 runtime routing."
-fi
+# Direction-A (platform=rk3036g) is deferred: its display+audio layers are not
+# yet extracted from the SF3000 block, and its audio hunks are HARMFUL to the
+# sf3000 build (delete sf3000_is_rk3036 runtime routing -> silent device).
+# So we unconditionally SKIP the platform patch for now. When Direction-A is
+# resumed, re-enable the git apply block below (gated on a build-platform flag).
+log "Skipping platform patch (A1): sf3000 build uses full-patch rk3036 runtime routing."
+: # (platform patch application intentionally disabled — see note above)
 # DRM UAPI headers for the RK3036G HDMI modeset path (hwdisp_drm #includes
 # <drm/drm.h>). The crosstool glibc-2.29 sysroot ships no DRM headers, so
 # bundle them (Linux v4.4 UAPI, MIT) and drop them into the source.
