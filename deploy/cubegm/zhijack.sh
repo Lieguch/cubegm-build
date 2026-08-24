@@ -60,6 +60,13 @@ TF_DRIVER=
 EOF
 export TF_DEVICE=rk3036g TF_PANEL_W=1280 TF_PANEL_H=720 TF_UI_SCALE=150
 
+# SDL 1.2 fbcon mouse: RK3036G has no PS/2 mouse device (/dev/input/mice,
+# /dev/usbmouse, /dev/psaux). FB_OpenMouse() fails, SDL_InitVideo returns -1
+# ("Unable to open mouse") — the root cause of the black screen + FrogUI
+# restart loop. SDL_NOMOUSE is SDL's own documented switch (SDL_fbvideo.c:802)
+# that skips the mouse probe error. The device is gamepad-only, no PS/2 mouse.
+export SDL_NOMOUSE=1
+
 # Runtime libs the device rootfs does NOT provide (SDL/libpng12/z) ship in
 # cubegm/lib; picoarch's NEEDED entries resolve against it.
 export LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib:$LD_LIBRARY_PATH
@@ -211,15 +218,13 @@ while true; do
     # runs every boot, so a future "no crash.log" is a real no-crash, not a
     # missing feature.
     echo "=== picoarch launch iter=$ITER $(date '+%H:%M:%S' 2>/dev/null) ===" >> /mnt/sdcard/crash.log 2>/dev/null
-    # Direction B: one-shot diagnostics. Put an empty file named "diag.flag"
-    # on the SD root -> this boot runs `diag all` first (report to
-    # /mnt/sdcard/diag_report.txt), then deletes the flag so normal boot
-    # continues on the next iteration. Fact base for every fix -- see
-    # charter §0.4.
-    if [ -f /mnt/sdcard/diag.flag ] && [ -x /mnt/sdcard/cubegm/diag ]; then
-        echo "zhijack: diag.flag present -> running diag all (this boot only)" >> "$LOG"
+    # Direction B: diagnostics run on EVERY boot (no flag file needed).
+    # Outputs structured report to /mnt/sdcard/diag_report.txt covering
+    # ALSA cards, PCM devices, acodec/I2S/HDMI registers, DRM, input,
+    # libretro core scan, and 1 kHz audio test. Read report from SD card.
+    if [ -x /mnt/sdcard/cubegm/diag ]; then
+        echo "zhijack: running diag all..." >> "$LOG"
         /mnt/sdcard/cubegm/diag all >> "$LOG" 2>&1
-        rm -f /mnt/sdcard/diag.flag
         sync
         echo "zhijack: diag finished, report -> /mnt/sdcard/diag_report.txt" >> "$LOG"
     fi
