@@ -28,31 +28,33 @@ index 599031e..ab190cf 100644
  	$(CC) $(CFLAGS) -c -o $@ $<
 diff --git a/plat_rk3036g.c b/plat_rk3036g.c
 new file mode 100644
-index 0000000..be51201
+index 0000000..8d92b46
 --- /dev/null
 +++ b/plat_rk3036g.c
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,158 @@
 +/*
 + * plat_rk3036g.c -- RK3036G (ARM Cortex-A7, HDMI-only) platform layer.
 + *
-+ * This is the direction-A port (charter §0.4): a clean, self-contained
-+ * platform backend for the RK3036G CubeGM handheld, replacing the SF2000
-+ * transitional patches (plat_sf3000.c / cubevol shm / /dev/dis / driver.so).
++ * Direction-A port (charter §0.4): clean self-contained platform backend
++ * for the RK3036G CubeGM handheld, replacing the SF2000 transitional
++ * patches (cubevol shm input / /dev/dis display / driver.so audio).
 + *
-+ * Hardware facts (from payload-305/307 device diag_report.txt):
++ * Structure mirrors the upstream plat_sf3000.c (which `#include "plat_sdl.c"`
++ * at the end): define the SDL keyboard binds + the evdev gamepad binds, then
++ * pull in the shared SDL implementation. SDL drives the keyboard/panel; evdev
++ * auto-supports any standard HID USB gamepad via BTN_*/ABS_* codes.
++ *
++ * Hardware facts (payload-305/307 device diag_report.txt + cubevol_bridge.c
++ * stock profile 0810_0001_0110):
 + *   - SoC: RK3036 dual Cortex-A7 @ ~1.0 GHz, ARMv7-A NEON, 244 MB RAM
 + *   - Display: DRM/KMS only (card0-HDMI-A-1), 1280x720p60. /dev/fb0 is a
-+ *     legacy emulation that does NOT drive the HDMI scanout (payload-305
-+ *     black screen root cause). Rendering goes through hwdisp.c DRM dumb
-+ *     buffer + SETCRTC (verified 48 FPS on payload-307).
++ *     legacy emulation that does NOT drive HDMI (payload-305 black screen
++ *     root cause). Rendering via hwdisp.c DRM dumb buffer + SETCRTC
++ *     (verified 48 FPS on payload-307).
 + *   - Audio: ALSA "rockchip,hdmi" card, i2s-hifi PCM (default).
-+ *   - Input: standard evdev. Two "Twin USB Gamepad" (VID:0810 PID:0001)
-+ *     report BTN_* buttons (codes 288-297) + ABS_X/ABS_Y dpad, plus a
-+ *     "key" gpio-keys device (EV_KEY only, KEY=80000).
-+ *
-+ * Structure mirrors plat_linux.c: define the evdev default-bind tables, then
-+ * pull in the shared plat_sdl.c implementation (which provides plat_init,
-+ * the SDL framebuffer surface, and calls in_evdev_init for gamepad input).
++ *   - Input: "Twin USB Gamepad" (VID:0810 PID:0001) reports BTN_TRIGGER..
++ *     BTN_BASE4 (0x120..0x129 = codes 288-297), dpad on ABS_HAT0X/Y +
++ *     ABS_X/ABS_Y; "key" gpio-keys device (EV_KEY only).
 + */
 +#include <SDL/SDL.h>
 +#include <linux/input.h>
@@ -62,71 +64,135 @@ index 0000000..be51201
 +#include "libpicofe/in_sdl.h"
 +#include "main.h"
 +#include "util.h"
++#include "scale.h"
++#include "scaler_neon.h"
++#include "libpicofe/linux/in_evdev.h"   /* in_evdev_init() -- generic gamepad backend */
++#include "plat.h"
 +
-+/* Gamepad button bindings -> libretro joypad IDs.
-+ *
-+ * Twin USB Gamepad (VID:0810 PID:0001) — authoritative mapping from the
-+ * stock profile 0810_0001_0110 (see cubevol_bridge.c header, verified
-+ * against payload-307 device diag keycodes):
-+ *   btn0=Y btn1=B btn2=A btn3=X btn4=L1 btn5=R1 btn6=L2 btn7=R2
-+ *   btn8=SELECT btn9=START   (keycodes 0x120..0x129 = BTN_TRIGGER..BTN_BASE4)
-+ * d-pad arrives as ABS_HAT0X/HAT0Y (also ABS_X/ABS_Y stick, thresholded);
-+ * in_evdev's abs->digital mapping handles it, so no BTN_DPAD_* entries
-+ * are needed (kept as a harmless fallback for hats that report as keys).
-+ */
++// Video system
++static SDL_Surface* screen;
++static SDL_Surface* clean_screen;
++
++// Buffer structure
++static struct GFX_Buffer buffer;
++
++/* --------------------------------------------------------------------- */
++/* SDL keyboard binds (SDL fallback; also what in_sdl_init() needs).      */
++/* --------------------------------------------------------------------- */
++static const struct in_default_bind in_sdl_defbinds[] = {
++    { SDLK_UP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP },
++    { SDLK_DOWN,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN },
++    { SDLK_LEFT,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT },
++    { SDLK_RIGHT,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
++    { SDLK_LCTRL,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B },
++    { SDLK_SPACE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A },
++    { SDLK_LSHIFT,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X },
++    { SDLK_LALT,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y },
++    { SDLK_RETURN,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START },
++    { SDLK_RCTRL,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
++    { SDLK_TAB,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L },
++    { SDLK_BACKSPACE, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R },
++    { SDLK_q,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2 },
++    { SDLK_BACKSLASH, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2 },
++    { SDLK_ESCAPE,    IN_BINDTYPE_EMU, EACTION_MENU },
++    { 0, 0, 0 }
++};
++
++const struct menu_keymap in_sdl_key_map[] =
++{
++    { SDLK_UP,        PBTN_UP },
++    { SDLK_DOWN,      PBTN_DOWN },
++    { SDLK_LEFT,      PBTN_LEFT },
++    { SDLK_RIGHT,     PBTN_RIGHT },
++    { SDLK_SPACE,     PBTN_MOK },
++    { SDLK_LCTRL,     PBTN_MBACK },
++    { SDLK_LALT,      PBTN_MA2 },
++    { SDLK_LSHIFT,    PBTN_MA3 },
++    { SDLK_TAB,       PBTN_L },
++    { SDLK_BACKSPACE, PBTN_R },
++    { SDLK_ESCAPE,    PBTN_MENU },
++};
++
++const struct menu_keymap in_sdl_joy_map[] =
++{
++    { SDLK_UP,    PBTN_UP },
++    { SDLK_DOWN,  PBTN_DOWN },
++    { SDLK_LEFT,  PBTN_LEFT },
++    { SDLK_RIGHT, PBTN_RIGHT },
++    { SDLK_WORLD_0, PBTN_MOK },
++    { SDLK_WORLD_1, PBTN_MBACK },
++    { SDLK_WORLD_2, PBTN_MA2 },
++    { SDLK_WORLD_3, PBTN_MA3 },
++};
++
++static const struct in_pdata in_sdl_platform_data = {
++    .defbinds  = in_sdl_defbinds,
++    .key_map   = in_sdl_key_map,
++    .kmap_size = array_size(in_sdl_key_map),
++    .joy_map   = in_sdl_joy_map,
++    .jmap_size = array_size(in_sdl_joy_map),
++};
++
++/* --------------------------------------------------------------------- */
++/* evdev gamepad binds. Twin USB Gamepad (0810:0001) authoritative mapping */
++/* from stock profile 0810_0001_0110 (cubevol_bridge.c header, verified    */
++/* against payload-307 device keycodes): btn0=Y btn1=B btn2=A btn3=X        */
++/* btn4=L1 btn5=R1 btn6=L2 btn7=R2 btn8=SEL btn9=START (0x120..0x129).     */
++/* dpad = ABS_HAT0X/Y via in_evdev abs->digital.                           */
++/* --------------------------------------------------------------------- */
 +static const struct in_default_bind in_evdev_defbinds[] = {
-+	/* d-pad hat fallback (primary d-pad is ABS_HAT0X/Y via abs->digital) */
-+	{ BTN_DPAD_UP,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP    },
-+	{ BTN_DPAD_DOWN,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN  },
-+	{ BTN_DPAD_LEFT,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT  },
-+	{ BTN_DPAD_RIGHT, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
++    /* d-pad hat fallback (primary d-pad is ABS_HAT0X/Y via abs->digital) */
++    { BTN_DPAD_UP,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP    },
++    { BTN_DPAD_DOWN,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN  },
++    { BTN_DPAD_LEFT,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT  },
++    { BTN_DPAD_RIGHT, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
 +
-+	/* face buttons (btn0..btn3 -> Y B A X per stock profile) */
-+	{ BTN_TRIGGER,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y      },
-+	{ BTN_THUMB,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B      },
-+	{ BTN_THUMB2,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A      },
-+	{ BTN_TOP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X      },
++    /* face buttons (btn0..btn3 -> Y B A X per stock profile) */
++    { BTN_TRIGGER,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y      },
++    { BTN_THUMB,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B      },
++    { BTN_THUMB2,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A      },
++    { BTN_TOP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X      },
 +
-+	/* shoulders (btn4..btn7 -> L1 R1 L2 R2) */
-+	{ BTN_TOP2,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L      },
-+	{ BTN_PINKIE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R      },
-+	{ BTN_BASE,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2     },
-+	{ BTN_BASE2,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2     },
++    /* shoulders (btn4..btn7 -> L1 R1 L2 R2) */
++    { BTN_TOP2,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L      },
++    { BTN_PINKIE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R      },
++    { BTN_BASE,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2     },
++    { BTN_BASE2,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2     },
 +
-+	/* btn8/btn9 -> SELECT/START */
-+	{ BTN_BASE3,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
-+	{ BTN_BASE4,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START  },
-+	{ 0, 0, 0 }
++    /* btn8/btn9 -> SELECT/START */
++    { BTN_BASE3,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
++    { BTN_BASE4,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START  },
++    { 0, 0, 0 }
 +};
 +
 +/* Menu navigation (evdev keycodes -> unified PBTN_*). */
 +const struct menu_keymap in_evdev_key_map[] = {
-+	{ BTN_DPAD_UP,    PBTN_UP    },
-+	{ BTN_DPAD_DOWN,  PBTN_DOWN  },
-+	{ BTN_DPAD_LEFT,  PBTN_LEFT  },
-+	{ BTN_DPAD_RIGHT, PBTN_RIGHT },
-+	{ BTN_THUMB2,     PBTN_MOK   },   /* A = confirm */
-+	{ BTN_THUMB,      PBTN_MBACK },   /* B = back */
-+	{ BTN_BASE4,      PBTN_MENU  },   /* START = menu */
-+	/* keyboard-arrow fallback (dpad hats mapped to these by in_evdev) */
-+	{ KEY_UP,         PBTN_UP    },
-+	{ KEY_DOWN,       PBTN_DOWN  },
-+	{ KEY_LEFT,       PBTN_LEFT  },
-+	{ KEY_RIGHT,      PBTN_RIGHT },
++    { BTN_DPAD_UP,    PBTN_UP    },
++    { BTN_DPAD_DOWN,  PBTN_DOWN  },
++    { BTN_DPAD_LEFT,  PBTN_LEFT  },
++    { BTN_DPAD_RIGHT, PBTN_RIGHT },
++    { BTN_THUMB2,     PBTN_MOK   },   /* A = confirm */
++    { BTN_THUMB,      PBTN_MBACK },   /* B = back */
++    { BTN_BASE4,      PBTN_MENU  },   /* START = menu */
++    /* keyboard-arrow fallback (dpad hats mapped to these by in_evdev) */
++    { KEY_UP,         PBTN_UP    },
++    { KEY_DOWN,       PBTN_DOWN  },
++    { KEY_LEFT,       PBTN_LEFT  },
++    { KEY_RIGHT,      PBTN_RIGHT },
 +};
 +
 +static const struct in_pdata in_evdev_platform_data = {
-+	.defbinds  = in_evdev_defbinds,
-+	.key_map   = in_evdev_key_map,
-+	.kmap_size = array_size(in_evdev_key_map),
-+	.joy_map   = NULL,
-+	.jmap_size = 0,
-+	.key_names = NULL,
++    .defbinds  = in_evdev_defbinds,
++    .key_map   = in_evdev_key_map,
++    .kmap_size = array_size(in_evdev_key_map),
++    .joy_map   = NULL,
++    .jmap_size = 0,
 +};
 +
 +#include "plat_sdl.c"
+\ No newline at end of file
 diff --git a/plat_sdl.c b/plat_sdl.c
-index b0c98e6..8218379 100644
+index b0c98e6..25ded33 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
 @@ -172,7 +172,7 @@ static void sf3000_text_native(int px, int py, const char *text, uint32_t color,
@@ -138,30 +204,7 @@ index b0c98e6..8218379 100644
  // loosely based on eggs' picogpsp gfx.c
  #include <mi_sys.h>
  #include <mi_gfx.h>
-@@ -492,6 +492,22 @@ static void buffer_scale(unsigned w, unsigned h, size_t pitch, const void *src)
- 
- #endif // end miyoo hardware scaling support
- 
-+/* RK3036G: the miyoo HW-scaling block above is excluded (no mi_sys/mi_gfx
-+ * SDK), but the generic SDL framebuffer path below still needs the 'buffer'
-+ * global + its GFX_Buffer type. Declare them here (phyAddr omitted — it
-+ * comes from <mi_sys.h> which is excluded, and the generic path never
-+ * touches it). */
-+#ifdef PLATFORM_RK3036G
-+struct GFX_Buffer {
-+	void*		virAddr;
-+	int 		width;
-+	int 		height;
-+	int 		depth;
-+	int 		pitch;
-+	uint32_t 	size;
-+};
-+static struct GFX_Buffer buffer;
-+#endif
- 
- //begin PLATFORM_SF3000
- 
-@@ -1534,10 +1550,10 @@ int plat_init(void)
+@@ -1534,10 +1534,10 @@ int plat_init(void)
              return -1;
          }
      }
@@ -176,7 +219,7 @@ index b0c98e6..8218379 100644
      in_evdev_init(&in_evdev_platform_data);
  #endif
      in_probe();
-@@ -1610,8 +1626,8 @@ dbg_log("DBG M3: sound init done\n");
+@@ -1610,8 +1610,8 @@ dbg_log("DBG M3: sound init done\n");
  		PA_ERROR("SDL input failed to init: %s\n", SDL_GetError());
  		return -1;
  	}
