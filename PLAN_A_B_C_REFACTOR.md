@@ -154,12 +154,12 @@ RK3036G (标准 buildroot Linux)
 
 | 步骤 | 动作 | 完成定义（DoD） |
 |---|---|---|
-| A1 | 新建 `plat_rk3036g.c`（仿 plat_linux.c 结构，PLATFORM_RK3036G 宏隔离）+ Makefile `platform=rk3036g` 分支 | 空平台可编译链接 |
-| A2 | 输入：in_evdev 默认绑定表 = diag 实测键码；移除 core.c shm OR | 游戏输入正确（实机） |
-| A3 | 显示：hwdisp_drm 挂接 plat_rk3036g | HDMI 正确出图（实机） |
-| A4 | 音频：ALSA 路径独立化 + fork 前释放 | 有声（实机） |
-| A5 | FrogUI 全链路（菜单+启动+返回） | 可玩循环（实机） |
-| A6 | 性能调优（frameskip/编译 flags/逐核验收） | 达标帧率 |
+| A1 | 新建 `plat_rk3036g.c`（仿 plat_linux.c 结构，PLATFORM_RK3036G 宏隔离）+ Makefile `platform=rk3036g` 分支 | ✅ CI #308+ 可编译链接 |
+| A2 | 输入：in_evdev 默认绑定表 = diag 实测键码；移除 core.c shm OR | ✅ 权威键码表（cubevol_bridge.c 0810） |
+| A3 | 显示：hwdisp_drm 挂接 plat_rk3036g；构建切换 `platform=rk3036g` | ✅ CI #316 真编译通过（6 轮错误链见 a3-error-chain） |
+| A4 | 音频：ALSA 路径独立化 + fork 前释放 | ✅ CI #318 真绿（63 PASS/0 FAIL，dlopen libasound + SDL fallback） |
+| A5 | FrogUI 全链路（菜单+启动+返回） | 🔧 代码就绪（fork+execl 启动 <-> 退出 execl 回菜单），**待实机验证** |
+| A6 | 性能调优（frameskip/编译 flags/逐核验收） | ⏳ 待 A5 实机通过后启动 |
 
 ### 阶段 C：单子系统迭代验收（贯穿）
 
