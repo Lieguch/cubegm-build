@@ -253,7 +253,7 @@ index 0000000..aaf890c
 +#include "plat_sdl.c"
 \ No newline at end of file
 diff --git a/plat_sdl.c b/plat_sdl.c
-index b0c98e6..72bb3ee 100644
+index b0c98e6..97c311a 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
 @@ -172,7 +172,7 @@ static void sf3000_text_native(int px, int py, const char *text, uint32_t color,
@@ -265,7 +265,72 @@ index b0c98e6..72bb3ee 100644
  // loosely based on eggs' picogpsp gfx.c
  #include <mi_sys.h>
  #include <mi_gfx.h>
-@@ -1534,10 +1534,10 @@ int plat_init(void)
+@@ -1119,30 +1119,15 @@ static void plat_sound_finish_alsa(void);
+  * fails EBUSY ("ALSA init failed, falling back to SDL audio" -> no sound). */
+ void plat_sound_finish(void)
+ {
+-#ifdef PLATFORM_SF3000
+-	/* RK3036G has no stock driver.so audio -> SDL/ALSA path below. */
+-	extern int sf3000_is_rk3036(void);
+-	if (!sf3000_is_rk3036()) {
+-		if (sf3000_audio_running) {
+-			sf3000_audio_running = 0;
+-			pthread_join(sf3000_audio_thread, NULL);  /* thread deinits the DAC itself */
+-		}
+-		if (sf3000_sound_handle) {
+-			dlclose(sf3000_sound_handle);
+-			sf3000_sound_handle = NULL;
+-		}
+-		return;
+-	}
+-	/* RK3036G: close the ALSA pcm if it was opened (SDL audio never opened). */
+-	extern int sf3000_is_rk3036(void);
+-	if (sf3000_is_rk3036()) {
+-		plat_sound_finish_alsa();
+-		SDL_PauseAudio(1);
+-		SDL_CloseAudio();
+-		if (audio.buf) { free(audio.buf); audio.buf = NULL; }
+-		return;
+-	}
++#ifdef PLATFORM_RK3036G
++	plat_sound_finish_alsa();
++	SDL_PauseAudio(1);
++	SDL_CloseAudio();
++	if (audio.buf) { free(audio.buf); audio.buf = NULL; }
++	return;
+ #endif
++#ifdef PLATFORM_SF3000
++	/* SF3000 proprietary driver shutdown path */
+ 	SDL_PauseAudio(1);
+ 	SDL_CloseAudio();
+ 	if (audio.buf) {
+@@ -1264,17 +1249,15 @@ static int plat_sound_init_sdl(void)
+ 
+ static int plat_sound_init(void)
+ {
++#ifdef PLATFORM_RK3036G
++	/* RK3036G: no stock driver.so audio — use SDL/ALSA directly. */
++	if (plat_sound_init_alsa() == 0)
++		return 0;
++	PA_INFO("RK3036G: ALSA init failed, falling back to SDL audio\n");
++	return plat_sound_init_sdl();
++#endif
+ #ifdef PLATFORM_SF3000
+-	/* RK3036G: no stock driver.so audio (HDMI via SDL/ALSA) — route to the
+-	 * SDL backend below. This also stops the "sound_driver_init failed"
+-	 * audio-thread error and the core teardown it triggered. */
+-	extern int sf3000_is_rk3036(void);
+-	if (sf3000_is_rk3036()) {
+-		if (plat_sound_init_alsa() == 0)
+-			return 0;
+-		PA_INFO("RK3036G: ALSA init failed, falling back to SDL audio\n");
+-		return plat_sound_init_sdl();
+-	}
++	/* SF3000 proprietary driver path */
+ 	/* NOTE: sound_driver_init() is NOT called here — it runs on the audio thread
+ 	 * (the SF3500-class driver's handle is thread-local; see sf3000_audio_thread_fn).
+ 	 * Here we only dlopen/dlsym, set rates, and start that thread. */
+@@ -1534,10 +1517,10 @@ int plat_init(void)
              return -1;
          }
      }
@@ -280,7 +345,7 @@ index b0c98e6..72bb3ee 100644
      in_evdev_init(&in_evdev_platform_data);
  #endif
      in_probe();
-@@ -1610,8 +1610,8 @@ dbg_log("DBG M3: sound init done\n");
+@@ -1610,8 +1593,8 @@ dbg_log("DBG M3: sound init done\n");
  		PA_ERROR("SDL input failed to init: %s\n", SDL_GetError());
  		return -1;
  	}
@@ -291,7 +356,7 @@ index b0c98e6..72bb3ee 100644
  	in_evdev_init(&in_evdev_platform_data);
  #endif
  	in_probe();
-@@ -1666,6 +1666,229 @@ void plat_finish(void)
+@@ -1666,6 +1649,229 @@ void plat_finish(void)
  #endif
  }
  
