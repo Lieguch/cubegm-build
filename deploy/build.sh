@@ -229,28 +229,23 @@ fi
 #   Also note: the Makefile reads lowercase 'platform'; passing PLATFORM=...
 #   is a no-op and silently builds the 'unix' target.
 # -----------------------------------------------------------------------------
-log "Building picoarch (plat_rk3036g, ARM) -- Direction-A platform..."
-ARM_BUILD="$HERE/build_rk3036g_armhf.sh"
+# Direction-A (plat_rk3036g.c) 的显示路径未完成：切换到 platform=rk3036g 后
+# plat_sdl.c 的 plat_init() 走 #else 分支（SDL_SetVideoMode fbcon），而 RK3036G
+# 是 DRM/KMS-only（无 fbcon）→ "failed to set video mode" → FrogUI 反复重启
+# （#322/#323 实机黑屏）。#307 及之前用 platform=sf3000 构建（-DPLATFORM_SF3000），
+# plat_init 走 SF3000 分支（SDL dummy video + hwdisp DRM），再靠 full patch 的
+# sf3000_is_rk3036() 运行时检测分流 DRM/ALSA/evdev —— 已验证亮屏 48FPS。
+# 因此回退 sf3000 构建器（复用已验证路径），方向 A 的独立 plat_rk3036g 显示层
+# 留待后续补全（需把 DRM/ALSA 从 SF3000 块抽离到 rk3036g 专用路径）。
+log "Building picoarch (platform=sf3000, ARM) -- SF3000 branch + rk3036 runtime detect..."
+ARM_BUILD="$HERE/build_sf3000_armhf.sh"
 if [ -x "$ARM_BUILD" ]; then
     SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
     CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
     PICOARCH_DIR="$PWD/picoarch" \
-        bash "$ARM_BUILD" || {
-        log "WARN: rk3036g build failed -- falling back to sf3000 builder."
-        ARM_BUILD="$HERE/build_sf3000_armhf.sh"
-        SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-        CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-        PICOARCH_DIR="$PWD/picoarch" \
-            bash "$ARM_BUILD"
-    }
+        bash "$ARM_BUILD" || die "sf3000 picoarch build failed."
 else
-    log "WARN: build_rk3036g_armhf.sh missing -- fallback needs manual Makefile fix."
-    pushd picoarch >/dev/null
-    make CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-         platform=rk3036g SYSROOT="$SYSROOT" \
-         CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-         picoarch -j"$(nproc)"
-    popd >/dev/null
+    die "build_sf3000_armhf.sh missing -- cannot build picoarch."
 fi
 [ -x picoarch/picoarch ] || die "picoarch build failed."
 log "picoarch built."
