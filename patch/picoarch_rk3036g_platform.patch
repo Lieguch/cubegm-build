@@ -28,7 +28,7 @@ index 599031e..ab190cf 100644
  	$(CC) $(CFLAGS) -c -o $@ $<
 diff --git a/plat_rk3036g.c b/plat_rk3036g.c
 new file mode 100644
-index 0000000..8d92b46
+index 0000000..aaf890c
 --- /dev/null
 +++ b/plat_rk3036g.c
 @@ -0,0 +1,158 @@
@@ -42,7 +42,7 @@ index 0000000..8d92b46
 + * Structure mirrors the upstream plat_sf3000.c (which `#include "plat_sdl.c"`
 + * at the end): define the SDL keyboard binds + the evdev gamepad binds, then
 + * pull in the shared SDL implementation. SDL drives the keyboard/panel; evdev
-+ * auto-supports any standard HID USB gamepad via BTN_*/ABS_* codes.
++ * auto-supports any standard HID USB gamepad via BTN_* / ABS_* codes.
 + *
 + * Hardware facts (payload-305/307 device diag_report.txt + cubevol_bridge.c
 + * stock profile 0810_0001_0110):
