@@ -142,15 +142,15 @@ LAUNCH=/tmp/frogui_launch.txt
 #     killed, so launch our evdev->shm bridge (ships in this payload). ------
 BRIDGE=/mnt/sdcard/cubegm/cubevol_bridge
 if [ -x "$BRIDGE" ]; then
-    "$BRIDGE" >> "$LOG" 2>&1 &
-    echo "zhijack: cubevol_bridge started pid=$!" >> "$LOG"
+    nohup "$BRIDGE" >> "$LOG" 2>&1 </dev/null &
+    echo "zhijack: cubevol_bridge started pid=$! (nohup)" >> "$LOG"
 else
     echo "zhijack: WARN cubevol_bridge missing -- FrogUI will have NO input" >> "$LOG"
 fi
 if [ -e /dev/watchdog ]; then
     echo "zhijack: /dev/watchdog PRESENT -- petting each loop" >> "$LOG"
 fi
-sync
+echo "zhijack: past bridge start, entering backup restoration" >> "$LOG"
 
 # NEVER rename/delete the stock icube/rkgame binaries. A previous build renamed
 # icube -> icube.bak to "disarm" the respawner; on the NEXT boot the stock init
@@ -163,6 +163,7 @@ for _name in icube rkgame; do
         mv "$_bak" "/mnt/sdcard/cubegm/$_name" 2>>"$LOG" && echo "zhijack: RESTORED $_bak -> $_name (boot chain repaired)" >> "$LOG"
     fi
 done
+echo "zhijack: past backup restoration, freezing respawner" >> "$LOG"
 kill -STOP $(pidof icube) 2>/dev/null
 killall -9 rkgame 2>/dev/null
 echo "zhijack: respawner frozen (icube pidof=$(pidof icube 2>/dev/null))" >> "$LOG"
@@ -192,10 +193,11 @@ setsid sh -c '
     done
 ' sh "$LOG" &
 WD_PID=$!
-echo "zhijack: background icube/rkgame watchdog started (pid=$WD_PID, 1s)" >> "$LOG"
+echo "zhijack: past watchdog start (WD_PID=$WD_PID)" >> "$LOG"
 
 # Front-end launcher loop. FrogUI writes $LAUNCH (core path on line 1, ROM path
 # on line 2) when the user picks a game; we then launch picoarch with that core.
+echo "zhijack: entering main loop" >> "$LOG"
 ITER=0
 while true; do
     ITER=$((ITER+1))
@@ -210,7 +212,6 @@ while true; do
     echo "--- iter $ITER: frogui (icube=$(pidof icube 2>/dev/null)) ---" >> "$LOG"
     if [ ! -x "$PICOARCH" ]; then
         echo "zhijack: FATAL $PICOARCH missing/not executable" >> "$LOG"
-        sync
         sleep 5
         continue
     fi
@@ -225,13 +226,11 @@ while true; do
     if [ -x /mnt/sdcard/cubegm/diag ]; then
         echo "zhijack: running diag all..." >> "$LOG"
         /mnt/sdcard/cubegm/diag all >> "$LOG" 2>&1
-        sync
         echo "zhijack: diag finished, report -> /mnt/sdcard/diag_report.txt" >> "$LOG"
     fi
     "$PICOARCH" "$FROGUI_CORE" "$FROGUI_CORE" >> "$LOG" 2>&1
     RC=$?
     echo "frogui exited rc=$RC" >> "$LOG"
-    sync
     if [ -f "$LAUNCH" ]; then
         CORE_PATH=$(sed -n '1p' "$LAUNCH")
         ROM_PATH=$(sed -n '2p' "$LAUNCH")
