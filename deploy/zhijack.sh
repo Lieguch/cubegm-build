@@ -16,6 +16,16 @@
 
 set -e
 
+# SDL 1.2 fbcon mouse: the RK3036G has no PS/2 mouse device (/dev/input/mice,
+# /dev/usbmouse, /dev/psaux all absent). FB_OpenMouse() then fails and without
+# SDL_NOMOUSE SDL_InitVideo returns -1 ("Unable to open mouse") which kills
+# picoarch -> FrogUI restart loop -> black screen (zhijack-2.log iter 1..42).
+# The device is operated by the USB gamepad via evdev, so disable the SDL
+# mouse probe. This is SDL's own documented switch (src/video/fbcon/
+# SDL_fbvideo.c: if (FB_OpenMouse(this) < 0) { ... if (!SDL_getenv("SDL_NOMOUSE"))
+#   -> fail }); it only affects the init-time probe, NOT the evdev gamepad.
+export SDL_NOMOUSE=1
+
 # Resolve our own directory so relative paths (cores/, Roms/) resolve on the SD card.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR" || exit 1
