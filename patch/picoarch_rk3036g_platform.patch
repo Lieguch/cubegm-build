@@ -26,6 +26,67 @@ index 599031e..ab190cf 100644
  
  hwdisp.o: hwdisp.c hwdisp.h
  	$(CC) $(CFLAGS) -c -o $@ $<
+diff --git a/main.c b/main.c
+index 1536200..9d25116 100644
+--- a/main.c
++++ b/main.c
+@@ -772,7 +772,6 @@ static void get_tag_name(const char* in_path, char* out_tag) {
+ 	}
+ }
+ 
+-#ifdef PLATFORM_SF3000
+ /* ---- Rewind: per-frame serialized-state ring. Hold SELECT+B to rewind. ----
+  * Each normal frame we serialize the core state into a ring. While rewinding we
+  * drop the newest slot and unserialize the now-newest, then retro_run() renders
+@@ -833,13 +832,19 @@ static int rewind_back(void) {
+ }
+ 
+ static int rewind_held(void) {
++#ifdef PLATFORM_SF3000
+ 	extern volatile uint32_t *sf3000_keys_ptr;
+ 	extern volatile uint32_t sf3000_keys_filtered;
+ 	if (!sf3000_keys_ptr) return 0;
+ 	uint32_t r = sf3000_keys_filtered;  /* race-filtered */
+ 	return (r & ((1u << 0) | (1u << 14))) == ((1u << 0) | (1u << 14)); /* SELECT+B */
+-}
++#else
++	int acts[IN_BINDTYPE_COUNT] = { 0, };
++	in_update(acts);
++	int mask = (1 << RETRO_DEVICE_ID_JOYPAD_SELECT) | (1 << RETRO_DEVICE_ID_JOYPAD_B);
++	return (acts[IN_BINDTYPE_PLAYER12] & mask) == mask;
+ #endif
++}
+ 
+ int main(int argc, char **argv) {
+ 	setvbuf(stdout, NULL, _IONBF, 0);
+@@ -1012,9 +1017,7 @@ int main(int argc, char **argv) {
+ #endif
+ 	show_startup_message();
+ 	state_resume();
+-#ifdef PLATFORM_SF3000
+ 	rewind_init();
+-#endif
+ 
+ 	long play_start = playtime_mono();   /* for local play-time stats */
+ 
+@@ -1022,7 +1025,6 @@ int main(int argc, char **argv) {
+ 		count_fps();
+ 		adjust_audio();
+ 		core_frame_time_tick();
+-#ifdef PLATFORM_SF3000
+ 		if (g_rw_buf && rewind_held() && rewind_back()) {
+ 			current_core.retro_run();          /* render restored frame */
+ 		} else {
+@@ -1033,9 +1035,6 @@ int main(int argc, char **argv) {
+ 			if (g_rw_buf && (++rw_fc % REWIND_INTERVAL) == 0)
+ 				rewind_capture();
+ 		}
+-#else
+-		current_core.retro_run();
+-#endif
+ 		if (!should_quit)
+ 			plat_video_flip();
+ #ifdef PLATFORM_SF3000
 diff --git a/plat_rk3036g.c b/plat_rk3036g.c
 new file mode 100644
 index 0000000..aaf890c
@@ -192,7 +253,7 @@ index 0000000..aaf890c
 +#include "plat_sdl.c"
 \ No newline at end of file
 diff --git a/plat_sdl.c b/plat_sdl.c
-index b0c98e6..25ded33 100644
+index b0c98e6..83dc365 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
 @@ -172,7 +172,7 @@ static void sf3000_text_native(int px, int py, const char *text, uint32_t color,
@@ -230,3 +291,224 @@ index b0c98e6..25ded33 100644
  	in_evdev_init(&in_evdev_platform_data);
  #endif
  	in_probe();
+@@ -1666,6 +1666,220 @@ void plat_finish(void)
+ #endif
+ }
+ 
++#ifdef PLATFORM_RK3036G
++/* ---- RK3036G device detection + query (Direction-A) ----
++ * Full copy of the SF3000 device-info layer, deliberately OUTSIDE the
++ * #ifdef PLATFORM_SF3000 block above so hwdisp.c (compiled for every
++ * platform) can link sf3000_is_r36sx/is_rk3036/dump_fb_state/driver_path.
++ * RK3036G always detects as rk3036 via /proc/device-tree compatible.
++ * Kept under #ifdef PLATFORM_RK3036G so the two platforms never define
++ * the same symbols in one translation unit. */
++void sf3000_dump_fb_state(const char *tag) {
++    const int devs[] = {0, 6, 22};
++    for (size_t i = 0; i < sizeof(devs)/sizeof(devs[0]); i++) {
++        char path[32];
++        snprintf(path, sizeof(path), "/dev/fb%d", devs[i]);
++        int fd = open(path, O_RDONLY);
++        if (fd < 0) {
++            DBG("DBG dump[%s] %s: open failed (errno=%d)\n", tag, path, errno);
++            continue;
++        }
++        struct fb_var_screeninfo v;
++        struct fb_fix_screeninfo f;
++        if (ioctl(fd, FBIOGET_VSCREENINFO, &v) == 0 &&
++            ioctl(fd, FBIOGET_FSCREENINFO, &f) == 0) {
++            DBG("DBG dump[%s] %s: %ux%u(v%ux%u) bpp=%u off=%u,%u rot=%u "
++                            "line=%u smem_start=0x%lx smem_len=%u type=%u visual=%u\n",
++                    tag, path,
++                    v.xres, v.yres, v.xres_virtual, v.yres_virtual,
++                    v.bits_per_pixel, v.xoffset, v.yoffset, v.rotate,
++                    f.line_length, (unsigned long)f.smem_start, f.smem_len,
++                    f.type, f.visual);
++        } else {
++            DBG("DBG dump[%s] %s: ioctl failed (errno=%d)\n", tag, path, errno);
++        }
++        close(fd);
++    }
++}
++enum { TF_DEV_SF3000 = 0, TF_DEV_R36SX = 1, TF_DEV_SF3500 = 2, TF_DEV_GB350 = 3,
++       TF_DEV_RK3036 = 4 };
++static int g_dev_id = -1;       /* -1 = undetected */
++static int g_dev_r36sx = -1;    /* derived: 1 if R36SX (the fb-write device) */
++static int g_dev_rk3036 = -1;   /* derived: 1 if RK3036G (fb0-direct device) */
++static int g_dev_w = 854, g_dev_h = 480, g_dev_scale = 150;
++
++/* Recursively scan /proc/device-tree for the R36SX panel node (r63311), without
++ * forking — popen/fork inside the emulator process can disturb later dynarec
++ * memory mappings (gpsp). Bounded depth. Sets *found if seen. */
++static void dt_scan_r63311(const char *dir, int depth, int *found) {
++    if (*found || depth > 5) return;
++    DIR *d = opendir(dir);
++    if (!d) return;
++    struct dirent *e;
++    char path[512];
++    while ((e = readdir(d))) {
++        if (e->d_name[0] == '.') continue;
++        if (strstr(e->d_name, "r63311")) { *found = 1; break; }
++        snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
++        /* recurse into subdirs only */
++        DIR *sub = opendir(path);
++        if (sub) { closedir(sub); dt_scan_r63311(path, depth + 1, found); if (*found) break; }
++    }
++    closedir(d);
++}
++
++/* Map a device name (from env file or DT scan) to the id enum. Unknown → -1. */
++static int tf_id_from_name(const char *n) {
++    if (!n) return -1;
++    if (!strcasecmp(n, "R36SX"))  return TF_DEV_R36SX;
++    if (!strcasecmp(n, "SF3500")) return TF_DEV_SF3500;
++    if (!strcasecmp(n, "SF3000")) return TF_DEV_SF3000;
++    if (!strcasecmp(n, "GB350"))  return TF_DEV_GB350;
++    return -1;
++}
++
++/* Read TF_DEVICE / TF_PANEL_W / TF_PANEL_H / TF_UI_SCALE from the boot env file.
++ * Returns the device id (or -1 if the file is missing / has no usable TF_DEVICE).
++ * Geometry lines are optional overrides applied to the w/h/scale outputs. */
++static int tf_read_env_file(int *w, int *h, int *scale) {
++    FILE *f = fopen("/tmp/tfdevice.env", "r");
++    if (!f) return -1;
++    int id = -1;
++    char line[128];
++    while (fgets(line, sizeof line, f)) {
++        char *eq = strchr(line, '=');
++        if (!eq) continue;
++        *eq = 0;
++        char *key = line, *val = eq + 1;
++        char *nl = strpbrk(val, "\r\n"); if (nl) *nl = 0;
++        if      (!strcmp(key, "TF_DEVICE"))   id = tf_id_from_name(val);
++        else if (!strcmp(key, "TF_PANEL_W"))  { int v = atoi(val); if (v > 0) *w = v; }
++        else if (!strcmp(key, "TF_PANEL_H"))  { int v = atoi(val); if (v > 0) *h = v; }
++        else if (!strcmp(key, "TF_UI_SCALE")) { int v = atoi(val); if (v > 0) *scale = v; }
++    }
++    fclose(f);
++    return id;
++}
++
++/* RK3036G has no SF3000-class panel/DT nodes — detect via the SoC compatible
++ * string the kernel exposes. Returns 1 if /proc/device-tree/compatible lists
++ * an rk3036 OR rk3032 SoC. DEVICE EVIDENCE (K:/picoarch_init.log payload-236):
++ * this RK3036G unit's stock kernel DT compatible is 'rockchip,rk3032-dongle'
++ * (uname says rk3036; stock firmware reuses the rk3032 board DT), so BOTH
++ * strings must classify as RK3036G. */
++/* fsync'd file log (black-screen evidence; stderr is invisible on device). */
++static void sf3000_fslog(const char *fmt, ...) {
++    int il = open("/mnt/sdcard/picoarch_init.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
++    if (il < 0) return;
++    char buf[512]; va_list ap; va_start(ap, fmt);
++    int n = vsnprintf(buf, sizeof buf, fmt, ap); va_end(ap);
++    if (n > 0) (void)!write(il, buf, (size_t)n);
++    (void)!dprintf(il, "\n");
++    fsync(il); close(il);
++}
++
++static int tf_device_is_rk3036(void) {
++    FILE *f = fopen("/proc/device-tree/compatible", "r");
++    if (!f) { sf3000_fslog("tf_device_is_rk3036: fopen /proc/device-tree/compatible FAILED errno=%d", errno); return 0; }
++    char buf[256]; int n = fread(buf, 1, sizeof buf - 1, f); fclose(f);
++    if (n <= 0) { sf3000_fslog("tf_device_is_rk3036: fread EMPTY (n=%d)", n); return 0; }
++    buf[n] = 0;
++    /* rk3036 OR rk3032 (device evidence: DT says 'rockchip,rk3032-dongle'). */
++    int match = (strstr(buf, "rk3036") != NULL) || (strstr(buf, "rk3032") != NULL);
++    sf3000_fslog("tf_device_is_rk3036: n=%d match=%d content='%s'", n, match, buf);
++    return match;
++}
++
++void sf3000_detect_device(void) {
++    if (g_dev_id != -1) return;
++
++    sf3000_fslog("sf3000_detect_device: START (TF_DEVICE env='%s')",
++                 getenv("TF_DEVICE") ? getenv("TF_DEVICE") : "(null)");
++    int w = 854, h = 480, scale = 150;        /* defaults (SF3000/SF3500) */
++    /* RK3036G is a SoC fact (DT compatible) -- must win over boot-env
++     * TF_DEVICE=SF3000 (stock firmware leaves it; it short-circuits detection
++     * and forces the SF3000 FBIOPUT path -> picoarch_init.log errno=22 black). */
++    if (tf_device_is_rk3036()) {
++        g_dev_id = TF_DEV_RK3036; g_dev_r36sx = 0; g_dev_rk3036 = 1;
++        g_dev_w = 1280; g_dev_h = 720; g_dev_scale = scale;
++        char s[16];
++        snprintf(s, sizeof s, "%d", g_dev_w);     setenv("TF_PANEL_W", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_h);     setenv("TF_PANEL_H", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_scale); setenv("TF_UI_SCALE", s, 1);
++        sf3000_fslog("sf3000_detect_device: RESULT=TF_DEV_RK3036 %dx%d (DT compatible matched)");
++        DBG("sf3000_detect_device: RK3036G via DT compatible\n");
++        return;
++    }
++    int id = tf_read_env_file(&w, &h, &scale); /* primary: boot env file */
++    sf3000_fslog("sf3000_detect_device: tf_read_env_file -> id=%d w=%d h=%d scale=%d", id, w, h, scale);
++    if (id < 0) id = tf_id_from_name(getenv("TF_DEVICE")); /* inherited env */
++    sf3000_fslog("sf3000_detect_device: tf_id_from_name(env) -> id=%d", id);
++    if (id < 0) {                              /* fallback: scan live DT */
++        int r63311 = 0;
++        dt_scan_r63311("/proc/device-tree", 0, &r63311);
++        if (r63311)
++            id = TF_DEV_R36SX;
++        else if (access("/proc/device-tree/panel", F_OK) == 0) {
++            /* /panel devices are 854x480 SF3500-class — EXCEPT GB350, which is
++             * 640x480 and is the only /panel device lacking BOTH hcrtos/
++             * multiple_init (present on SF3000HD) and hcrtos/uart@1 (present on
++             * SF3500/SF3100). */
++            if (access("/proc/device-tree/hcrtos/multiple_init", F_OK) == 0 ||
++                access("/proc/device-tree/hcrtos/uart@1", F_OK) == 0)
++                id = TF_DEV_SF3500;
++            else
++                id = TF_DEV_GB350;
++        } else if (tf_device_is_rk3036()) {
++            id = TF_DEV_RK3036; w = 1280; h = 720;
++        } else
++            id = TF_DEV_SF3000;
++        sf3000_fslog("sf3000_detect_device: fallback DT scan -> id=%d (r63311=%d panel=%d)",
++                     id, r63311, access("/proc/device-tree/panel", F_OK) == 0);
++    }
++
++    /* Panel geometry by device (env-file overrides above already applied to
++     * w/h when present; otherwise set the known per-device defaults). */
++    if (id == TF_DEV_R36SX || id == TF_DEV_GB350) { if (w == 854) w = 640; }  /* landscape 640x480, 4:3 */
++    g_dev_id    = id;
++    g_dev_r36sx = (id == TF_DEV_R36SX);
++    g_dev_rk3036 = (id == TF_DEV_RK3036);
++    g_dev_w = w; g_dev_h = h; g_dev_scale = scale;
++
++    char s[16];
++    snprintf(s, sizeof s, "%d", g_dev_w);     setenv("TF_PANEL_W", s, 1);
++    snprintf(s, sizeof s, "%d", g_dev_h);     setenv("TF_PANEL_H", s, 1);
++    snprintf(s, sizeof s, "%d", g_dev_scale); setenv("TF_UI_SCALE", s, 1);
++    dbg_log("DBG device: %s panel=%dx%d ui_scale=%d\n",
++            id == TF_DEV_R36SX ? "R36SX" : id == TF_DEV_SF3500 ? "SF3500" :
++            id == TF_DEV_GB350 ? "GB350" : "SF3000",
++            g_dev_w, g_dev_h, g_dev_scale);
++    sf3000_fslog("sf3000_detect_device: FINAL id=%d rk3036=%d panel=%dx%d", id, g_dev_rk3036, g_dev_w, g_dev_h);
++}
++
++int sf3000_panel_w(void)  { sf3000_detect_device(); return g_dev_w; }
++int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
++int sf3000_is_r36sx(void) { sf3000_detect_device(); return g_dev_r36sx > 0; }
++int sf3000_is_sf3500(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_SF3500; }
++int sf3000_is_gb350(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_GB350; }
++int sf3000_is_rk3036(void) { sf3000_detect_device(); return g_dev_rk3036 > 0; }
++/* 4:3 panels (R36SX, GB350 = 640x480) vs 16:9 (SF3000/SF3500 = 854x480). */
++int sf3000_aspect_is_43(void) { sf3000_detect_device(); return g_dev_r36sx > 0 || g_dev_id == TF_DEV_GB350; }
++
++/* Device-correct driver.so path. NOTE: SF3500's STOCK driver.so is ENCRYPTED
++ * (firmware decrypts it to /tmp/cubegm/driver.so at boot). We grab that plaintext
++ * at runtime (zhijack) and ship it AS driver_sf3500.so — a real ELF picoarch can
++ * dlopen for HW video + audio. */
++const char *sf3000_driver_path(void) {
++    sf3000_detect_device();
++    switch (g_dev_id) {
++    case TF_DEV_R36SX:  return "/mnt/sdcard/cubegm/driver_r36sx.so";
++    case TF_DEV_SF3500: return "/mnt/sdcard/cubegm/driver_sf3500.so"; /* decrypted, real driver */
++    case TF_DEV_GB350:  return "/mnt/sdcard/cubegm/driver_gb350.so";  /* plain ELF, 640x480 */
++    default:            return "/mnt/sdcard/cubegm/driver_sf3000.so";
++    }
++}
++#endif // PLATFORM_RK3036G
++
+ // SF3000 framebuffer implementation
+ #ifdef PLATFORM_SF3000
+ 
