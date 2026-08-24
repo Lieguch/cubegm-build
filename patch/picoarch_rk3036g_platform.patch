@@ -253,7 +253,7 @@ index 0000000..aaf890c
 +#include "plat_sdl.c"
 \ No newline at end of file
 diff --git a/plat_sdl.c b/plat_sdl.c
-index b0c98e6..83dc365 100644
+index b0c98e6..72bb3ee 100644
 --- a/plat_sdl.c
 +++ b/plat_sdl.c
 @@ -172,7 +172,7 @@ static void sf3000_text_native(int px, int py, const char *text, uint32_t color,
@@ -291,7 +291,7 @@ index b0c98e6..83dc365 100644
  	in_evdev_init(&in_evdev_platform_data);
  #endif
  	in_probe();
-@@ -1666,6 +1666,220 @@ void plat_finish(void)
+@@ -1666,6 +1666,229 @@ void plat_finish(void)
  #endif
  }
  
@@ -303,6 +303,15 @@ index b0c98e6..83dc365 100644
 + * RK3036G always detects as rk3036 via /proc/device-tree compatible.
 + * Kept under #ifdef PLATFORM_RK3036G so the two platforms never define
 + * the same symbols in one translation unit. */
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <strings.h>
++#include <fcntl.h>
++#include <errno.h>
++#include <stdarg.h>
++#include <sys/ioctl.h>
++#include <linux/fb.h>
 +void sf3000_dump_fb_state(const char *tag) {
 +    const int devs[] = {0, 6, 22};
 +    for (size_t i = 0; i < sizeof(devs)/sizeof(devs[0]); i++) {
