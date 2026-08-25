@@ -131,26 +131,21 @@ ALSA_CFLAGS="-I$ALSA_INC"
 # -----------------------------------------------------------------------------
 # STAGE 4 -- libdrm headers (for RetroArch kms_drm driver)
 # The device ships libdrm.so.2 (driver.so NEEDED), but the crosstool sysroot
-# lacks the development headers. Download from Debian armhf package.
+# lacks the development headers. The host-installed libdrm-dev package (from
+# STAGE 0 apt) provides architecture-independent headers that work for
+# cross-compilation. Just set the include path.
 # -----------------------------------------------------------------------------
-DRM_HEADER_DIR="$SYSROOT/usr/include/libdrm"
+DRM_HEADER_DIR="/usr/include/libdrm"
 if [ ! -f "$DRM_HEADER_DIR/xf86drm.h" ]; then
-    log "Fetching libdrm headers (Debian armhf package)..."
-    mkdir -p "$DRM_HEADER_DIR"
-    pushd /tmp >/dev/null
-    # Download and extract libdrm-dev armhf package from Ubuntu archive
-    wget -q "http://archive.ubuntu.com/ubuntu/pool/main/libd/libdrm/libdrm-dev_2.4.113-2~ubuntu22.04.1_armhf.deb" -O /tmp/libdrm-dev.deb 2>/dev/null || \
-    wget -q "http://ports.ubuntu.com/ubuntu-ports/pool/main/libd/libdrm/libdrm-dev_2.4.113-2~ubuntu22.04.1_armhf.deb" -O /tmp/libdrm-dev.deb || \
-        die "libdrm-dev download failed"
-    dpkg-deb -x /tmp/libdrm-dev.deb /tmp/libdrm-extract
-    cp -r /tmp/libdrm-extract/usr/include/libdrm/* "$DRM_HEADER_DIR/" 2>/dev/null || true
-    rm -rf /tmp/libdrm-dev.deb /tmp/libdrm-extract
-    popd >/dev/null
+    # Fallback: install on-the-fly if missing
+    log "Installing libdrm-dev (host headers, arch-independent)..."
+    sudo apt-get install -y libdrm-dev 2>/dev/null || \
+        die "libdrm-dev not available -- RetroArch kms_drm cannot compile."
 fi
-log "libdrm headers staged."
+log "libdrm headers at $DRM_HEADER_DIR"
 
 # Common compile flags for every target binary
-export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include/libdrm"
+export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I/usr/include/libdrm"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
 

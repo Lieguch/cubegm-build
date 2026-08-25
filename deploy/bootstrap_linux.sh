@@ -146,7 +146,7 @@ if command -v apt-get >/dev/null 2>&1; then
             flex bison texinfo gawk libgmp-dev libmpfr-dev libmpc-dev \
             pkg-config autoconf automake libtool libtool-bin libncurses-dev \
             gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip python3-dev \
-            help2man zip unzip file \
+            help2man zip unzip file libdrm-dev \
             || log "WARN: apt-get install failed -- continuing with preinstalled tools"
         sudo touch /tmp/.cubegm_apt_done
         log "STAGE 0: apt deps installed."
