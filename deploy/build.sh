@@ -386,8 +386,23 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/" 2>/dev/null || true
         cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/libretro-common/include/" 2>/dev/null || true
         cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/gfx/drivers/" 2>/dev/null || true
-        log "Copied libdrm headers into RetroArch root + libretro-common/include + gfx/drivers ($(ls /usr/include/libdrm/*.h | wc -l) files)."
+        log "Copied libdrm headers into RetroArch root + libretro-common/include + gfx/drivers ($(ls /usr/include/libdrm/*.h 2>/dev/null | wc -l) files)."
     fi
+    # RELIABLE include fix (bypasses CFLAGS/CPPFLAGS/INCLUDE_DIRS/sysroot entirely):
+    # C preprocessor rule: for `#include "hdr.h"`, the directory of the source
+    # file is searched FIRST. drm_gfx.c lives in gfx/drivers/, so we put the
+    # libdrm headers there (done above) and rewrite the angle-bracket includes
+    # to quoted includes. Any `#include <xf86drm.h>` / `<libdrm/...>` inside the
+    # libdrm headers themselves is also rewritten to quoted form so the chain
+    # resolves regardless of -I flags.
+    for f in "${WORKDIR}/RetroArch/gfx/drivers/"*.h; do
+        sed -i 's|#include <libdrm/|#include "|g; s|#include <xf86drm|#include "xf86drm|g' "$f" 2>/dev/null || true
+    done
+    sed -i 's|#include <xf86drm|#include "xf86drm|g' \
+        "${WORKDIR}/RetroArch/gfx/drivers/drm_gfx.c" 2>/dev/null || true
+    sed -i 's|#include <libdrm/|#include "|g; s|#include <xf86drm|#include "xf86drm|g' \
+        "${WORKDIR}/RetroArch/gfx/drivers/oga_gfx.c" "${WORKDIR}/RetroArch/gfx/common/drm_common.h" 2>/dev/null || true
+    log "Rewrote libdrm includes to quoted form (drm_gfx.c) for reliable lookup."
     # libretro-common submodule headers (boolean.h, compat/strl.h, rthreads/rthreads.h)
     # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
     # Pass the path explicitly in CPPFLAGS for the make step (CFLAGS is managed by
