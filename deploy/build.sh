@@ -314,10 +314,10 @@ else
         log "Reusing cached RetroArch/."
         ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
     else
-        log "Cloning RetroArch..."
-        git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
+        log "Cloning RetroArch (full, not --depth 1, to ensure deps/ are present)..."
+        git clone "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
             die "RetroArch clone failed."
-        # Initialize libretro-common submodule (contains boolean.h, compat/strl.h, rthreads/rthreads.h etc.)
+        # Initialize libretro-common and deps submodules (boolean.h, compat/strl.h, xxhash.h etc.)
         cd "$WORKDIR/RetroArch" && git submodule update --init --recursive 2>&1 || \
             die "RetroArch submodule init failed."
         cd "$HERE"
