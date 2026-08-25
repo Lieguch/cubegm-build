@@ -317,6 +317,10 @@ else
         log "Cloning RetroArch..."
         git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
             die "RetroArch clone failed."
+        # Initialize libretro-common submodule (contains boolean.h, compat/strl.h, rthreads/rthreads.h etc.)
+        cd "$WORKDIR/RetroArch" && git submodule update --init --recursive 2>&1 || \
+            die "RetroArch submodule init failed."
+        cd "$HERE"
         ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
     fi
 fi
