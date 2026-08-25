@@ -311,10 +311,17 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     export RANLIB="${CROSS_COMPILE}ranlib"
     export LD="${CROSS_COMPILE}ld"
     export STRIP="${CROSS_COMPILE}strip"
+    # 正确选项名（来自 qb/config.params.sh）：
+    #   HAVE_PLAIN_DRM = 纯 DRM 视频驱动（软件渲染直出 framebuffer，无 GPU/EGL/GL）
+    #   HAVE_KMS        = KMS context（需要 EGL/GL，本设备无 GPU → 不用）
+    #   HAVE_ALSA       = ALSA 音频
+    #   HAVE_UDEV       = udev/evdev 手柄（linuxraw 是运行时 driver，非编译选项）
     ./configure --host=arm-linux-gnueabihf \
-        --enable-kms --enable-alsa --enable-linuxraw \
-        --disable-egl --disable-opengl --disable-opengl1 --disable-vulkan \
-        --disable-x11 --disable-wayland --disable-sdl --disable-sdl2 \
+        --enable-plain_drm --enable-alsa --enable-udev \
+        --disable-kms --disable-egl --disable-opengl --disable-opengl1 \
+        --disable-opengl_core --disable-opengles --disable-opengles3 \
+        --disable-vulkan --disable-x11 --disable-wayland \
+        --disable-sdl --disable-sdl2 --disable-sdl3 \
         --disable-ffmpeg --disable-networking --disable-cheevos \
         --disable-discord --disable-7zip --disable-freetype \
         --disable-png --disable-builtinflac --disable-builtinmbedtls \
