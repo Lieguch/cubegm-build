@@ -132,10 +132,14 @@ sleep 0.3
 
 # RK3036G input is standard evdev — picoarch (plat_linux.c) reads it directly.
 # No cubevol/gpio shim is required (driver.so has no cubevol references).
+# RetroArch (primary frontend, build.sh STAGE 5b) is self-contained: RGUI menu
+# + ROM browser + core loading all built in. picoarch+FrogUI is the fallback.
 
 PICOARCH=/mnt/sdcard/cubegm/picoarch
 FROGUI_CORE=/mnt/sdcard/cubegm/cores/frogui_libretro.so
 LAUNCH=/tmp/frogui_launch.txt
+RETROARCH=/mnt/sdcard/cubegm/retroarch
+RETROARCH_CFG=/mnt/sdcard/cubegm/retroarch.cfg
 
 # --- cubevol_bridge: FrogUI reads input ONLY from the stock cubevol shm
 #     /tmp/joy_key (ftok 'a'). The stock daemon lives inside rkgame, which we
@@ -195,9 +199,11 @@ setsid sh -c '
 WD_PID=$!
 echo "zhijack: past watchdog start (WD_PID=$WD_PID)" >> "$LOG"
 
-# Front-end launcher loop. FrogUI writes $LAUNCH (core path on line 1, ROM path
-# on line 2) when the user picks a game; we then launch picoarch with that core.
-echo "zhijack: entering main loop" >> "$LOG"
+# Front-end launcher loop.
+# PRIMARY: RetroArch — self-contained (menu/ROM browser/cores), crash-restart.
+# FALLBACK: FrogUI writes $LAUNCH (core path on line 1, ROM path on line 2)
+#           when the user picks a game; we then launch picoarch with that core.
+echo "zhijack: entering main loop (retroarch=$([ -x "$RETROARCH" ] && echo yes || echo no))" >> "$LOG"
 ITER=0
 while true; do
     ITER=$((ITER+1))
@@ -209,16 +215,11 @@ while true; do
     killall -9 rkgame 2>/dev/null
     # pet the stock watchdog if present (prevents a ~10-min system reset)
     [ -e /dev/watchdog ] && echo > /dev/watchdog 2>/dev/null
-    echo "--- iter $ITER: frogui (icube=$(pidof icube 2>/dev/null)) ---" >> "$LOG"
-    if [ ! -x "$PICOARCH" ]; then
-        echo "zhijack: FATAL $PICOARCH missing/not executable" >> "$LOG"
-        sleep 5
-        continue
-    fi
-    # v8.7: stamp each picoarch launch into crash.log — proves the debug path
+    echo "--- iter $ITER: frontend (icube=$(pidof icube 2>/dev/null)) ---" >> "$LOG"
+    # v8.7: stamp each frontend launch into crash.log — proves the debug path
     # runs every boot, so a future "no crash.log" is a real no-crash, not a
     # missing feature.
-    echo "=== picoarch launch iter=$ITER $(date '+%H:%M:%S' 2>/dev/null) ===" >> /mnt/sdcard/crash.log 2>/dev/null
+    echo "=== frontend launch iter=$ITER $(date '+%H:%M:%S' 2>/dev/null) ===" >> /mnt/sdcard/crash.log 2>/dev/null
     # Direction B: diagnostics run on EVERY boot (no flag file needed).
     # Outputs structured report to /mnt/sdcard/diag_report.txt covering
     # ALSA cards, PCM devices, acodec/I2S/HDMI registers, DRM, input,
@@ -228,16 +229,28 @@ while true; do
         /mnt/sdcard/cubegm/diag all >> "$LOG" 2>&1
         echo "zhijack: diag finished, report -> /mnt/sdcard/diag_report.txt" >> "$LOG"
     fi
-    "$PICOARCH" "$FROGUI_CORE" "$FROGUI_CORE" >> "$LOG" 2>&1
-    RC=$?
-    echo "frogui exited rc=$RC" >> "$LOG"
+    if [ -x "$RETROARCH" ]; then
+        # PRIMARY PATH: RetroArch owns the whole session (RGUI menu -> game ->
+        # back to menu). It reads input via linuxraw/udev and writes to the
+        # plain DRM dumb buffer directly, same API family hwdisp.c proved.
+        echo "=== retroarch launch iter=$ITER $(date '+%H:%M:%S' 2>/dev/null) ===" >> /mnt/sdcard/crash.log 2>/dev/null
+        "$RETROARCH" -c "$RETROARCH_CFG" >> "$LOG" 2>&1
+        RC=$?
+        echo "retroarch exited rc=$RC (cooldown 1s)" >> "$LOG"
+        sleep 1
+        continue
+    fi
+    if [ ! -x "$PICOARCH" ]; then
+        echo "zhijack: FATAL neither $RETROARCH nor $PICOARCH executable" >> "$LOG"
+        sleep 5
+        continue
+    fi
+    # FALLBACK PATH: FrogUI browser + picoarch game launches
     if [ -f "$LAUNCH" ]; then
         CORE_PATH=$(sed -n '1p' "$LAUNCH")
         ROM_PATH=$(sed -n '2p' "$LAUNCH")
-        rm -f "$LAUNCH"
-        if [ -n "$CORE_PATH" ] && [ -n "$ROM_PATH" ]; then
+        [ -n "$CORE_PATH" ] && [ -n "$ROM_PATH" ] && {
             killall rkgame 2>/dev/null
-            sleep 0.3
             echo "--- iter $ITER: game [$CORE_PATH] via $PICOARCH ---" >> "$LOG"
             "$PICOARCH" "$CORE_PATH" "$ROM_PATH" >> "$LOG" 2>&1
             GRC=$?
@@ -247,7 +260,10 @@ while true; do
             head -6 /proc/meminfo >> "$LOG"
             [ -f /mnt/sdcard/crash.log ] && echo "crash.log EXISTS: $(tail -3 /mnt/sdcard/crash.log)" >> "$LOG"
             sync
-        fi
+        }
     fi
+    "$PICOARCH" "$FROGUI_CORE" "$FROGUI_CORE" >> "$LOG" 2>&1
+    RC=$?
+    echo "frogui exited rc=$RC" >> "$LOG"
     sleep 0.2
 done

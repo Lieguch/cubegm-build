@@ -126,26 +126,36 @@ if [ ! -d "$ALSA_INC/alsa" ]; then
     rm -rf "$WORKDIR/alsa-lib"
     git clone --depth 1 "$ALSA_LIB_REPO" "$WORKDIR/alsa-lib"
 fi
-ALSA_CFLAGS="-I$ALSA_INC"
+# Install into the sysroot STANDARD location so RetroArch's configure check
+# ("Checking existence of /usr/include/alsa" under --sysroot) passes. This is
+# the standard cross-compiler layout: <sysroot>/usr/include/alsa/*.h
+mkdir -p "$SYSROOT/usr/include"
+rm -rf "$SYSROOT/usr/include/alsa"
+cp -a "$ALSA_INC/alsa" "$SYSROOT/usr/include/"
+log "ALSA headers installed -> $SYSROOT/usr/include/alsa ($(ls "$SYSROOT/usr/include/alsa" | wc -l) files)"
+ALSA_CFLAGS="-I$SYSROOT/usr/include"
 
 # -----------------------------------------------------------------------------
-# STAGE 4 -- libdrm headers (for RetroArch kms_drm driver)
+# STAGE 4 -- libdrm headers (for RetroArch plain_drm driver)
 # The device ships libdrm.so.2 (driver.so NEEDED), but the crosstool sysroot
 # lacks the development headers. The host-installed libdrm-dev package (from
 # STAGE 0 apt) provides architecture-independent headers that work for
-# cross-compilation. Just set the include path.
+# cross-compilation. Install them at the sysroot standard location so the
+# cross-compiler's --sysroot lookup finds them.
 # -----------------------------------------------------------------------------
 DRM_HEADER_DIR="/usr/include/libdrm"
 if [ ! -f "$DRM_HEADER_DIR/xf86drm.h" ]; then
-    # Fallback: install on-the-fly if missing
     log "Installing libdrm-dev (host headers, arch-independent)..."
     sudo apt-get install -y libdrm-dev 2>/dev/null || \
-        die "libdrm-dev not available -- RetroArch kms_drm cannot compile."
+        die "libdrm-dev not available -- RetroArch plain_drm cannot compile."
 fi
-log "libdrm headers at $DRM_HEADER_DIR"
+[ -d "$DRM_HEADER_DIR" ] || die "libdrm headers missing at $DRM_HEADER_DIR"
+mkdir -p "$SYSROOT/usr/include/libdrm"
+cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
+log "libdrm headers installed -> $SYSROOT/usr/include/libdrm ($(ls "$SYSROOT/usr/include/libdrm" | wc -l) files)"
 
 # Common compile flags for every target binary
-export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I/usr/include/libdrm"
+export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include/libdrm"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
 
