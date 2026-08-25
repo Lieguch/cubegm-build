@@ -330,9 +330,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     #   HAVE_PLAIN_DRM = 纯 DRM 视频驱动（软件渲染直出 framebuffer，无 GPU/EGL/GL）
     #   HAVE_KMS        = KMS context（需要 EGL/GL，本设备无 GPU → 不用）
     #   HAVE_ALSA       = ALSA 音频
-    #   HAVE_UDEV       = udev/evdev 手柄（linuxraw 是运行时 driver，非编译选项）
+    #   HAVE_UDEV       不启用：sysroot 无 libudev，且 linuxraw 输入驱动直接读
+    #                    /dev/input/event*（zhijack.sh 已证实设备是标准 evdev），
+    #                    零依赖，比 udev 更适合此最小设备
     ./configure --host=arm-linux-gnueabihf \
-        --enable-plain_drm --enable-alsa --enable-udev \
+        --enable-plain_drm --enable-alsa \
         --disable-kms --disable-egl --disable-opengl --disable-opengl1 \
         --disable-opengl_core --disable-opengles --disable-opengles3 \
         --disable-vulkan --disable-x11 --disable-wayland \
