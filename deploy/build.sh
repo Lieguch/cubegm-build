@@ -324,14 +324,13 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-sdl --disable-sdl2 --disable-sdl3 \
         --disable-ffmpeg --disable-networking --disable-cheevos \
         --disable-discord --disable-7zip --disable-freetype \
-        --disable-png --disable-builtinflac --disable-builtinmbedtls \
+        --disable-rpng --disable-flac --disable-jack --disable-pulse \
+        --disable-ssl --disable-libxml2 \
+        --disable-builtinlibretrodb --disable-builtinmbedtls \
         --disable-videoprocessor --disable-qt --disable-cg \
         --disable-neon --disable-libretro --disable-bsnes \
         --disable-odroid --disable-mali_fbdev \
         --enable-optimizations \
-        --disable-flac --disable-jack --disable-pulse \
-        --disable-ssl --disable-tls --disable-libxml2 \
-        --disable-builtinlibretrodb \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
     make -j"$(nproc)" 2>&1 || \
