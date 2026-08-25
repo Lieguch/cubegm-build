@@ -36,6 +36,7 @@ ARCH_FLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O
 PICOARCH_REPO="https://github.com/tzubertowski/TreeFrogUI_picoarch.git"
 FROGUI_REPO="https://github.com/tzubertowski/FrogUI.git"
 ALSA_LIB_REPO="https://github.com/alsa-project/alsa-lib.git"
+RETROARCH_DST="$HERE/cubegm"
 
 # Stage-1 default cores (proves the loop across GBA/SNES/NES/MD/Atari).
 # Each is built from github.com/libretro/<NAME> with the libretro common Makefile.
@@ -127,8 +128,29 @@ if [ ! -d "$ALSA_INC/alsa" ]; then
 fi
 ALSA_CFLAGS="-I$ALSA_INC"
 
+# -----------------------------------------------------------------------------
+# STAGE 4 -- libdrm headers (for RetroArch kms_drm driver)
+# The device ships libdrm.so.2 (driver.so NEEDED), but the crosstool sysroot
+# lacks the development headers. Download from Debian armhf package.
+# -----------------------------------------------------------------------------
+DRM_HEADER_DIR="$SYSROOT/usr/include/libdrm"
+if [ ! -f "$DRM_HEADER_DIR/xf86drm.h" ]; then
+    log "Fetching libdrm headers (Debian armhf package)..."
+    mkdir -p "$DRM_HEADER_DIR"
+    pushd /tmp >/dev/null
+    # Download and extract libdrm-dev armhf package from Ubuntu archive
+    wget -q "http://archive.ubuntu.com/ubuntu/pool/main/libd/libdrm/libdrm-dev_2.4.113-2~ubuntu22.04.1_armhf.deb" -O /tmp/libdrm-dev.deb 2>/dev/null || \
+    wget -q "http://ports.ubuntu.com/ubuntu-ports/pool/main/libd/libdrm/libdrm-dev_2.4.113-2~ubuntu22.04.1_armhf.deb" -O /tmp/libdrm-dev.deb || \
+        die "libdrm-dev download failed"
+    dpkg-deb -x /tmp/libdrm-dev.deb /tmp/libdrm-extract
+    cp -r /tmp/libdrm-extract/usr/include/libdrm/* "$DRM_HEADER_DIR/" 2>/dev/null || true
+    rm -rf /tmp/libdrm-dev.deb /tmp/libdrm-extract
+    popd >/dev/null
+fi
+log "libdrm headers staged."
+
 # Common compile flags for every target binary
-export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS"
+export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include/libdrm"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
 
@@ -257,34 +279,62 @@ fi
 log "picoarch built."
 
 # -----------------------------------------------------------------------------
-# STAGE 5b -- build stockui (独立原厂 UI 程序，根源方案，弃用 FrogUI 打补丁)
+# STAGE 5b -- build RetroArch (替代 picoarch + frogui/stockui 全部自定义 UI)
 # -----------------------------------------------------------------------------
-# v9.0 (2026-08-25): 独立原厂 UI 程序。直接 DRM/evdev/ALSA 渲染，不再依赖
-# frogui_libretro.so 文件夹浏览器。编译成 cubegm/stockui，icube_replacement
-# 优先 exec 它。若失败则 fallback 到 frogui。
-# 依赖：hwdisp.c（DRM）、font.c（stb_truetype）、stock_ui.c、stock_dat.c、evdev_input.c
-# 编译命令与 picoarch 共用同一 crosstool sysroot。
-log "Building stockui (standalone stock UI launcher)..."
-STOCKUI_CC="${CROSS_COMPILE}gcc"
-STOCKUI_CFLAGS="-O2 -Wall -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -I$HERE -I$HERE/drm_headers -I$SYSROOT/usr/include -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DUI_SCALE=100"
-STOCKUI_LIBS="-L$SYSROOT/usr/lib -ldl -lz -lm"
-STOCKUI_DST="$HERE/cubegm"
-if [ -f "$HERE/stockui_main.c" ]; then
-    $STOCKUI_CC $STOCKUI_CFLAGS \
-        "$HERE/stockui_main.c" \
-        "$HERE/hwdisp.c" \
-        "$HERE/font.c" \
-        "$HERE/stock_ui.c" \
-        "$HERE/stock_dat.c" \
-        "$HERE/evdev_input.c" \
-        $STOCKUI_LIBS -o "$STOCKUI_DST/stockui" 2>&1 || \
-        { log "WARN: stockui build failed -- falling back to FrogUI menu."; rm -f "$STOCKUI_DST/stockui"; }
-    if [ -f "$STOCKUI_DST/stockui" ]; then
-        ${CROSS_COMPILE}strip "$STOCKUI_DST/stockui"
-        log "stockui built: $(ls -la "$STOCKUI_DST/stockui" 2>/dev/null | awk '{print $5}') bytes"
-    fi
+# v9.0 根源方案：用 RetroArch 成熟 15 年的 libretro 前端替代所有自定义 UI 代码。
+# 显示：kms_drm（DRM/KMS 直出，与 hwdisp 同原理但更稳定）
+# 音频：alsa（设备已有 libasound.so.2）
+# 输入：linuxraw（直接读 /dev/input/event*，无需 udev 中转）
+# 菜单：rgui（轻量文字菜单，244MB 内存足够）
+# 核心：复用现有 libretro 57 核（同一份 .so 文件）
+RETROARCH_REPO="https://github.com/libretro/RetroArch.git"
+log "Building RetroArch (standalone libretro frontend)..."
+if [ -d RetroArch ]; then
+    log "Reusing existing RetroArch/."
 else
-    log "NOTE: stockui_main.c missing -- FrogUI only."
+    mkdir -p "$WORKDIR"
+    if [ -d "$WORKDIR/RetroArch" ]; then
+        log "Reusing cached RetroArch/."
+        ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
+    else
+        log "Cloning RetroArch..."
+        git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
+            die "RetroArch clone failed."
+        ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
+    fi
+fi
+if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
+    cd RetroArch
+    # KMS/DRM display: needs libdrm headers (STAGE 4)
+    # ALSA audio: needs alsa-lib headers (STAGE 3)
+    # linuxraw input: no deps (reads /dev/input/event* directly)
+    # NO GPU/GLES needed: RGUI is software-rendered
+    ./configure --host=arm-linux-gnueabihf \
+        CC="${CROSS_COMPILE}gcc" CXX="${CROSS_COMPILE}g++" \
+        AR="${CROSS_COMPILE}ar" RANLIB="${CROSS_COMPILE}ranlib" \
+        --enable-kms --enable-alsa --enable-linuxraw \
+        --disable-egl --disable-opengl --disable-opengl1 --disable-vulkan \
+        --disable-x11 --disable-wayland --disable-sdl --disable-sdl2 \
+        --disable-ffmpeg --disable-networking --disable-cheevos \
+        --disable-discord --disable-7zip --disable-freetype \
+        --disable-png --disable-builtinflac --disable-builtinmbedtls \
+        --disable-videoprocessor --disable-qt --disable-cg \
+        --disable-neon --disable-libretro --disable-bsnes \
+        --disable-odroid --disable-mali_fbdev \
+        --enable-optimizations \
+        --disable-flac --disable-jack --disable-pulse \
+        --disable-ssl --disable-tls --disable-libxml2 \
+        --disable-builtinlibretrodb \
+        --prefix="$RETROARCH_DST" 2>&1 || \
+        die "RetroArch configure failed."
+    make -j"$(nproc)" 2>&1 || \
+        die "RetroArch make failed."
+    ${CROSS_COMPILE}strip retroarch
+    log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
+    cp retroarch "$RETROARCH_DST/"
+    cd "$HERE"
+else
+    log "WARN: RetroArch directory missing -- using picoarch+frogui fallback."
 fi
 
 # -----------------------------------------------------------------------------
@@ -584,6 +634,7 @@ fi
 cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
+cp -f "$HERE/retroarch.cfg"              "$DST/" 2>/dev/null || true
 chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
