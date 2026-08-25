@@ -295,6 +295,13 @@ if [ -f "$HERE/integrate_frogui_modules.py" ]; then
 else
     log "NOTE: integrate_frogui_modules.py missing -- base FrogUI only."
 fi
+# v9.0 (2026-08-25): 原厂 UI 渲染器集成（stock_ui/stock_dat — 复刻原厂 5 界面操作模型）
+if [ -f "$HERE/integrate_stock_ui.py" ]; then
+    python3 "$HERE/integrate_stock_ui.py" "$HERE" 2>/dev/null || \
+        log "WARN: stock UI integration failed -- keeping FrogUI folder UI (0-score fallback)."
+else
+    log "NOTE: integrate_stock_ui.py missing -- base FrogUI only."
+fi
 # Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
 # LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
 # Command-line CC/CFLAGS/SYSROOT override the MIPS hardcodes (GNU make precedence).
