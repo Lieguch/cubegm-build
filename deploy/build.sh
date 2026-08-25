@@ -309,23 +309,25 @@ log "picoarch built."
 # 核心：复用现有 libretro 57 核（同一份 .so 文件）
 RETROARCH_REPO="https://github.com/libretro/RetroArch.git"
 log "Building RetroArch (standalone libretro frontend)..."
-if [ -d RetroArch ]; then
-    log "Reusing existing RetroArch/."
+# 将 RetroArch 放入 WORKDIR 以便缓存复用（避免每次 CI 重新克隆 ~100MB）
+mkdir -p "$WORKDIR"
+if [ -d "$WORKDIR/RetroArch" ]; then
+    log "Reusing cached RetroArch/ from $WORKDIR"
+    ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
+elif [ -d RetroArch ]; then
+    log "Reusing existing RetroArch/ (moved to cache)"
+    rm -rf "$WORKDIR/RetroArch"
+    mv RetroArch "$WORKDIR/RetroArch"
+    ln -sf "$WORKDIR/RetroArch" RetroArch
 else
-    mkdir -p "$WORKDIR"
-    if [ -d "$WORKDIR/RetroArch" ]; then
-        log "Reusing cached RetroArch/."
-        ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
-    else
-        log "Cloning RetroArch (full, not --depth 1, to ensure deps/ are present)..."
-        git clone "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
-            die "RetroArch clone failed."
-        # Initialize libretro-common and deps submodules (boolean.h, compat/strl.h, xxhash.h etc.)
-        cd "$WORKDIR/RetroArch" && git submodule update --init --recursive 2>&1 || \
-            die "RetroArch submodule init failed."
-        cd "$HERE"
-        ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
-    fi
+    log "Cloning RetroArch (shallow, to save time; submodules init later)..."
+    git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
+        die "RetroArch clone failed."
+    # Initialize submodules (libretro-common, deps)
+    cd "$WORKDIR/RetroArch" && git submodule update --init --recursive 2>&1 || \
+        die "RetroArch submodule init failed."
+    cd "$HERE"
+    ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
 fi
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch

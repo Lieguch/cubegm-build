@@ -35,12 +35,12 @@ jobs:
           sudo apt-get clean
           df -h /
 
-      - name: Cache crosstool sysroot + SDL/libpng
+      - name: Cache crosstool sysroot + SDL/libpng + RetroArch
         id: cache-tc
         uses: actions/cache@v4
         with:
           path: /home/runner/cubegm-tc
-          key: tc-glibc229-${{ hashFiles('build/toolchain/build_sysroot_ctng.sh', 'deploy/build_sdl_libpng.sh') }}
+          key: tc-glibc229-${{ hashFiles('build/toolchain/build_sysroot_ctng.sh', 'deploy/build_sdl_libpng.sh', 'deploy/build.sh') }}
           restore-keys: |
             tc-glibc229-
 
