@@ -304,9 +304,14 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # ALSA audio: needs alsa-lib headers (STAGE 3)
     # linuxraw input: no deps (reads /dev/input/event* directly)
     # NO GPU/GLES needed: RGUI is software-rendered
+    # RetroArch configure uses env vars for cross-compiler, not command-line CC=
+    export CC="${CROSS_COMPILE}gcc"
+    export CXX="${CROSS_COMPILE}g++"
+    export AR="${CROSS_COMPILE}ar"
+    export RANLIB="${CROSS_COMPILE}ranlib"
+    export LD="${CROSS_COMPILE}ld"
+    export STRIP="${CROSS_COMPILE}strip"
     ./configure --host=arm-linux-gnueabihf \
-        CC="${CROSS_COMPILE}gcc" CXX="${CROSS_COMPILE}g++" \
-        AR="${CROSS_COMPILE}ar" RANLIB="${CROSS_COMPILE}ranlib" \
         --enable-kms --enable-alsa --enable-linuxraw \
         --disable-egl --disable-opengl --disable-opengl1 --disable-vulkan \
         --disable-x11 --disable-wayland --disable-sdl --disable-sdl2 \
