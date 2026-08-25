@@ -268,6 +268,7 @@ log "Building stockui (standalone stock UI launcher)..."
 STOCKUI_CC="${CROSS_COMPILE}gcc"
 STOCKUI_CFLAGS="-O2 -Wall -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -I$HERE -I$HERE/drm_headers -I$SYSROOT/usr/include -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DUI_SCALE=100"
 STOCKUI_LIBS="-L$SYSROOT/usr/lib -ldl -lz -lm"
+STOCKUI_DST="$HERE/cubegm"
 if [ -f "$HERE/stockui_main.c" ]; then
     $STOCKUI_CC $STOCKUI_CFLAGS \
         "$HERE/stockui_main.c" \
@@ -276,11 +277,11 @@ if [ -f "$HERE/stockui_main.c" ]; then
         "$HERE/stock_ui.c" \
         "$HERE/stock_dat.c" \
         "$HERE/evdev_input.c" \
-        $STOCKUI_LIBS -o "$DST/stockui" 2>&1 || \
-        { log "WARN: stockui build failed -- falling back to FrogUI menu."; rm -f "$DST/stockui"; }
-    if [ -f "$DST/stockui" ]; then
-        ${CROSS_COMPILE}strip "$DST/stockui"
-        log "stockui built: $(ls -la "$DST/stockui" 2>/dev/null | awk '{print $5}') bytes"
+        $STOCKUI_LIBS -o "$STOCKUI_DST/stockui" 2>&1 || \
+        { log "WARN: stockui build failed -- falling back to FrogUI menu."; rm -f "$STOCKUI_DST/stockui"; }
+    if [ -f "$STOCKUI_DST/stockui" ]; then
+        ${CROSS_COMPILE}strip "$STOCKUI_DST/stockui"
+        log "stockui built: $(ls -la "$STOCKUI_DST/stockui" 2>/dev/null | awk '{print $5}') bytes"
     fi
 else
     log "NOTE: stockui_main.c missing -- FrogUI only."
