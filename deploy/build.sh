@@ -155,6 +155,8 @@ if [ ! -f "$DRM_HEADER_DIR/xf86drm.h" ]; then
         die "libdrm-dev not available -- RetroArch plain_drm cannot compile."
 fi
 [ -d "$DRM_HEADER_DIR" ] || die "libdrm headers missing at $DRM_HEADER_DIR"
+# FORCE refresh: CI may cache sysroot with stale headers. Delete and reinstall.
+rm -rf "$SYSROOT/usr/include/libdrm"
 mkdir -p "$SYSROOT/usr/include/libdrm"
 cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
 # ALSO copy to the sysroot include ROOT: RetroArch's gfx/drivers/drm_gfx.c does
@@ -163,6 +165,7 @@ cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
 # directly visible there (Debian provides it as libdrm/xf86drm.h via pkg-config,
 # but our toolchain has no pkg-config and RetroArch's configure does not relay
 # -I$SYSROOT/usr/include/libdrm into drm_gfx.c's include resolution).
+rm -f "$SYSROOT/usr/include/xf86drm.h"
 cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/" 2>/dev/null
 log "libdrm headers installed -> $SYSROOT/usr/include/(libdrm + root) ($(ls "$SYSROOT/usr/include/libdrm" | wc -l) files)"
 
@@ -314,10 +317,10 @@ else
         log "Reusing cached RetroArch/."
         ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
     else
-        log "Cloning RetroArch..."
-        git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
+        log "Cloning RetroArch (full, not --depth 1, to ensure deps/ are present)..."
+        git clone "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
             die "RetroArch clone failed."
-        # Initialize libretro-common submodule (contains boolean.h, compat/strl.h, rthreads/rthreads.h etc.)
+        # Initialize libretro-common and deps submodules (boolean.h, compat/strl.h, xxhash.h etc.)
         cd "$WORKDIR/RetroArch" && git submodule update --init --recursive 2>&1 || \
             die "RetroArch submodule init failed."
         cd "$HERE"
@@ -364,9 +367,21 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
     # Pass the path explicitly in CFLAGS for the make step.
     # Also need RetroArch root (config.h, verbosity.h etc.) and libretro-common root.
+    # Also need deps/ submodules (xxhash, zstd etc.) that are not in standard include paths.
     LIBRETRO_COMMON_INC="-I${WORKDIR}/RetroArch/libretro-common/include"
-    RETROARCH_ROOT_INC="-I${WORKDIR}/RetroArch -I${WORKDIR}/RetroArch/libretro-common"
-    make -j"$(nproc)" CFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC" 2>&1 || \
+    RETROARCH_ROOT_INC="-I${WORKDIR}/RetroArch -I${WORKDIR}/RetroArch/libretro-common -I${WORKDIR}/RetroArch/libretro-common/compat"
+    DEPS_INC="-I${WORKDIR}/RetroArch/deps -I${WORKDIR}/RetroArch/deps/zstd/lib"
+    # Also create symlinks in RetroArch root for headers that need to be found via --sysroot
+    # (xf86drm.h, etc.) since RetroArch Makefile may not propagate CFLAGS correctly.
+    SYSROOT_INC_DIR="$SYSROOT/usr/include"
+    if [ -d "$SYSROOT_INC_DIR" ]; then
+        for h in "$SYSROOT_INC_DIR"/*.h; do
+            [ -f "$h" ] && ln -sf "$h" "${WORKDIR}/RetroArch/" 2>/dev/null || true
+        done
+        log "Symlinked sysroot headers into RetroArch root."
+    fi
+    make -j"$(nproc)" CPPFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC" \
+        CFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC" 2>&1 || \
         die "RetroArch make failed."
     ${CROSS_COMPILE}strip retroarch
     log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
