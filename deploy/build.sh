@@ -363,14 +363,12 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-mali_fbdev \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
-    # Copy libdrm headers directly into RetroArch source tree.
-    # The Makefile has -I./ in CFLAGS, so headers in the RetroArch root
-    # will be found by #include <xf86drm.h> (angle brackets search -I paths).
-    # This is more reliable than --sysroot or CPPFLAGS (which the Makefile
-    # may not propagate to all compile targets).
+    # Copy libdrm headers into BOTH the RetroArch root AND the libretro-common/include
+    # directory (which is in the include path via the Makefile's -I./libretro-common/include/).
     if [ -d /usr/include/libdrm ]; then
         cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/" 2>/dev/null || true
-        log "Copied libdrm headers into RetroArch root ($(ls /usr/include/libdrm/*.h | wc -l) files)."
+        cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/libretro-common/include/" 2>/dev/null || true
+        log "Copied libdrm headers into RetroArch root + libretro-common/include ($(ls /usr/include/libdrm/*.h | wc -l) files)."
     fi
     # libretro-common submodule headers (boolean.h, compat/strl.h, rthreads/rthreads.h)
     # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
