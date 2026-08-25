@@ -329,40 +329,36 @@ else
 fi
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
-    # KMS/DRM display: needs libdrm headers (STAGE 4)
-    # ALSA audio: needs alsa-lib headers (STAGE 3)
-    # linuxraw input: no deps (reads /dev/input/event* directly)
-    # NO GPU/GLES needed: RGUI is software-rendered
-    # RetroArch configure uses env vars for cross-compiler, not command-line CC=
+    # ---- 显示/音频策略（2026-08-25 定案，基于权威源码验证）----
+    # 设备 = RK3036G 无 GPU framebuffer。项目已在 build_sdl_libpng.sh 将
+    # SDL 1.2.15 (fbcon 视频 + ALSA 音频) 交叉编译进 sysroot，且 picoarch
+    # 已在设备上用它跑通。RetroArch 的 HAVE_SDL 检测（qb/qb.libs.sh）在
+    # pkg-config 缺失时回退到 check_lib 直接链接 -lSDL 测试，sysroot 里
+    # 的 libSDL.so 可满足 -> 用 SDL 驱动，零新增依赖。
+    # 相反，plain_drm 需要 libdrm 头文件（xf86drm.h），无 pkg-config 时
+    # RetroArch 的 -I 传递不可靠，已在 20+ 次 CI 里反复验证为死路。
+    # 输入：linuxraw 读 /dev/input/event*，零依赖。
+    # 禁用 GL/EGL/Vulkan/X11/Wayland：设备无 GPU/无 X server。禁用 SDL2/SDL3
+    # 强制使用 SDL1.2（与 sysroot 已有的 libSDL.so 一致）。
+    # RetroArch configure 用环境变量传交叉编译器，不是命令行 CC=
     export CC="${CROSS_COMPILE}gcc"
     export CXX="${CROSS_COMPILE}g++"
     export AR="${CROSS_COMPILE}ar"
     export RANLIB="${CROSS_COMPILE}ranlib"
     export LD="${CROSS_COMPILE}ld"
     export STRIP="${CROSS_COMPILE}strip"
-    # Set INCLUDE_DIRS so the Makefile's DEF_FLAGS includes sysroot paths.
-    # Without this, the configure script cannot detect libdrm (no pkg-config)
-    # and the Makefile won't find xf86drm.h via --sysroot alone.
-    # These paths are also needed for xf86drm.h, ALSA, and libretro-common headers.
-    export INCLUDE_DIRS="-I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm -I$SYSROOT/usr/include/alsa"
-    # 正确选项名（来自 qb/config.params.sh）：
-    #   HAVE_PLAIN_DRM = 纯 DRM 视频驱动（软件渲染直出 framebuffer，无 GPU/EGL/GL）
-    #   HAVE_KMS        = KMS context（需要 EGL/GL，本设备无 GPU → 不用）
-    #   HAVE_ALSA       = ALSA 音频
-    #   HAVE_UDEV       不启用：sysroot 无 libudev，且 linuxraw 输入驱动直接读
-    #                    /dev/input/event*（zhijack.sh 已证实设备是标准 evdev），
-    #                    零依赖，比 udev 更适合此最小设备
-    # IMPORTANT: Pass CPPFLAGS/CFLAGS to configure so it uses sysroot paths,
-    # NOT the host's /usr/include/libdrm. Without this, configure detects host
-    # headers and adds -I/usr/include/libdrm to the compile command, which fails
-    # because the cross-compiler's --sysroot expects headers in $SYSROOT/usr/include/.
-    CPPFLAGS="$CFLAGS" \
+    # SDL.h 在 $SYSROOT/usr/include/SDL/（SDL1.2 布局），alsa/asoundlib.h 在
+    # $SYSROOT/usr/include/alsa/。configure 的 SDL/ALSA 链接测试需要
+    # --sysroot 才能解析 -lSDL/-lasound；include 路径通过 CPPFLAGS 传入，
+    # 同时作为 Makefile DEF_FLAGS 的底（见下方补丁）。
+    export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include"
     ./configure --host=arm-linux-gnueabihf \
-        --enable-plain_drm --enable-alsa \
-        --disable-kms --disable-egl --disable-opengl --disable-opengl1 \
+        --enable-sdl --disable-sdl2 --disable-sdl3 \
+        --enable-alsa \
+        --disable-plain_drm --disable-kms --disable-egl \
+        --disable-opengl --disable-opengl1 \
         --disable-opengl_core --disable-opengles --disable-opengles3 \
         --disable-vulkan --disable-x11 --disable-wayland \
-        --disable-sdl --disable-sdl2 --disable-sdl3 \
         --disable-ffmpeg --disable-networking --disable-cheevos \
         --disable-discord --disable-7zip --disable-freetype \
         --disable-rpng --disable-flac --disable-jack --disable-pulse \
@@ -373,45 +369,15 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-mali_fbdev \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
-    # Patch config.mk to add sysroot include paths for libdrm/ALSA.
-    # The configure script misses these (no pkg-config) and the Makefile's
-    # DEF_FLAGS += $(INCLUDE_DIRS) doesn't work reliably via environment.
-    # Directly patch the Makefile's DEF_FLAGS instead.
+    # 无 pkg-config 时 configure 的 SDL/ALSA include 扫描会误指向宿主
+    # /usr/include。用 DEF_FLAGS 追加 sysroot 真实路径，编译时优先解析。
     echo "" >> Makefile
-    echo "# Added by build.sh: sysroot include paths for cross-compilation" >> Makefile
-    echo "DEF_FLAGS += -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm -I$SYSROOT/usr/include/alsa" >> Makefile
-    # Copy libdrm headers into BOTH the RetroArch root AND the gfx/drivers/ directory
-    # (where drm_gfx.c lives and where #include <xf86drm.h> is searched from).
-    if [ -d /usr/include/libdrm ]; then
-        cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/" 2>/dev/null || true
-        cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/libretro-common/include/" 2>/dev/null || true
-        cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/gfx/drivers/" 2>/dev/null || true
-        log "Copied libdrm headers into RetroArch root + libretro-common/include + gfx/drivers ($(ls /usr/include/libdrm/*.h 2>/dev/null | wc -l) files)."
-    fi
-    # RELIABLE include fix (bypasses CFLAGS/CPPFLAGS/INCLUDE_DIRS/sysroot entirely):
-    # C preprocessor rule: for `#include "hdr.h"`, the directory of the source
-    # file is searched FIRST. drm_gfx.c lives in gfx/drivers/, so we put the
-    # libdrm headers there (done above) and rewrite the angle-bracket includes
-    # to quoted includes. Any `#include <xf86drm.h>` / `<libdrm/...>` inside the
-    # libdrm headers themselves is also rewritten to quoted form so the chain
-    # resolves regardless of -I flags.
-    for f in "${WORKDIR}/RetroArch/gfx/drivers/"*.h; do
-        sed -i 's|#include <libdrm/|#include "|g; s|#include <xf86drm|#include "xf86drm|g' "$f" 2>/dev/null || true
-    done
-    sed -i 's|#include <xf86drm|#include "xf86drm|g' \
-        "${WORKDIR}/RetroArch/gfx/drivers/drm_gfx.c" 2>/dev/null || true
-    sed -i 's|#include <libdrm/|#include "|g; s|#include <xf86drm|#include "xf86drm|g' \
-        "${WORKDIR}/RetroArch/gfx/drivers/oga_gfx.c" "${WORKDIR}/RetroArch/gfx/common/drm_common.h" 2>/dev/null || true
-    log "Rewrote libdrm includes to quoted form (drm_gfx.c) for reliable lookup."
-    # libretro-common submodule headers (boolean.h, compat/strl.h, rthreads/rthreads.h)
-    # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
-    # Pass the path explicitly in CPPFLAGS for the make step (CFLAGS is managed by
-    # the Makefile internally and passing it externally overrides -I./ paths).
-    # Also need RetroArch root (config.h, verbosity.h etc.) and libretro-common root.
-    # Also need deps/ submodules (xxhash, zstd etc.) that are not in standard include paths.
-    # IMPORTANT: Do NOT pass CFLAGS= to make — the Makefile uses ?= to set default
-    # CFLAGS, then += from config.mk (DEF_FLAGS). Passing CFLAGS= externally
-    # overrides the ?= and breaks -I./ include resolution (RARCH_PATH_* undeclared).
+    echo "# Added by build.sh: sysroot include paths (no pkg-config present)" >> Makefile
+    echo "DEF_FLAGS += -I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include" >> Makefile
+    # libretro-common 子模块头文件（boolean.h/compat/strl.h/rthreads 等）不在
+    # --sysroot 可见范围，make 阶段通过 CPPFLAGS 显式传入。
+    # CFLAGS 由 Makefile 内部管理（?= 默认 + += DEF_FLAGS），外部传参会覆盖
+    # -I./ 解析导致 RARCH_PATH_* 未定义——所以只传 CPPFLAGS，不传 CFLAGS。
     LIBRETRO_COMMON_INC="-I${WORKDIR}/RetroArch/libretro-common/include"
     RETROARCH_ROOT_INC="-I${WORKDIR}/RetroArch -I${WORKDIR}/RetroArch/libretro-common -I${WORKDIR}/RetroArch/libretro-common/compat"
     DEPS_INC="-I${WORKDIR}/RetroArch/deps -I${WORKDIR}/RetroArch/deps/zstd/lib"
