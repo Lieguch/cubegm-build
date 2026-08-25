@@ -360,7 +360,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-mali_fbdev \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
-    make -j"$(nproc)" CFLAGS="$CFLAGS" 2>&1 || \
+    # libretro-common submodule headers (boolean.h, compat/strl.h, rthreads/rthreads.h)
+    # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
+    # Pass the path explicitly in CFLAGS for the make step.
+    LIBRETRO_COMMON_INC="-I${WORKDIR}/RetroArch/libretro-common/include"
+    make -j"$(nproc)" CFLAGS="$CFLAGS $LIBRETRO_COMMON_INC" 2>&1 || \
         die "RetroArch make failed."
     ${CROSS_COMPILE}strip retroarch
     log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
