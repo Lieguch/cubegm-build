@@ -353,6 +353,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # $SYSROOT/usr/include/alsa/。configure 的 SDL/ALSA 链接测试需要
     # --sysroot 才能解析 -lSDL/-lasound；include 路径通过 CPPFLAGS 传入，
     # 同时作为 Makefile DEF_FLAGS 的底（见下方补丁）。
+    # 修补 qb/qb.libs.sh：check_lib 的 include 目录扫描用硬编码的
+    # INCLUDES="usr/include usr/local/include"，不会查 $SYSROOT。
+    # 追加 sysroot 路径使 SDL.h 存在性检查通过。
+    # 注意：ALSA 不需要此修补，因为 runner 宿主机装了 libasound2-dev。
+    sed -i 's|^INCLUDES="usr/include usr/local/include"|INCLUDES="usr/include usr/local/include '"$SYSROOT"'/usr/include"|' qb/qb.libs.sh
     export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include"
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
