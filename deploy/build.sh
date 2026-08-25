@@ -267,36 +267,9 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# STAGE 5 -- build picoarch for RK3036G (ARM, NOT MIPS!)
-#   Gotcha: the repo's build_sf3000.sh and the Makefile 'sf3000' branch are
-#   HARDCODED to MIPS (-mips32r2). Our device is ARM (RK3036G), so use the
-#   provided ARM template build_sf3000_armhf.sh. It rewrites the Makefile's
-#   MIPS flags to ARM and expects SDL1.2 + libpng12 (armhf, linked against the
-#   2.29 sysroot) to be present in $SYSROOT. The minimal crosstool-NG sysroot
-#   does NOT include SDL/libpng -- cross-build them first (see HANDOFF.md).
-#   Also note: the Makefile reads lowercase 'platform'; passing PLATFORM=...
-#   is a no-op and silently builds the 'unix' target.
+# STAGE 5 -- SKIPPED (v9.0: RetroArch replaces picoarch)
 # -----------------------------------------------------------------------------
-# Direction-A (plat_rk3036g.c) 的显示路径未完成：切换到 platform=rk3036g 后
-# plat_sdl.c 的 plat_init() 走 #else 分支（SDL_SetVideoMode fbcon），而 RK3036G
-# 是 DRM/KMS-only（无 fbcon）→ "failed to set video mode" → FrogUI 反复重启
-# （#322/#323 实机黑屏）。#307 及之前用 platform=sf3000 构建（-DPLATFORM_SF3000），
-# plat_init 走 SF3000 分支（SDL dummy video + hwdisp DRM），再靠 full patch 的
-# sf3000_is_rk3036() 运行时检测分流 DRM/ALSA/evdev —— 已验证亮屏 48FPS。
-# 因此回退 sf3000 构建器（复用已验证路径），方向 A 的独立 plat_rk3036g 显示层
-# 留待后续补全（需把 DRM/ALSA 从 SF3000 块抽离到 rk3036g 专用路径）。
-log "Building picoarch (platform=sf3000, ARM) -- SF3000 branch + rk3036 runtime detect..."
-ARM_BUILD="$HERE/build_sf3000_armhf.sh"
-if [ -x "$ARM_BUILD" ]; then
-    SYSROOT="$SYSROOT" CC="$CC" CXX="$CXX" CROSS_COMPILE="$CROSS_COMPILE" \
-    CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
-    PICOARCH_DIR="$PWD/picoarch" \
-        bash "$ARM_BUILD" || die "sf3000 picoarch build failed."
-else
-    die "build_sf3000_armhf.sh missing -- cannot build picoarch."
-fi
-[ -x picoarch/picoarch ] || die "picoarch build failed."
-log "picoarch built."
+log "STAGE 5 skipped: picoarch deprecated (RetroArch replaces it)"
 
 # -----------------------------------------------------------------------------
 # STAGE 5b -- build RetroArch (替代 picoarch + frogui/stockui 全部自定义 UI)
@@ -406,72 +379,11 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# STAGE 6 -- build FrogUI launcher core (fallback browser UI)
+# STAGE 6 -- FrogUI launcher core (DEPRECATED by RetroArch v9.0)
 # -----------------------------------------------------------------------------
-# v8.7: apply ONE full FrogUI patch (authored against pinned 2f41ace). It
-# contains the whole RK3036G delta: ARM build fix (declare buffers + stub
-# direct_loader/xlog), 000-008 folder table (002 -> snes9x2005_plus for speed,
-# 005 -> nestopia for compatibility), extension fallback, roms/Roms path probe,
-# /tmp scan cache + root-level dirs-only (fast first menu), L/R SHOULDER-key
-# paging, ALSA pre-fork release (dlsym plat_sound_finish) and display
-# re-assert after the game child (dlsym hwdisp_restore).
-# A failed/already-applied check is fatal: shipping without it = no menu.
-FROGUI_PATCH="$HERE/../patch/frogui_rk3036g_full.patch"
-if [ -f "$FROGUI_PATCH" ]; then
-    if git -C FrogUI apply --ignore-whitespace --check "$FROGUI_PATCH" 2>/dev/null; then
-        log "Applying FrogUI full RK3036G patch (v8.7)..."
-        git -C FrogUI apply --ignore-whitespace "$FROGUI_PATCH"
-        # v8.10: fix C99 implicit declaration of mkdir_p (called before static def)
-        sed -i '/^static void map_save(void) {/i\static void mkdir_p(const char *path); /* forward decl */' FrogUI/frogui_libretro.c 2>/dev/null || true
-    elif git -C FrogUI apply --ignore-whitespace -R --check "$FROGUI_PATCH" 2>/dev/null; then
-        log "FrogUI full patch already applied -- skipping."
-    else
-        die "FrogUI full RK3036G patch NOT applicable and NOT applied -- refusing to ship a fake menu. Abort."
-    fi
-else
-    die "frogui_rk3036g_full.patch missing -- cannot build."
-fi
-log "Building FrogUI (frogui_libretro.so)..."
-pushd FrogUI >/dev/null
-# v1.1 (2026-08-24): 集成增强模块（鼠标输入 + 键位学习 + 原厂背景图）。
-#   mouse_input.c/h   : USB 鼠标 evdev（UI 全面使用，游戏内不用）
-#   keymap_learning.c : 未知手柄键位学习（鼠标辅助 + VID_PID 保存）
-#   background.c/h    : 原厂背景图加载（复刻原厂 UI）
-#   用 sed 精确插入（保守：失败仅 WARN，不阻止旧版 FrogUI 编译）。
-if [ -f "$HERE/integrate_frogui_modules.py" ]; then
-    python3 "$HERE/integrate_frogui_modules.py" "$HERE" 2>/dev/null || \
-        log "WARN: FrogUI module integration failed -- shipping base FrogUI (no mouse/keymap/background)."
-else
-    log "NOTE: integrate_frogui_modules.py missing -- base FrogUI only."
-fi
-# Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
-# LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).
-# Command-line CC/CFLAGS/SYSROOT override the MIPS hardcodes (GNU make precedence).
-# v8.6.1: NO silent fallback. Run #276's make failed (RTLD_DEFAULT/lt_last errors)
-# and the old code silently "normalized" the unix Makefile's menu_libretro.so (a
-# DIFFERENT binary with no FrogUI UI code) into frogui_libretro.so -> device
-# black-screen crash loop (retro_init pc=(nil)). A missing/empty FrogUI must fail
-# the build loudly, never ship a fake.
-if [ -f Makefile.sf3000 ]; then
-    make -f Makefile.sf3000 frogui_libretro.so \
-        CC="$CC" CXX="$CXX" \
-        STRIP="$CROSS_COMPILE"strip \
-        CFLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mlong-calls --sysroot=$SYSROOT -fPIC -Wall -Ofast -DPLATFORM_SF3000 -DNDEBUG -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DUI_SCALE=100 -I$SYSROOT/usr/include" \
-        SYSROOT="$SYSROOT" || { popd >/dev/null; die "FrogUI make failed (Makefile.sf3000) -- fix frogui_libretro.c, do NOT ship."; }
-fi
-popd >/dev/null
-if [ -f FrogUI/frogui_libretro.so ]; then
-    # v8.6.1: sanity-check it really is FrogUI (not an empty/stubbed core) --
-    # catches build-script regressions that ship a non-FrogUI binary.
-    if grep -q "fork picoarch" FrogUI/frogui_libretro.so 2>/dev/null || \
-       strings FrogUI/frogui_libretro.so 2>/dev/null | grep -q "retro_init start"; then
-        log "FrogUI built (verified FrogUI binary)."
-    else
-        die "FrogUI frogui_libretro.so lacks FrogUI code (no 'retro_init start' string) -- refusing to ship a fake menu."
-    fi
-else
-    die "frogui_libretro.so not produced -- FrogUI build failed."
-fi
+# v9.0: RetroArch 自带 rgui 菜单 + 内置 libretro 核心加载，替代整个
+# picoarch+FrogUI 栈。FrogUI 构建不再需要。
+log "STAGE 6 skipped: FrogUI deprecated (RetroArch rgui replaces it)"
 
 # -----------------------------------------------------------------------------
 # STAGE 6.5 -- download prebuilt cores from libretro buildbot
@@ -679,8 +591,7 @@ done <<< "$CORE_TABLE"
 # -----------------------------------------------------------------------------
 log "Running ABI verification gate (EM_ARM / 0x5000400 / glibc <= 2.29)..."
 bash "$HERE/toolchain/verify_target_abi.sh" \
-    picoarch/picoarch \
-    FrogUI/frogui_libretro.so \
+    RetroArch/retroarch \
     $(ls "$CORE_OUT"/*.so 2>/dev/null) \
     || die "ABI gate FAILED -- do not deploy. Fix sysroot/toolchain and rebuild."
 
@@ -688,10 +599,9 @@ bash "$HERE/toolchain/verify_target_abi.sh" \
 # STAGE 9 -- stage into deploy/cubegm/
 # -----------------------------------------------------------------------------
 DST="$HERE/cubegm"
-mkdir -p "$DST" "$DST/cores" "$DST/lib"
-cp -f picoarch/picoarch               "$DST/" 2>/dev/null || true
-cp -f FrogUI/frogui_libretro.so        "$DST/cores/" 2>/dev/null || true
-cp -f "$CORE_OUT"/*.so                  "$DST/cores/" 2>/dev/null || true
+mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system"
+cp -f RetroArch/retroarch            "$DST/" 2>/dev/null || true
+cp -f "$CORE_OUT"/*.so               "$DST/cores/" 2>/dev/null || true
 # v8.7: alias snes9x2005_plus -> snes9x2005 (any old mapping / launch.txt that
 # references the non-plus name still resolves to the OPTIMISED core; the stock
 # snes9x2005 on the card was unoptimised -> ~1 FPS on 002 games).
@@ -703,7 +613,7 @@ cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
 cp -f "$HERE/retroarch.cfg"              "$DST/" 2>/dev/null || true
-chmod +x "$DST/picoarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
+chmod +x "$DST/retroarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
 # Direction B (charter §0.4): device-side diagnostics. diag.c answers the
@@ -778,7 +688,7 @@ BASE_LIBS="libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 libgcc_s.so.1 \
 is_base() { for b in $BASE_LIBS; do [ "$1" = "$b" ] && return 0; done; return 1; }
 declare -A _seen=()
 _queue=()
-for _b in picoarch/picoarch FrogUI/frogui_libretro.so; do
+for _b in RetroArch/retroarch; do
     [ -f "$_b" ] || continue
     if command -v "$READELF" >/dev/null 2>&1; then
         while IFS= read -r _l; do [ -n "$_l" ] && _queue+=("$_l"); done \
@@ -907,4 +817,4 @@ fi
 log "Staged into $DST"
 log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
 log "overwriting the existing cubegm/ (stock rkgame/icube/driver.so/root.dat stay)."
-log "On next boot the device launches picoarch + FrogUI directly."
+log "On next boot retroarch launches with rgui menu."
