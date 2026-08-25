@@ -375,7 +375,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-discord --disable-7zip --disable-freetype \
         --disable-rpng --disable-flac --disable-jack --disable-pulse \
         --disable-ssl \
-        --disable-libretrodb --disable-builtinmbedtls \
+        --disable-builtinmbedtls \
         --disable-videoprocessor --disable-qt --disable-cg \
         --disable-neon --disable-libretro \
         --disable-mali_fbdev \
