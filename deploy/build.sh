@@ -368,6 +368,13 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-mali_fbdev \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
+    # Patch config.mk to add sysroot include paths for libdrm/ALSA.
+    # The configure script misses these (no pkg-config) and the Makefile's
+    # DEF_FLAGS += $(INCLUDE_DIRS) doesn't work reliably via environment.
+    # Directly patch the Makefile's DEF_FLAGS instead.
+    echo "" >> Makefile
+    echo "# Added by build.sh: sysroot include paths for cross-compilation" >> Makefile
+    echo "DEF_FLAGS += -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm -I$SYSROOT/usr/include/alsa" >> Makefile
     # Copy libdrm headers into BOTH the RetroArch root AND the libretro-common/include
     # directory (which is in the include path via the Makefile's -I./libretro-common/include/).
     if [ -d /usr/include/libdrm ]; then
