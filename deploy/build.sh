@@ -352,6 +352,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     #   HAVE_UDEV       不启用：sysroot 无 libudev，且 linuxraw 输入驱动直接读
     #                    /dev/input/event*（zhijack.sh 已证实设备是标准 evdev），
     #                    零依赖，比 udev 更适合此最小设备
+    # IMPORTANT: Pass CPPFLAGS/CFLAGS to configure so it uses sysroot paths,
+    # NOT the host's /usr/include/libdrm. Without this, configure detects host
+    # headers and adds -I/usr/include/libdrm to the compile command, which fails
+    # because the cross-compiler's --sysroot expects headers in $SYSROOT/usr/include/.
+    CPPFLAGS="$CFLAGS" \
     ./configure --host=arm-linux-gnueabihf \
         --enable-plain_drm --enable-alsa \
         --disable-kms --disable-egl --disable-opengl --disable-opengl1 \
