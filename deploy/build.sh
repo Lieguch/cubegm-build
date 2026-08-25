@@ -157,7 +157,14 @@ fi
 [ -d "$DRM_HEADER_DIR" ] || die "libdrm headers missing at $DRM_HEADER_DIR"
 mkdir -p "$SYSROOT/usr/include/libdrm"
 cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
-log "libdrm headers installed -> $SYSROOT/usr/include/libdrm ($(ls "$SYSROOT/usr/include/libdrm" | wc -l) files)"
+# ALSO copy to the sysroot include ROOT: RetroArch's gfx/drivers/drm_gfx.c does
+# `#include <xf86drm.h>` (angle brackets -> default include search). With
+# --sysroot the default path is $SYSROOT/usr/include/, so xf86drm.h must be
+# directly visible there (Debian provides it as libdrm/xf86drm.h via pkg-config,
+# but our toolchain has no pkg-config and RetroArch's configure does not relay
+# -I$SYSROOT/usr/include/libdrm into drm_gfx.c's include resolution).
+cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/" 2>/dev/null
+log "libdrm headers installed -> $SYSROOT/usr/include/(libdrm + root) ($(ls "$SYSROOT/usr/include/libdrm" | wc -l) files)"
 
 # Common compile flags for every target binary
 export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include/libdrm"
