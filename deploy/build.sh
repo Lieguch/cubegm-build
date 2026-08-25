@@ -364,9 +364,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
     # Pass the path explicitly in CFLAGS for the make step.
     # Also need RetroArch root (config.h, verbosity.h etc.) and libretro-common root.
+    # Also need deps/ submodules (xxhash, zstd etc.) that are not in standard include paths.
     LIBRETRO_COMMON_INC="-I${WORKDIR}/RetroArch/libretro-common/include"
     RETROARCH_ROOT_INC="-I${WORKDIR}/RetroArch -I${WORKDIR}/RetroArch/libretro-common -I${WORKDIR}/RetroArch/libretro-common/compat"
-    make -j"$(nproc)" CFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC" 2>&1 || \
+    DEPS_INC="-I${WORKDIR}/RetroArch/deps/xxHash -I${WORKDIR}/RetroArch/deps/zstd/lib"
+    make -j"$(nproc)" CFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC" 2>&1 || \
         die "RetroArch make failed."
     ${CROSS_COMPILE}strip retroarch
     log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
