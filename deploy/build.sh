@@ -365,23 +365,17 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         die "RetroArch configure failed."
     # libretro-common submodule headers (boolean.h, compat/strl.h, rthreads/rthreads.h)
     # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
-    # Pass the path explicitly in CFLAGS for the make step.
+    # Pass the path explicitly in CPPFLAGS for the make step (CFLAGS is managed by
+    # the Makefile internally and passing it externally overrides -I./ paths).
     # Also need RetroArch root (config.h, verbosity.h etc.) and libretro-common root.
     # Also need deps/ submodules (xxhash, zstd etc.) that are not in standard include paths.
+    # IMPORTANT: Do NOT pass CFLAGS= to make — the Makefile uses ?= to set default
+    # CFLAGS, then += from config.mk (DEF_FLAGS). Passing CFLAGS= externally
+    # overrides the ?= and breaks -I./ include resolution (RARCH_PATH_* undeclared).
     LIBRETRO_COMMON_INC="-I${WORKDIR}/RetroArch/libretro-common/include"
     RETROARCH_ROOT_INC="-I${WORKDIR}/RetroArch -I${WORKDIR}/RetroArch/libretro-common -I${WORKDIR}/RetroArch/libretro-common/compat"
     DEPS_INC="-I${WORKDIR}/RetroArch/deps -I${WORKDIR}/RetroArch/deps/zstd/lib"
-    # Also create symlinks in RetroArch root for headers that need to be found via --sysroot
-    # (xf86drm.h, etc.) since RetroArch Makefile may not propagate CFLAGS correctly.
-    SYSROOT_INC_DIR="$SYSROOT/usr/include"
-    if [ -d "$SYSROOT_INC_DIR" ]; then
-        for h in "$SYSROOT_INC_DIR"/*.h; do
-            [ -f "$h" ] && ln -sf "$h" "${WORKDIR}/RetroArch/" 2>/dev/null || true
-        done
-        log "Symlinked sysroot headers into RetroArch root."
-    fi
-    make -j"$(nproc)" CPPFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC" \
-        CFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC" 2>&1 || \
+    make -j"$(nproc)" CPPFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC" 2>&1 || \
         die "RetroArch make failed."
     ${CROSS_COMPILE}strip retroarch
     log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
