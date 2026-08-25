@@ -375,12 +375,13 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     echo "" >> Makefile
     echo "# Added by build.sh: sysroot include paths for cross-compilation" >> Makefile
     echo "DEF_FLAGS += -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm -I$SYSROOT/usr/include/alsa" >> Makefile
-    # Copy libdrm headers into BOTH the RetroArch root AND the libretro-common/include
-    # directory (which is in the include path via the Makefile's -I./libretro-common/include/).
+    # Copy libdrm headers into BOTH the RetroArch root AND the gfx/drivers/ directory
+    # (where drm_gfx.c lives and where #include <xf86drm.h> is searched from).
     if [ -d /usr/include/libdrm ]; then
         cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/" 2>/dev/null || true
         cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/libretro-common/include/" 2>/dev/null || true
-        log "Copied libdrm headers into RetroArch root + libretro-common/include ($(ls /usr/include/libdrm/*.h | wc -l) files)."
+        cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/gfx/drivers/" 2>/dev/null || true
+        log "Copied libdrm headers into RetroArch root + libretro-common/include + gfx/drivers ($(ls /usr/include/libdrm/*.h | wc -l) files)."
     fi
     # libretro-common submodule headers (boolean.h, compat/strl.h, rthreads/rthreads.h)
     # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
