@@ -325,11 +325,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-ffmpeg --disable-networking --disable-cheevos \
         --disable-discord --disable-7zip --disable-freetype \
         --disable-rpng --disable-flac --disable-jack --disable-pulse \
-        --disable-ssl --disable-libxml2 \
+        --disable-ssl \
         --disable-builtinlibretrodb --disable-builtinmbedtls \
         --disable-videoprocessor --disable-qt --disable-cg \
-        --disable-neon --disable-libretro --disable-bsnes \
-        --disable-odroid --disable-mali_fbdev \
+        --disable-neon --disable-libretro \
+        --disable-mali_fbdev \
         --enable-optimizations \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
