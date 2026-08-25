@@ -257,7 +257,37 @@ fi
 log "picoarch built."
 
 # -----------------------------------------------------------------------------
-# STAGE 6 -- build FrogUI launcher core
+# STAGE 5b -- build stockui (独立原厂 UI 程序，根源方案，弃用 FrogUI 打补丁)
+# -----------------------------------------------------------------------------
+# v9.0 (2026-08-25): 独立原厂 UI 程序。直接 DRM/evdev/ALSA 渲染，不再依赖
+# frogui_libretro.so 文件夹浏览器。编译成 cubegm/stockui，icube_replacement
+# 优先 exec 它。若失败则 fallback 到 frogui。
+# 依赖：hwdisp.c（DRM）、font.c（stb_truetype）、stock_ui.c、stock_dat.c、evdev_input.c
+# 编译命令与 picoarch 共用同一 crosstool sysroot。
+log "Building stockui (standalone stock UI launcher)..."
+STOCKUI_CC="${CROSS_COMPILE}gcc"
+STOCKUI_CFLAGS="-O2 -Wall -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot=$SYSROOT -I$HERE -I$HERE/drm_headers -I$SYSROOT/usr/include -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720 -DUI_SCALE=100"
+STOCKUI_LIBS="-L$SYSROOT/usr/lib -ldl -lz -lm -lasound"
+if [ -f "$HERE/stockui_main.c" ]; then
+    $STOCKUI_CC $STOCKUI_CFLAGS \
+        "$HERE/stockui_main.c" \
+        "$HERE/hwdisp.c" \
+        "$HERE/font.c" \
+        "$HERE/stock_ui.c" \
+        "$HERE/stock_dat.c" \
+        "$HERE/evdev_input.c" \
+        $STOCKUI_LIBS -o "$DST/stockui" 2>&1 || \
+        { log "WARN: stockui build failed -- falling back to FrogUI menu."; rm -f "$DST/stockui"; }
+    if [ -f "$DST/stockui" ]; then
+        ${CROSS_COMPILE}strip "$DST/stockui"
+        log "stockui built: $(ls -la "$DST/stockui" 2>/dev/null | awk '{print $5}') bytes"
+    fi
+else
+    log "NOTE: stockui_main.c missing -- FrogUI only."
+fi
+
+# -----------------------------------------------------------------------------
+# STAGE 6 -- build FrogUI launcher core (fallback browser UI)
 # -----------------------------------------------------------------------------
 # v8.7: apply ONE full FrogUI patch (authored against pinned 2f41ace). It
 # contains the whole RK3036G delta: ARM build fix (declare buffers + stub
@@ -294,13 +324,6 @@ if [ -f "$HERE/integrate_frogui_modules.py" ]; then
         log "WARN: FrogUI module integration failed -- shipping base FrogUI (no mouse/keymap/background)."
 else
     log "NOTE: integrate_frogui_modules.py missing -- base FrogUI only."
-fi
-# v9.0 (2026-08-25): 原厂 UI 渲染器集成（stock_ui/stock_dat — 复刻原厂 5 界面操作模型）
-if [ -f "$HERE/integrate_stock_ui.py" ]; then
-    python3 "$HERE/integrate_stock_ui.py" "$HERE" 2>/dev/null || \
-        log "WARN: stock UI integration failed -- keeping FrogUI folder UI (0-score fallback)."
-else
-    log "NOTE: integrate_stock_ui.py missing -- base FrogUI only."
 fi
 # Build the libretro core via Makefile.sf3000 (LIBRETRO_TARGET=frogui_libretro.so,
 # LIBRETRO_SOURCES=frogui_libretro.c with get_core_for_folder + execl(picoarch)).

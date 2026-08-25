@@ -1,7 +1,6 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 #include "font.h"
-#include "settings.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,8 +109,8 @@ void font_load_from_settings(const char *font_name) {
 }
 
 void font_init(void) {
-    // Load default font initially
-    font_load_from_settings("GamePocket");
+    // 独立 stockui: 直接加载原厂中文字体
+    load_font_file("font.ttf");
 }
 
 void font_draw_char(uint16_t *framebuffer, int screen_width, int screen_height,

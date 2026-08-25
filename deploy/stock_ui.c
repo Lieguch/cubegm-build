@@ -8,6 +8,7 @@
  */
 #include "stock_ui.h"
 #include "stock_dat.h"
+#include "font.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -273,9 +274,7 @@ static void fill(uint16_t *fb, int x, int y, int w, int h, uint16_t c) {
     }
 }
 
-extern void font_draw_text(uint16_t *fb, int sw, int sh, int x, int y,
-                           const char *text, uint16_t color);
-
+/* 字体渲染（font_draw_text 来自 font.c） */
 static void draw_text(uint16_t *fb, int x, int y, const char *t, uint16_t c) {
     if (t && t[0]) font_draw_text(fb, STOCK_SCREEN_W, STOCK_SCREEN_H, x, y, t, c);
 }

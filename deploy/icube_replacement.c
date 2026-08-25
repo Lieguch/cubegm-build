@@ -98,7 +98,12 @@ static void run_supervisor(const char *picoarch, const char *core) {
         pid_t pid = fork();
         if (pid == 0) {
             /* picoarch <core> <content>；FrogUI 菜单按 zhijack.sh 惯例传 core 两次。 */
-            execl(picoarch, picoarch, core, core, (char *)NULL);
+            /* v9.0: 若有 stockui 则优先用独立原厂 UI（不再依赖 frogui 文件夹浏览器） */
+            if (access("/mnt/sdcard/cubegm/stockui", X_OK) == 0) {
+                execl("/mnt/sdcard/cubegm/stockui", "stockui", (char *)NULL);
+            } else {
+                execl(picoarch, picoarch, core, core, (char *)NULL);
+            }
             hlog("icube: exec picoarch FAILED\n");
             _exit(1);
         }
