@@ -357,7 +357,12 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # INCLUDES='usr/include usr/local/include'，不会查 $SYSROOT。
     # 追加 sysroot 路径使 SDL.h 存在性检查通过。
     # 注意：ALSA 不需要此修补，因为 runner 宿主机装了 libasound2-dev。
-    sed -i "s|^INCLUDES='usr/include usr/local/include'\$|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include'|" qb/config.libs.sh
+    sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include'|" qb/config.libs.sh
+    # 备用方案：在宿主 /usr/include 创建 SDL 符号链接，确保 check_lib 能找到
+    # SDL 1.2 头文件（即使 sed 修补因版本差异失效）
+    if [ ! -d /usr/include/SDL ]; then
+        sudo ln -sf "$SYSROOT/usr/include/SDL" /usr/include/SDL 2>/dev/null || true
+    fi
     export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include"
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
