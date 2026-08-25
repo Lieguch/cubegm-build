@@ -168,7 +168,6 @@ void mouse_render_cursor(uint16_t *framebuffer) {
 
     int x = g_cursor_x, y = g_cursor_y;
     uint16_t white = 0xFFFF;  /* 白色光标 */
-    uint16_t black = 0x0000;  /* 黑色描边 */
 
     /* 简单箭头光标（9×9） */
     for (int i = 0; i < 9; i++) {

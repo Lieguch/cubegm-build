@@ -1,7 +1,7 @@
 /* background.c — 原厂背景图加载（复刻原厂 UI）
  *
  * 让 FrogUI 从"纯色背景"升级为"原厂背景图"：
- *   - 加载 /mnt/sdcard/cubegm/res/*.rgb565（原厂背景转成的 RGB565 raw）
+ *   - 加载 /mnt/sdcard/cubegm/res/ 下的 *.rgb565（原厂背景转成的 RGB565 raw）
  *   - 1280×720 整屏背景，替代 render_clear_screen 的纯色填充
  *
  * 与 render.c 的 load_raw_rgb565() 机制一致（RGB565 raw，little-endian）。
