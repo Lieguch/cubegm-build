@@ -155,6 +155,8 @@ if [ ! -f "$DRM_HEADER_DIR/xf86drm.h" ]; then
         die "libdrm-dev not available -- RetroArch plain_drm cannot compile."
 fi
 [ -d "$DRM_HEADER_DIR" ] || die "libdrm headers missing at $DRM_HEADER_DIR"
+# FORCE refresh: CI may cache sysroot with stale headers. Delete and reinstall.
+rm -rf "$SYSROOT/usr/include/libdrm"
 mkdir -p "$SYSROOT/usr/include/libdrm"
 cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
 # ALSO copy to the sysroot include ROOT: RetroArch's gfx/drivers/drm_gfx.c does
@@ -163,6 +165,7 @@ cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
 # directly visible there (Debian provides it as libdrm/xf86drm.h via pkg-config,
 # but our toolchain has no pkg-config and RetroArch's configure does not relay
 # -I$SYSROOT/usr/include/libdrm into drm_gfx.c's include resolution).
+rm -f "$SYSROOT/usr/include/xf86drm.h"
 cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/" 2>/dev/null
 log "libdrm headers installed -> $SYSROOT/usr/include/(libdrm + root) ($(ls "$SYSROOT/usr/include/libdrm" | wc -l) files)"
 
