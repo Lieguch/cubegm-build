@@ -340,6 +340,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     export RANLIB="${CROSS_COMPILE}ranlib"
     export LD="${CROSS_COMPILE}ld"
     export STRIP="${CROSS_COMPILE}strip"
+    # Set INCLUDE_DIRS so the Makefile's DEF_FLAGS includes sysroot paths.
+    # Without this, the configure script cannot detect libdrm (no pkg-config)
+    # and the Makefile won't find xf86drm.h via --sysroot alone.
+    # These paths are also needed for xf86drm.h, ALSA, and libretro-common headers.
+    export INCLUDE_DIRS="-I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm -I$SYSROOT/usr/include/alsa"
     # 正确选项名（来自 qb/config.params.sh）：
     #   HAVE_PLAIN_DRM = 纯 DRM 视频驱动（软件渲染直出 framebuffer，无 GPU/EGL/GL）
     #   HAVE_KMS        = KMS context（需要 EGL/GL，本设备无 GPU → 不用）
