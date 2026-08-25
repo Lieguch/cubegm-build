@@ -340,6 +340,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     export RANLIB="${CROSS_COMPILE}ranlib"
     export LD="${CROSS_COMPILE}ld"
     export STRIP="${CROSS_COMPILE}strip"
+    # Set INCLUDE_DIRS so the Makefile's DEF_FLAGS includes sysroot paths.
+    # Without this, the configure script cannot detect libdrm (no pkg-config)
+    # and the Makefile won't find xf86drm.h via --sysroot alone.
+    # These paths are also needed for xf86drm.h, ALSA, and libretro-common headers.
+    export INCLUDE_DIRS="-I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm -I$SYSROOT/usr/include/alsa"
     # 正确选项名（来自 qb/config.params.sh）：
     #   HAVE_PLAIN_DRM = 纯 DRM 视频驱动（软件渲染直出 framebuffer，无 GPU/EGL/GL）
     #   HAVE_KMS        = KMS context（需要 EGL/GL，本设备无 GPU → 不用）
@@ -363,14 +368,19 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-mali_fbdev \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
-    # Copy libdrm headers directly into RetroArch source tree.
-    # The Makefile has -I./ in CFLAGS, so headers in the RetroArch root
-    # will be found by #include <xf86drm.h> (angle brackets search -I paths).
-    # This is more reliable than --sysroot or CPPFLAGS (which the Makefile
-    # may not propagate to all compile targets).
+    # Patch config.mk to add sysroot include paths for libdrm/ALSA.
+    # The configure script misses these (no pkg-config) and the Makefile's
+    # DEF_FLAGS += $(INCLUDE_DIRS) doesn't work reliably via environment.
+    # Directly patch the Makefile's DEF_FLAGS instead.
+    echo "" >> Makefile
+    echo "# Added by build.sh: sysroot include paths for cross-compilation" >> Makefile
+    echo "DEF_FLAGS += -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm -I$SYSROOT/usr/include/alsa" >> Makefile
+    # Copy libdrm headers into BOTH the RetroArch root AND the libretro-common/include
+    # directory (which is in the include path via the Makefile's -I./libretro-common/include/).
     if [ -d /usr/include/libdrm ]; then
         cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/" 2>/dev/null || true
-        log "Copied libdrm headers into RetroArch root ($(ls /usr/include/libdrm/*.h | wc -l) files)."
+        cp -f /usr/include/libdrm/*.h "${WORKDIR}/RetroArch/libretro-common/include/" 2>/dev/null || true
+        log "Copied libdrm headers into RetroArch root + libretro-common/include ($(ls /usr/include/libdrm/*.h | wc -l) files)."
     fi
     # libretro-common submodule headers (boolean.h, compat/strl.h, rthreads/rthreads.h)
     # are in $WORKDIR/RetroArch/libretro-common/include, not visible via --sysroot.
