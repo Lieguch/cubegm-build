@@ -29,6 +29,12 @@ mkdir /tmp/zhijack.lock 2>/dev/null || exit 0
 # --- diagnostics: ALWAYS write a boot log (cheap; survives power-cycle) -------
 LOG=/mnt/sdcard/zhijack.log
 : > "$LOG"
+# v10.2: rotate stale per-boot logs so each boot starts clean (previous boot's
+# copy kept as .old for post-mortem; prevents unbounded growth on the FAT card).
+for _l in retroarch.log picoarch_init.log tfhijack.log icube.log; do
+    [ -f "/mnt/sdcard/$_l" ] && mv -f "/mnt/sdcard/$_l" "/mnt/sdcard/$_l.old" 2>/dev/null
+done
+
 echo "=== zhijack boot [rk3036g] $(date '+%H:%M:%S' 2>/dev/null) ===" >> "$LOG"
 echo "pid=$$ cmdline=$(cat /proc/$$/cmdline 2>/dev/null)" >> "$LOG"
 # v8.7: prove the debug/crash-log path is live. picoarch appends a backtrace
@@ -139,9 +145,6 @@ sleep 0.3
 # /dev/input/event* directly) + RGUI menu, all built in. No cubevol/gpio shim
 # required (driver.so has no cubevol references). picoarch+FrogUI deprecated.
 
-PICOARCH=/mnt/sdcard/cubegm/picoarch
-FROGUI_CORE=/mnt/sdcard/cubegm/cores/frogui_libretro.so
-LAUNCH=/tmp/frogui_launch.txt
 RETROARCH=/mnt/sdcard/cubegm/retroarch
 RETROARCH_CFG=/mnt/sdcard/cubegm/retroarch.cfg
 
@@ -204,14 +207,12 @@ WD_PID=$!
 echo "zhijack: past watchdog start (WD_PID=$WD_PID)" >> "$LOG"
 
 # Front-end launcher loop.
-# PRIMARY: RetroArch — self-contained (menu/ROM browser/cores), crash-restart.
-# FALLBACK: FrogUI writes $LAUNCH (core path on line 1, ROM path on line 2)
-#           when the user picks a game; we then launch picoarch with that core.
+# ONLY frontend: RetroArch — self-contained (menu/ROM browser/cores),
+# crash-restart via the loop below. picoarch+FrogUI fully removed (v10.0).
 echo "zhijack: entering main loop (retroarch=$([ -x "$RETROARCH" ] && echo yes || echo no))" >> "$LOG"
 ITER=0
 while true; do
     ITER=$((ITER+1))
-    rm -f "$LAUNCH"
     # icube is the respawner: if it revives (crash-restart), it respawns
     # rkgame which takes DRM master back -> HDMI switches away from our dumb
     # buffer (observed as half-white after ~10 min). Kill -9 it every iteration.
@@ -244,30 +245,11 @@ while true; do
         sleep 1
         continue
     fi
-    if [ ! -x "$PICOARCH" ]; then
-        echo "zhijack: FATAL neither $RETROARCH nor $PICOARCH executable" >> "$LOG"
+    # RetroArch is the only frontend; picoarch+FrogUI deprecated (v10.0)
+    # If RetroArch binary missing, fatal error
+    if [ ! -x "$RETROARCH" ]; then
+        echo "zhijack: FATAL $RETROARCH not executable -- cannot launch" >> "$LOG"
         sleep 5
         continue
     fi
-    # FALLBACK PATH: FrogUI browser + picoarch game launches
-    if [ -f "$LAUNCH" ]; then
-        CORE_PATH=$(sed -n '1p' "$LAUNCH")
-        ROM_PATH=$(sed -n '2p' "$LAUNCH")
-        [ -n "$CORE_PATH" ] && [ -n "$ROM_PATH" ] && {
-            killall rkgame 2>/dev/null
-            echo "--- iter $ITER: game [$CORE_PATH] via $PICOARCH ---" >> "$LOG"
-            "$PICOARCH" "$CORE_PATH" "$ROM_PATH" >> "$LOG" 2>&1
-            GRC=$?
-            echo "game exited rc=$GRC" >> "$LOG"
-            # mem snapshot after the game: a silent death with no crash.log is
-            # usually the OOM killer (SIGKILL) — this shows how much was left
-            head -6 /proc/meminfo >> "$LOG"
-            [ -f /mnt/sdcard/crash.log ] && echo "crash.log EXISTS: $(tail -3 /mnt/sdcard/crash.log)" >> "$LOG"
-            sync
-        }
-    fi
-    "$PICOARCH" "$FROGUI_CORE" "$FROGUI_CORE" >> "$LOG" 2>&1
-    RC=$?
-    echo "frogui exited rc=$RC" >> "$LOG"
-    sleep 0.2
 done

@@ -330,12 +330,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # INCLUDES='usr/include usr/local/include'，不会查 $SYSROOT。
     # 追加 sysroot 路径使 SDL.h 存在性检查通过。
     # 注意：ALSA 不需要此修补，因为 runner 宿主机装了 libasound2-dev。
-    sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include'|" qb/config.libs.sh
-    # 备用方案：在宿主 /usr/include 创建 SDL 符号链接，确保 check_lib 能找到
-    # SDL 1.2 头文件（即使 sed 修补因版本差异失效）
-    if [ ! -d /usr/include/SDL ]; then
-        sudo ln -sf "$SYSROOT/usr/include/SDL" /usr/include/SDL 2>/dev/null || true
-    fi
+    sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include $SYSROOT/usr/include/SDL'|" qb/config.libs.sh
     export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include"
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
@@ -602,7 +597,11 @@ DST="$HERE/cubegm"
 mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system" "$DST/autoconfig"
 # v10.1: 部署中文字体（RGUI 渲染中文必须）
 cp -f "$HERE/cubegm/font.ttf"              "$DST/" 2>/dev/null && log "  font.ttf deployed ($(ls -lh "$DST/font.ttf" 2>/dev/null | awk '{print $5}'))" || true
-cp -f RetroArch/retroarch            "$DST/" 2>/dev/null || true
+if [ -f RetroArch/retroarch ]; then
+    cp -f RetroArch/retroarch        "$DST/"
+else
+    die "RetroArch binary MISSING from build tree -- v10 direction requires it. Check STAGE 5b configure/make output above."
+fi
 cp -f "$CORE_OUT"/*.so               "$DST/cores/" 2>/dev/null || true
 # v9.6: 部署 autoconfig 配置文件（手柄自动识别）
 cp -f "$HERE/autoconfig/"*.cfg        "$DST/autoconfig/" 2>/dev/null && log "  autoconfig profiles deployed ($(ls "$DST/autoconfig/"*.cfg 2>/dev/null | wc -l) files)" || true
