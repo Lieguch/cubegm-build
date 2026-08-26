@@ -599,7 +599,7 @@ bash "$HERE/toolchain/verify_target_abi.sh" \
 # STAGE 9 -- stage into deploy/cubegm/
 # -----------------------------------------------------------------------------
 DST="$HERE/cubegm"
-mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system"
+mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system" "$DST/autoconfig"
 cp -f RetroArch/retroarch            "$DST/" 2>/dev/null || true
 cp -f "$CORE_OUT"/*.so               "$DST/cores/" 2>/dev/null || true
 # v8.7: alias snes9x2005_plus -> snes9x2005 (any old mapping / launch.txt that
