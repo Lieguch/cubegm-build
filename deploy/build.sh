@@ -347,6 +347,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-videoprocessor --disable-qt --disable-cg \
         --disable-neon --disable-libretro \
         --disable-mali_fbdev \
+        --enable-langextra \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
     # 无 pkg-config 时 configure 的 SDL/ALSA include 扫描会误指向宿主
@@ -616,6 +617,7 @@ cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
 cp -f "$HERE/retroarch.cfg"              "$DST/" 2>/dev/null || true
+    cp -f "$HERE/cubegm/asound.conf"          "$DST/" 2>/dev/null && log "  asound.conf deployed"
 chmod +x "$DST/retroarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------

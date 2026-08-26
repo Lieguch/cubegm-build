@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
     /* ALSA：设备有双输出（HDMI pcm0p + 内置扬声器 pcm1p），需 ALSS_CONFIG_PATH
        指向 ALSA 配置目录（/usr/share/alsa），使 default PCM 能正确路由到双输出 */
-    setenv("ALSA_CONFIG_PATH", "/usr/share/alsa", 1);
+    setenv("ALSA_CONFIG_PATH", "/etc", 1);
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
 
