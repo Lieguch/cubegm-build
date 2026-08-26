@@ -602,6 +602,8 @@ DST="$HERE/cubegm"
 mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system" "$DST/autoconfig"
 cp -f RetroArch/retroarch            "$DST/" 2>/dev/null || true
 cp -f "$CORE_OUT"/*.so               "$DST/cores/" 2>/dev/null || true
+# v9.6: 部署 autoconfig 配置文件（手柄自动识别）
+cp -f "$HERE/autoconfig/"*.cfg        "$DST/autoconfig/" 2>/dev/null && log "  autoconfig profiles deployed ($(ls "$DST/autoconfig/"*.cfg 2>/dev/null | wc -l) files)" || true
 # v8.7: alias snes9x2005_plus -> snes9x2005 (any old mapping / launch.txt that
 # references the non-plus name still resolves to the OPTIMISED core; the stock
 # snes9x2005 on the card was unoptimised -> ~1 FPS on 002 games).
