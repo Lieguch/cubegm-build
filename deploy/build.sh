@@ -637,19 +637,6 @@ if [ -f "$HERE/diag.c" ]; then
     fi
 fi
 
-# -----------------------------------------------------------------------------
-# cubevol_bridge: emulate the stock cubevol input daemon (FrogUI reads
-# /tmp/joy_key shared memory; the stock daemon is inside rkgame, so after the
-# hijack there is NO input source). Read USB pads via evdev, write the mask.
-if [ -f "$HERE/cubevol_bridge.c" ]; then
-    log "Building cubevol_bridge (evdev -> cubevol shm)..."
-    if ${CROSS_COMPILE}gcc -O2 -Wall -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard --sysroot="$SYSROOT" -I"$SYSROOT/usr/include" "$HERE/cubevol_bridge.c" -o "$DST/cubevol_bridge"; then
-        ${CROSS_COMPILE}strip "$DST/cubevol_bridge"
-        log "cubevol_bridge built: $(ls -la "$DST/cubevol_bridge" 2>/dev/null | awk '{print $5}') bytes"
-    else
-        log "WARN: cubevol_bridge build failed -- FrogUI will have no input!"
-    fi
-fi
 
 # -----------------------------------------------------------------------------
 # icube_replacement: 替换原厂 icube 的启动器（S80icube 环节事前接管）。

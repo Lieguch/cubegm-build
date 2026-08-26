@@ -148,16 +148,6 @@ sleep 0.3
 RETROARCH=/mnt/sdcard/cubegm/retroarch
 RETROARCH_CFG=/mnt/sdcard/cubegm/retroarch.cfg
 
-# --- cubevol_bridge: FrogUI reads input ONLY from the stock cubevol shm
-#     /tmp/joy_key (ftok 'a'). The stock daemon lives inside rkgame, which we
-#     killed, so launch our evdev->shm bridge (ships in this payload). ------
-BRIDGE=/mnt/sdcard/cubegm/cubevol_bridge
-if [ -x "$BRIDGE" ]; then
-    nohup "$BRIDGE" >> "$LOG" 2>&1 </dev/null &
-    echo "zhijack: cubevol_bridge started pid=$! (nohup)" >> "$LOG"
-else
-    echo "zhijack: WARN cubevol_bridge missing -- FrogUI will have NO input" >> "$LOG"
-fi
 if [ -e /dev/watchdog ]; then
     echo "zhijack: /dev/watchdog PRESENT -- petting each loop" >> "$LOG"
 fi
