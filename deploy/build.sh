@@ -650,9 +650,10 @@ fi
 
 # -----------------------------------------------------------------------------
 # icube_replacement: 替换原厂 icube 的启动器（S80icube 环节事前接管）。
-#   复刻 icube 职责（创建共享内存 + fork 输入桥 + supervisor 循环 exec picoarch）。
+#   supervisor 循环 exec: retroarch -c retroarch.cfg --menu（RetroArch 自带
+#   RGUI 菜单 + SDL1.2 fbcon 显示 + ALSA 音频 + linuxraw 输入，自给自足）。
 #   相比 zhijack 事后劫持，此方案在原厂 rkgame/driver.so 起来前就接管，
-#   显示/音频由 picoarch 自己初始化，根治半白屏/无声。
+#   显示/音频由 RetroArch 自己初始化，根治半白屏/无声。
 #   编译成 icube_replacement（不直接叫 icube，避免误覆盖原厂）。
 if [ -f "$HERE/icube_replacement.c" ]; then
     log "Building icube_replacement (boot launcher)..."

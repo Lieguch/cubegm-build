@@ -1,39 +1,41 @@
 /* icube_replacement.c — 替换原厂 icube 的启动器（S80icube 环节事前接管）
  *
  * 逆向确认原厂 icube 职责（ShareMemCreat + fork rkgame + waitpid 监控重启）。
- * 本启动器替代它：直接启动 picoarch + FrogUI，原厂 rkgame/driver.so 永远不会启动，
- * 因此显示/音频由 picoarch 自己初始化（DRM dumb buffer + ALSA），彻底脱离 driver.so。
+ * 本启动器替代它：直接启动 RetroArch（自带 RGUI 菜单 + libretro 核心加载），
+ * 原厂 rkgame/driver.so 永远不会启动，因此显示/音频由 RetroArch 自己初始化
+ * （SDL 1.2 fbcon 视频 + ALSA 音频），彻底脱离 driver.so。
  *
- * 关键事实（逆向 + 源码确认）：
- *   - picoarch 靠 sf3000_is_rk3036() 读 /proc/device-tree/compatible 硬件自检
- *     → rk3036 走 DRM/ALSA/evdev，不依赖 launcher 环境，但 tfdevice.env 双保险。
- *   - FrogUI 菜单输入源 = cubevol_bridge 写 /tmp/joy_key 共享内存（evdev → shm）。
- *   - 共享内存 key = ftok("/tmp/joy_key", 'a')；/tmp/joy_key 文件必须存在。
- *   - 游戏启动：FrogUI 内部 fork+execl picoarch <game_core> <rom>（launcher 不用管）。
+ * v10.0 (2026-08-26)：方向切换 picoarch+FrogUI → RetroArch。
+ *   - exec: retroarch -c /mnt/sdcard/cubegm/retroarch.cfg --menu
+ *   - 不再 spawn cubevol_bridge（RetroArch linuxraw 直接读 /dev/input/event*）
+ *   - 不再写 /tmp/joy_key（FrogUI 专属 shm，已废弃）
+ *   - --menu 必须：官方文档确认「不加载 content 时必须显式 --menu，否则
+ *     RetroArch 启动后立即退出」→ 缺它会变成 crash 重启循环。
+ *     zhijack.sh 同路径已同步补上。
  *
  * 与原厂 icube 的区别：
  *   - 原厂 fork/execl rkgame（闭源，dlopen driver.so 显示/音频）
- *   - 本启动器 exec picoarch（开源，自己 DRM/ALSA）
+ *   - 本启动器 exec retroarch（开源，自己 SDL/ALSA）
  *
  * 安全性（已验证）：
  *   - root.dat 不引用 icube，无校验 → 替换不触发 "sdcard is damaged"
  *   - 无看门狗（icube/rkgame 均无 watchdog 字符串）
  *
- * 编译：arm-linux-gnueabihf-gcc -O2 -Wall icube_replacement.c -o icube
+ * 编译：arm-linux-gnueabihf-gcc -O2 -Wall icube_replacement.c -o icube_replacement
  */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
 #include <unistd.h>
-#include <errno.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define LOG_PATH   "/mnt/sdcard/icube.log"
-#define WORK_DIR   "/mnt/sdcard/cubegm"
+#define LOG_PATH      "/mnt/sdcard/icube.log"
+#define WORK_DIR      "/mnt/sdcard/cubegm"
+#define RETROARCH     "/mnt/sdcard/cubegm/retroarch"
+#define RETROARCH_CFG "/mnt/sdcard/cubegm/retroarch.cfg"
+#define RETROARCH_LOG "/mnt/sdcard/retroarch.log"
 
 static void hlog(const char *msg) {
     FILE *f = fopen(LOG_PATH, "a");
@@ -42,8 +44,7 @@ static void hlog(const char *msg) {
     fclose(f);
 }
 
-/* 写 /tmp/tfdevice.env（对齐 zhijack.sh；picoarch/FrogUI 会读 TF_* 作为面板几何双保险，
- * 虽然 hardware 自检已能判定 rk3036 + 1280x720，但保留 env 便于诊断与人工覆盖）。 */
+/* 写 /tmp/tfdevice.env（对齐 zhijack.sh，保留设备几何约定便于诊断与人工覆盖）。 */
 static void write_tfdevice_env(void) {
     FILE *f = fopen("/tmp/tfdevice.env", "w");
     if (!f) { hlog("icube: write /tmp/tfdevice.env FAILED\n"); return; }
@@ -73,38 +74,19 @@ static void set_cpu_performance(void) {
     }
 }
 
-/* 确保 /tmp/joy_key 文件存在（ftok 需要文件存在才能算 key） */
-static void ensure_joy_key_file(void) {
-    int fd = open("/tmp/joy_key", O_WRONLY | O_CREAT, 0666);
-    if (fd >= 0) close(fd);
-}
-
-/* 启动后台进程（cubevol_bridge） */
-static pid_t spawn_background(const char *path) {
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl(path, path, (char *)NULL);
-        hlog("icube: exec cubevol_bridge FAILED\n");
-        _exit(1);
-    }
-    return pid;
-}
-
-/* supervisor：循环 exec picoarch+FrogUI，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。
- * FrogUI 内部 fork+execl 游戏，游戏退出后回到菜单，无需本循环处理游戏。 */
-static void run_supervisor(const char *picoarch, const char *core) {
+/* supervisor：循环 exec retroarch，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。 */
+static void run_supervisor(void) {
     int restart_count = 0;
     for (;;) {
         pid_t pid = fork();
         if (pid == 0) {
-            /* picoarch <core> <content>；FrogUI 菜单按 zhijack.sh 惯例传 core 两次。 */
-            /* v9.0: 若有 stockui 则优先用独立原厂 UI（不再依赖 frogui 文件夹浏览器） */
-            if (access("/mnt/sdcard/cubegm/stockui", X_OK) == 0) {
-                execl("/mnt/sdcard/cubegm/stockui", "stockui", (char *)NULL);
-            } else {
-                execl(picoarch, picoarch, core, core, (char *)NULL);
-            }
-            hlog("icube: exec picoarch FAILED\n");
+            /* 子进程：把 retroarch 的 stdout/stderr 重定向到日志，便于诊断 */
+            int fd = open(RETROARCH_LOG, O_WRONLY | O_CREAT | O_APPEND, 0644);
+            if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
+            /* RetroArch 自带 RGUI 菜单。--menu 显式声明「无 content 也要驻留菜单」，
+             * 缺它会启动后立即退出（崩溃重启循环）。 */
+            execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu", (char *)NULL);
+            hlog("icube: exec retroarch FAILED\n");
             _exit(1);
         }
         if (pid < 0) {
@@ -115,7 +97,7 @@ static void run_supervisor(const char *picoarch, const char *core) {
         int status;
         waitpid(pid, &status, 0);
         char buf[160];
-        snprintf(buf, sizeof buf, "icube: picoarch exited (rc=%d), restart #%d\n",
+        snprintf(buf, sizeof buf, "icube: retroarch exited (rc=%d), restart #%d\n",
                  WIFEXITED(status) ? WEXITSTATUS(status) : -1, ++restart_count);
         hlog(buf);
         sleep(1);
@@ -125,7 +107,7 @@ static void run_supervisor(const char *picoarch, const char *core) {
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
 
-    hlog("icube (replacement) v1.1 starting\n");
+    hlog("icube (replacement) v10.0 starting (RetroArch launcher)\n");
 
     /* 1. 设备环境：tfdevice.env + TF_* 导出 + 库路径 + 黑屏修复 + CPU 调度 */
     write_tfdevice_env();
@@ -133,26 +115,14 @@ int main(int argc, char **argv) {
     setenv("TF_PANEL_W", "1280", 1);
     setenv("TF_PANEL_H", "720", 1);
     setenv("TF_UI_SCALE", "150", 1);
-    setenv("SDL_NOMOUSE", "1", 1);
+    setenv("SDL_NOMOUSE", "1", 1);   /* SDL fbcon 黑屏根因修复 */
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
 
-    /* 2. 确保 /tmp/joy_key 存在（供 cubevol_bridge ftok） */
-    ensure_joy_key_file();
-
-    /* 3. 启动输入桥接（evdev → /tmp/joy_key shm，FrogUI 菜单输入源） */
-    pid_t bridge = spawn_background("/mnt/sdcard/cubegm/cubevol_bridge");
-    (void)bridge;
-    hlog("icube: cubevol_bridge spawned\n");
-
-    /* 3.5 等 bridge 创建共享内存（避免 frogui cv_init 竞态） */
-    usleep(200000);
-
-    /* 4. supervisor：循环 exec picoarch + FrogUI */
-    run_supervisor("/mnt/sdcard/cubegm/picoarch",
-                   "/mnt/sdcard/cubegm/cores/frogui_libretro.so");
+    /* 2. supervisor：循环 exec retroarch（自带 RGUI 菜单 + libretro 核心加载） */
+    run_supervisor();
 
     return 0;
 }

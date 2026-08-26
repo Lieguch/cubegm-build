@@ -130,10 +130,10 @@ ls -la /dev/input/ 2>/dev/null >> "$LOG"
 sync
 sleep 0.3
 
-# RK3036G input is standard evdev — picoarch (plat_linux.c) reads it directly.
-# No cubevol/gpio shim is required (driver.so has no cubevol references).
-# RetroArch (primary frontend, build.sh STAGE 5b) is self-contained: RGUI menu
-# + ROM browser + core loading all built in. picoarch+FrogUI is the fallback.
+# RK3036G input is standard evdev. RetroArch (primary frontend, build.sh STAGE 5b)
+# is self-contained: SDL1.2 fbcon video + ALSA audio + linuxraw input (reads
+# /dev/input/event* directly) + RGUI menu, all built in. No cubevol/gpio shim
+# required (driver.so has no cubevol references). picoarch+FrogUI deprecated.
 
 PICOARCH=/mnt/sdcard/cubegm/picoarch
 FROGUI_CORE=/mnt/sdcard/cubegm/cores/frogui_libretro.so
@@ -231,10 +231,10 @@ while true; do
     fi
     if [ -x "$RETROARCH" ]; then
         # PRIMARY PATH: RetroArch owns the whole session (RGUI menu -> game ->
-        # back to menu). It reads input via linuxraw/udev and writes to the
-        # plain DRM dumb buffer directly, same API family hwdisp.c proved.
+        # back to menu). Video = SDL 1.2 fbcon, audio = ALSA, input = linuxraw
+        # (reads /dev/input/event* directly). --menu keeps RGUI resident.
         echo "=== retroarch launch iter=$ITER $(date '+%H:%M:%S' 2>/dev/null) ===" >> /mnt/sdcard/crash.log 2>/dev/null
-        "$RETROARCH" -c "$RETROARCH_CFG" >> "$LOG" 2>&1
+        "$RETROARCH" -c "$RETROARCH_CFG" --menu >> "$LOG" 2>&1
         RC=$?
         echo "retroarch exited rc=$RC (cooldown 1s)" >> "$LOG"
         sleep 1
