@@ -600,6 +600,8 @@ bash "$HERE/toolchain/verify_target_abi.sh" \
 # -----------------------------------------------------------------------------
 DST="$HERE/cubegm"
 mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system" "$DST/autoconfig"
+# v10.1: 部署中文字体（RGUI 渲染中文必须）
+cp -f "$HERE/cubegm/font.ttf"              "$DST/" 2>/dev/null && log "  font.ttf deployed ($(ls -lh "$DST/font.ttf" 2>/dev/null | awk '{print $5}'))" || true
 cp -f RetroArch/retroarch            "$DST/" 2>/dev/null || true
 cp -f "$CORE_OUT"/*.so               "$DST/cores/" 2>/dev/null || true
 # v9.6: 部署 autoconfig 配置文件（手柄自动识别）

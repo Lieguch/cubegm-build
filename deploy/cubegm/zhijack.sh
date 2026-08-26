@@ -71,6 +71,10 @@ export SDL_NOMOUSE=1
 # cubegm/lib; picoarch's NEEDED entries resolve against it.
 export LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib:$LD_LIBRARY_PATH
 
+# ALSA：设备有双输出（HDMI pcm0p + 内置扬声器 pcm1p），需 ALSS_CONFIG_PATH
+# 指向 ALSA 配置目录（/usr/share/alsa），使 default PCM 能正确路由到双输出
+export ALSA_CONFIG_PATH=/usr/share/alsa
+
 # CPU: force max-performance governor (helps every emulator).
 for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
     [ -w "$g" ] && echo performance > "$g" 2>/dev/null
