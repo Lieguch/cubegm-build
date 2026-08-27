@@ -223,9 +223,12 @@ while true; do
     # ALSA cards, PCM devices, acodec/I2S/HDMI registers, DRM, input,
     # libretro core scan, and 1 kHz audio test. Read report from SD card.
     if [ -x /mnt/sdcard/cubegm/diag ]; then
-        echo "zhijack: running diag all..." >> "$LOG"
-        /mnt/sdcard/cubegm/diag all >> "$LOG" 2>&1
-        echo "zhijack: diag finished, report -> /mnt/sdcard/diag_report.txt" >> "$LOG"
+      echo "zhijack: running diag all..." >> "$LOG"
+      /mnt/sdcard/cubegm/diag all >> "$LOG" 2>&1
+      echo "zhijack: diag finished, report -> /mnt/sdcard/diag_report.txt" >> "$LOG"
+      # v10.9 开机即 Debug：持续键位/轴事件日志（守护进程，不阻塞）
+      /mnt/sdcard/cubegm/diag keylog >/dev/null 2>&1 &
+      echo "zhijack: diag keylog started (bg) -> /mnt/sdcard/keylog.txt" >> "$LOG"
     fi
     if [ -x "$RETROARCH" ]; then
         # PRIMARY PATH: RetroArch owns the whole session (RGUI menu -> game ->

@@ -37,6 +37,7 @@
 #define RETROARCH     "/mnt/sdcard/cubegm/retroarch"
 #define RETROARCH_CFG "/mnt/sdcard/cubegm/retroarch.cfg"
 #define RETROARCH_LOG "/mnt/sdcard/retroarch.log"
+#define DIAG_BIN      "/mnt/sdcard/cubegm/diag"
 
 static void hlog(const char *msg) {
     FILE *f = fopen(LOG_PATH, "a");
@@ -93,6 +94,28 @@ static void ensure_asound_conf(void) {
     hlog("icube: asound.conf OK at /mnt/sdcard/cubegm/asound.conf\n");
 }
 
+/* v10.9 开机即 Debug（用户硬性指令 2026-08-27）：
+ * 主路径「替换 icube」开机后立即在后台派生 diag：
+ *   - diag all    -> /mnt/sdcard/diag_report.txt（sysinfo/input/display/audio/cores）
+ *   - diag keylog -> /mnt/sdcard/keylog.txt（持续键位/轴事件日志，守护进程）
+ * 父进程不 wait（避免阻塞 retroarch 启动）。fallback 路径 zhijack.sh 已有同款。
+ * 若 diag 缺失（payload 异常）则不阻塞启动，仅记录。 */
+static void run_diag_bg(const char *arg) {
+    pid_t pid = fork();
+    if (pid < 0) { hlog("icube: fork diag failed\n"); return; }
+    if (pid == 0) {
+        /* 子进程：diag 输出重定向到 /dev/null（diag 自身写 report/keylog 文件） */
+        int fd = open("/dev/null", O_WRONLY);
+        if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
+        execl(DIAG_BIN, "diag", arg, (char *)NULL);
+        _exit(127);
+    }
+    /* 父进程不 wait —— diag 后台运行，retroarch 立即启动 */
+    char buf[128];
+    snprintf(buf, sizeof buf, "icube: diag %s forked (bg)\n", arg);
+    hlog(buf);
+}
+
 /* supervisor：循环 exec retroarch，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。 */
 static void run_supervisor(void) {
     int restart_count = 0;
@@ -135,6 +158,9 @@ int main(int argc, char **argv) {
     setenv("TF_PANEL_H", "720", 1);
     setenv("TF_UI_SCALE", "150", 1);
     setenv("SDL_NOMOUSE", "1", 1);   /* SDL fbcon 黑屏根因修复 */
+    setenv("HOME", WORK_DIR, 1);     /* v11.0: 修 "//.config" 双斜杠 —— RetroArch
+                                        getenv("HOME") 拼用户路径，未设则解析为空 */
+    setenv("XDG_CONFIG_HOME", WORK_DIR "/configs", 1);
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
     /* ALSA v10.8 官方机制：ALSA_CONFIG_PATH 直接指向 TF 卡上已存在的
@@ -144,6 +170,10 @@ int main(int argc, char **argv) {
     setenv("ALSA_CONFIG_PATH", "/mnt/sdcard/cubegm/asound.conf", 1);
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
+
+    /* 1.5 开机即 Debug（v10.9）：后台派 diag all + diag keylog，不阻塞 retroarch */
+    run_diag_bg("all");
+    run_diag_bg("keylog");
 
     /* 2. supervisor：循环 exec retroarch（自带 RGUI 菜单 + libretro 核心加载） */
     run_supervisor();

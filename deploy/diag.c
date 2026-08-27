@@ -243,6 +243,56 @@ static void cmd_input(void) {
 }
 
 /* ===========================================================================
+ * keylog -- continuous boot-time key/axis event logger (v10.9, user hard
+ * requirement 2026-08-27: 开机即 Debug，含键位触发等所有日志).
+ * Daemonized by icube_replacement at boot. Appends every EV_KEY/EV_ABS/EV_REL
+ * with a timestamp + device name to /mnt/sdcard/keylog.txt.
+ * This answers the ROOT question: does the kernel actually deliver the button
+ * events? (If keylog.txt has events but RetroArch ignores them -> problem is
+ * RetroArch-side driver/autoconfig. If keylog.txt is empty -> device never
+ * reports. No more guessing.)
+ * ========================================================================== */
+#define KEYLOG "/mnt/sdcard/keylog.txt"
+static void cmd_keylog(void) {
+    int fds[16]; int nfd = 0; char names[16][128];
+    FILE *kl = fopen(KEYLOG, "ab");
+    if (!kl) { fprintf(stderr, "keylog: cannot open %s\n", KEYLOG); return; }
+    fprintf(kl, "# CubeGM keylog started %s", ctime(&(time_t){time(NULL)}));
+    for (int i = 0; i < 16; i++) {
+        char path[64]; snprintf(path, sizeof path, "/dev/input/event%d", i);
+        int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0) continue;
+        unsigned long evbits = 0;
+        if (ioctl(fd, EVIOCGBIT(0, sizeof evbits), &evbits) < 0) { close(fd); continue; }
+        names[nfd][0] = 0;
+        ioctl(fd, EVIOCGNAME(sizeof names[nfd]-1), names[nfd]);
+        fprintf(kl, "# device %d: %s (EV bits=%08lx)\n", nfd, names[nfd], evbits);
+        fds[nfd++] = fd;
+    }
+    if (nfd == 0) { fprintf(kl, "# NO evdev devices found\n"); fflush(kl); fclose(kl); return; }
+    fflush(kl);
+    /* continuous loop: never exits (daemon). Log every input event. */
+    for (;;) {
+        for (int i = 0; i < nfd; i++) {
+            struct input_event ev;
+            ssize_t rd;
+            while ((rd = read(fds[i], &ev, sizeof ev)) == (ssize_t)sizeof ev) {
+                /* only record interesting event types (key press/release, abs, rel) */
+                if (ev.type == EV_KEY || ev.type == EV_ABS || ev.type == EV_REL) {
+                    time_t now = time(NULL);
+                    struct tm tm; localtime_r(&now, &tm);
+                    fprintf(kl, "[%02d:%02d:%02d] [%s] type=%u code=%d (0x%03x) val=%d\n",
+                            tm.tm_hour, tm.tm_min, tm.tm_sec, names[i],
+                            ev.type, ev.code, ev.code, ev.value);
+                    fflush(kl);
+                }
+            }
+        }
+        usleep(10000);   /* 10 ms poll interval */
+    }
+}
+
+/* ===========================================================================
  * display -- DRM modeset + test patterns (proves the HDMI link + buffer)
  * ========================================================================== */
 static void cmd_display(void) {
@@ -434,6 +484,7 @@ int main(int argc, char **argv) {
     else logf("# WARN: cannot write %s (SD read-only?) -- console only\n", REPORT);
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysinfo") == 0) cmd_sysinfo();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "input") == 0)   cmd_input();
+    if (strcmp(mod, "keylog") == 0)                             cmd_keylog();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "display") == 0) cmd_display();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
