@@ -175,6 +175,15 @@ export CXXFLAGS="$CFLAGS"
 export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
 
 # -----------------------------------------------------------------------------
+# STAGE 4.7 -- cross-build libudev-zero into sysroot (RetroArch udev input driver)
+# -----------------------------------------------------------------------------
+# v10.4: udev 驱动引入。libudev = RetroArch udev_input/udev_joypad 的枚举+hotplug
+# 客户端库。libudev-zero 是 daemonless 替代（Alpine 官方打包），无 udevd 也能
+# 枚举 /sys + 自算 ID_INPUT_* 属性。选型与 ABI 依据见 build_libudev_zero.sh 头注。
+# 幂等：sysroot 已含 libudev.so.1 则跳过（含在 CI sysroot 缓存里）。
+bash "$HERE/build_libudev_zero.sh" || die "libudev-zero sysroot install FAILED"
+
+# -----------------------------------------------------------------------------
 # STAGE 4 -- clone front-end sources
 #   IMPORTANT: the 5-edit patch (../patch/picoarch_5edits.patch) only applies on
 #   the *r36sx* branch and needs the libretro-common submodule (defines
@@ -277,7 +286,7 @@ log "STAGE 5 skipped: picoarch deprecated (RetroArch replaces it)"
 # v9.0 根源方案：用 RetroArch 成熟 15 年的 libretro 前端替代所有自定义 UI 代码。
 # 显示：kms_drm（DRM/KMS 直出，与 hwdisp 同原理但更稳定）
 # 音频：alsa（设备已有 libasound.so.2）
-# 输入：linuxraw（直接读 /dev/input/event*，无需 udev 中转）
+# 输入：udev（libudev-zero 客户端库，EVIOCGID/EVIOCGNAME 直读，四要素 autoconfig 自动匹配）
 # 菜单：rgui（轻量文字菜单，244MB 内存足够）
 # 核心：复用现有 libretro 57 核（同一份 .so 文件）
 RETROARCH_REPO="https://github.com/libretro/RetroArch.git"
@@ -312,7 +321,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # 的 libSDL.so 可满足 -> 用 SDL 驱动，零新增依赖。
     # 相反，plain_drm 需要 libdrm 头文件（xf86drm.h），无 pkg-config 时
     # RetroArch 的 -I 传递不可靠，已在 20+ 次 CI 里反复验证为死路。
-    # 输入：linuxraw 读 /dev/input/event*，零依赖。
+    # 输入：udev 驱动（libudev-zero 无 udevd 也能枚举/热插拔，见 STAGE 4.7）。
     # 禁用 GL/EGL/Vulkan/X11/Wayland：设备无 GPU/无 X server。禁用 SDL2/SDL3
     # 强制使用 SDL1.2（与 sysroot 已有的 libSDL.so 一致）。
     # RetroArch configure 用环境变量传交叉编译器，不是命令行 CC=
@@ -335,6 +344,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
         --enable-alsa \
+        --enable-udev \
         --disable-plain_drm --disable-kms --disable-egl \
         --disable-opengl --disable-opengl1 \
         --disable-opengl_core --disable-opengles --disable-opengles3 \

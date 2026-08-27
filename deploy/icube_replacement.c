@@ -7,8 +7,9 @@
  *
  * v10.0 (2026-08-26)：方向切换 picoarch+FrogUI → RetroArch。
  *   - exec: retroarch -c /mnt/sdcard/cubegm/retroarch.cfg --menu
- *   - 不再 spawn cubevol_bridge（RetroArch linuxraw 直接读 /dev/input/event*）
+ *   - 不再 spawn cubevol_bridge（RetroArch udev/linuxraw 直接读 input 设备）
  *   - 不再写 /tmp/joy_key（FrogUI 专属 shm，已废弃）
+ * v10.4 (2026-08-27)：输入切 udev 驱动（libudev-zero），删除 linuxraw 时代 player1 硬编码。
  *   - --menu 必须：官方文档确认「不加载 content 时必须显式 --menu，否则
  *     RetroArch 启动后立即退出」→ 缺它会变成 crash 重启循环。
  *     zhijack.sh 同路径已同步补上。
@@ -118,8 +119,8 @@ int main(int argc, char **argv) {
     setenv("SDL_NOMOUSE", "1", 1);   /* SDL fbcon 黑屏根因修复 */
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
-    /* ALSA：设备有双输出（HDMI pcm0p + 内置扬声器 pcm1p），需 ALSS_CONFIG_PATH
-       指向 ALSA 配置目录（/usr/share/alsa），使 default PCM 能正确路由到双输出 */
+    /* ALSA：设备无 ALSA 配置文件，部署 asound.conf（default→hw:0,0）到 /etc，
+       并设 ALSA_CONFIG_PATH=/etc 使 default PCM 可解析（纠偏报告 §11.3 定案） */
     setenv("ALSA_CONFIG_PATH", "/etc", 1);
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
