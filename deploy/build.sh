@@ -616,7 +616,15 @@ fi
 cp -f "$CORE_OUT"/*.so               "$DST/cores/" 2>/dev/null || true
 # v9.6: 部署 autoconfig 配置文件（手柄自动识别）
 # v10.3: 部署完整官方手柄特征库（按驱动子目录，RetroArch 按 driver+name+VID+PID 自动匹配）
-# 广泛适应性：插什么手柄认什么手柄，非单设备定制。
+# v10.6: 若 joypad-autoconfig 不存在（CI 干净 clone 场景），自动克隆。
+if [ ! -d "$HERE/joypad-autoconfig" ] || [ -z "$(ls "$HERE/joypad-autoconfig/udev"/*.cfg 2>/dev/null)" ]; then
+  log "Cloning retroarch-joypad-autoconfig (1099 profiles)..."
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    git clone --depth 1 "https://x-access-token:${GITHUB_TOKEN}@github.com/libretro/retroarch-joypad-autoconfig.git" "$HERE/joypad-autoconfig"
+  else
+    git clone --depth 1 https://github.com/libretro/retroarch-joypad-autoconfig.git "$HERE/joypad-autoconfig"
+  fi || die "Failed to clone joypad-autoconfig"
+fi
 for _drv in udev linuxraw sdl2 sdl3 android dinput xinput hid mfi parport qnx winraw x; do
   [ -d "$HERE/joypad-autoconfig/$_drv" ] && cp -rf "$HERE/joypad-autoconfig/$_drv" "$DST/autoconfig/" 2>/dev/null
 done
