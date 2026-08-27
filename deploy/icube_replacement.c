@@ -89,14 +89,22 @@ static void ensure_asound_conf(void) {
     FILE *src = fopen("/mnt/sdcard/cubegm/asound.conf", "r");
     if (!src) { hlog("icube: cubegm/asound.conf missing (audio may be silent)\n"); return; }
     FILE *dst = fopen("/etc/asound.conf", "w");
-    if (!dst) { fclose(src); return; }
+    if (!dst) {
+        /* squashfs rootfs 的 /etc 是只读的，fallback 到 /tmp（可写） */
+        hlog("icube: /etc is read-only, using /tmp/asound.conf\n");
+        dst = fopen("/tmp/asound.conf", "w");
+        if (!dst) { fclose(src); return; }
+        setenv("ALSA_CONFIG_PATH", "/tmp/asound.conf", 1);
+    } else {
+        setenv("ALSA_CONFIG_PATH", "/etc/asound.conf", 1);
+    }
     char buf[512];
     size_t n;
     while ((n = fread(buf, 1, sizeof buf, src)) > 0)
         fwrite(buf, 1, n, dst);
     fclose(src);
     fclose(dst);
-    hlog("icube: wrote /etc/asound.conf (default PCM -> hw:0,0)\n");
+    hlog("icube: wrote asound.conf (default PCM -> hw:0,0)\n");
 }
 
 /* supervisor：循环 exec retroarch，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。 */
