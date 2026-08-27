@@ -75,6 +75,30 @@ static void set_cpu_performance(void) {
     }
 }
 
+/* v10.5 ALSA 官方机制（源码级，alsa-lib src/conf.c:4546-4693）：
+ *   ALSA_CONFIG_PATH 必须指向【配置文件】（默认 /usr/share/alsa/alsa.conf），
+ *   不是目录。snd_config_update_r 用 fopen() 读它；指向目录会 fopen 失败、
+ *   只报"cannot access file"不中断 -> 配置树为空 -> snd_pcm_open("default")
+ *   报 Unknown PCM（src/pcm/pcm.c:2720-2722）。
+ *   asound.conf 是附加配置，靠 alsa.conf 的 @hooks func load 引入；设备 rootfs
+ *   无任何 ALSA 配置 -> 直接把 asound.conf 当主配置：定义 pcm.default -> hw:0,0。
+ *   本函数确保 /etc/asound.conf 存在（root 可写 /etc）。 */
+static void ensure_asound_conf(void) {
+    FILE *f = fopen("/etc/asound.conf", "r");
+    if (f) { fclose(f); return; }
+    FILE *src = fopen("/mnt/sdcard/cubegm/asound.conf", "r");
+    if (!src) { hlog("icube: cubegm/asound.conf missing (audio may be silent)\n"); return; }
+    FILE *dst = fopen("/etc/asound.conf", "w");
+    if (!dst) { fclose(src); return; }
+    char buf[512];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof buf, src)) > 0)
+        fwrite(buf, 1, n, dst);
+    fclose(src);
+    fclose(dst);
+    hlog("icube: wrote /etc/asound.conf (default PCM -> hw:0,0)\n");
+}
+
 /* supervisor：循环 exec retroarch，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。 */
 static void run_supervisor(void) {
     int restart_count = 0;
@@ -119,9 +143,11 @@ int main(int argc, char **argv) {
     setenv("SDL_NOMOUSE", "1", 1);   /* SDL fbcon 黑屏根因修复 */
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
-    /* ALSA：设备无 ALSA 配置文件，部署 asound.conf（default→hw:0,0）到 /etc，
-       并设 ALSA_CONFIG_PATH=/etc 使 default PCM 可解析（纠偏报告 §11.3 定案） */
-    setenv("ALSA_CONFIG_PATH", "/etc", 1);
+    /* ALSA v10.5 官方机制：ALSA_CONFIG_PATH 指向【配置文件】/etc/asound.conf
+       （默认 /usr/share/alsa/alsa.conf；但设备 rootfs 无 ALSA 配置，用 asound.conf
+       直接定义 pcm.default->hw:0,0）。ensure_asound_conf 保证文件存在。 */
+    ensure_asound_conf();
+    setenv("ALSA_CONFIG_PATH", "/etc/asound.conf", 1);
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
 

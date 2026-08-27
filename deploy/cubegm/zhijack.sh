@@ -77,9 +77,12 @@ export SDL_NOMOUSE=1
 # cubegm/lib; picoarch's NEEDED entries resolve against it.
 export LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib:$LD_LIBRARY_PATH
 
-# ALSA：设备有双输出（HDMI pcm0p + 内置扬声器 pcm1p），需 ALSS_CONFIG_PATH
-# 指向 ALSA 配置目录（/usr/share/alsa），使 default PCM 能正确路由到双输出
-export ALSA_CONFIG_PATH=/usr/share/alsa
+# ALSA v10.5 官方机制（alsa-lib src/conf.c:4546-4693 源码级）：ALSA_CONFIG_PATH
+# 必须指向【配置文件】（默认 /usr/share/alsa/alsa.conf），不是目录。设备 rootfs
+# 无任何 ALSA 配置 -> 用 asound.conf 直接定义 pcm.default->hw:0,0（含双输出路由）。
+# 先确保 /etc/asound.conf 存在（原厂 rootfs 无；root 可写 /etc）。
+[ -f /etc/asound.conf ] || cp -f /mnt/sdcard/cubegm/asound.conf /etc/asound.conf 2>/dev/null
+export ALSA_CONFIG_PATH=/etc/asound.conf
 
 # CPU: force max-performance governor (helps every emulator).
 for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
