@@ -605,7 +605,14 @@ else
 fi
 cp -f "$CORE_OUT"/*.so               "$DST/cores/" 2>/dev/null || true
 # v9.6: 部署 autoconfig 配置文件（手柄自动识别）
-cp -f "$HERE/autoconfig/"*.cfg        "$DST/autoconfig/" 2>/dev/null && log "  autoconfig profiles deployed ($(ls "$DST/autoconfig/"*.cfg 2>/dev/null | wc -l) files)" || true
+# v10.3: 部署完整官方手柄特征库（按驱动子目录，RetroArch 按 driver+name+VID+PID 自动匹配）
+# 广泛适应性：插什么手柄认什么手柄，非单设备定制。
+for _drv in udev linuxraw sdl2 sdl3 android dinput xinput hid mfi parport qnx winraw x; do
+  [ -d "$HERE/joypad-autoconfig/$_drv" ] && cp -rf "$HERE/joypad-autoconfig/$_drv" "$DST/autoconfig/" 2>/dev/null
+done
+# 保留本地 VID:PID 精确兜底 profile（平铺目录，RetroArch 兜底扫描）
+cp -f "$HERE/autoconfig/"*.cfg        "$DST/autoconfig/" 2>/dev/null
+log "  autoconfig db deployed ($(find "$DST/autoconfig" -name '*.cfg' 2>/dev/null | wc -l) profiles)"
 # v8.7: alias snes9x2005_plus -> snes9x2005 (any old mapping / launch.txt that
 # references the non-plus name still resolves to the OPTIMISED core; the stock
 # snes9x2005 on the card was unoptimised -> ~1 FPS on 002 games).
