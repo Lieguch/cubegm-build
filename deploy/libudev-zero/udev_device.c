@@ -381,24 +381,27 @@ static int set_properties_from_uevent(struct udev_device *udev_device, const cha
 
 static void make_bit(unsigned long *arr, int cnt, const char *str)
 {
-    size_t len;
+    const char *p;
     int i;
 
     if (!str) {
         return;
     }
 
-    for (i = 0, len = strlen(str); len > 0; len--) {
-        if (str[len] == ' ') {
-            arr[i++] = strtoul(str + len + 1, NULL, 16);
-
-            if (i == cnt) {
-                return;
-            }
-        }
+    /* v11.4: FIX byte-order.  Old code walked the string from the END
+     * backwards (arr[i++] = strtoul(str+len+1)), which REVERSED the
+     * capability words.  For a gamepad whose KEY bits sit at 288-297
+     * (0x120-0x129, word 9 = 0x3ff), the reversal put 0x3ff into word
+     * 14, so test_bit(KEY 288..297) all returned false -> device never
+     * tagged ID_INPUT_JOYSTICK -> RetroArch udev filtered it out.
+     * This broke EVERY gamepad whose buttons lie above code 127, not
+     * just one vendor.  Parse left-to-right, exactly like systemd. */
+    p = str;
+    for (i = 0; i < cnt && *p; i++) {
+        arr[i] = (unsigned long)strtoul(p, (char **)&p, 16);
+        while (*p == ' ')
+            p++;
     }
-
-    arr[i] = strtoul(str, NULL, 16);
 }
 
 static int test_bit(unsigned long *arr, unsigned long bit)

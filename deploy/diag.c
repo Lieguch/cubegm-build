@@ -211,7 +211,11 @@ static void cmd_input(void) {
         logf("  device %d: %s (EV bits=%08lx)\n", i, names[nfd], evbits);
         if (evbits & (1ul << EV_KEY)) {
             logf("    KEY capabilities:\n");
-            unsigned long kb[4] = {0};
+            /* v11.4: kb 必须覆盖到 0x300 (768 bit)。旧版 kb[4]=16B=128bit,
+             * 只能看到 keycode 0-127 —— Twin USB 按键 288-297 (0x120-0x129)
+             * 远超范围 → KEY capabilities 永远空 → 误导诊断为"设备无按键"。
+             * 768 bit 需要 768/32 = 24 个 unsigned long (32-bit ARM)。 */
+            unsigned long kb[24] = {0};
             if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kb), kb) == 0)
                 for (int k = 0; k < 0x300; k++)
                     if ((kb[k/(8*sizeof(long))] >> (k%(8*sizeof(long)))) & 1)
@@ -267,6 +271,30 @@ static void cmd_keylog(void) {
         names[nfd][0] = 0;
         ioctl(fd, EVIOCGNAME(sizeof names[nfd]-1), names[nfd]);
         fprintf(kl, "# device %d: %s (EV bits=%08lx)\n", nfd, names[nfd], evbits);
+        /* v11.4 generic diag: dump full KEY + ABS capability bits so ANY
+         * gamepad's layout is visible in one boot — no per-device guessing.
+         * (evdev reports button codes 0..0x2ff; old 128-bit array missed
+         * everything above code 127, e.g. BTN_TRIGGER..BTN_GAMEPAD.) */
+        if (evbits & (1ul << EV_KEY)) {
+            unsigned long kb[24] = {0};
+            if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kb), kb) == 0) {
+                fprintf(kl, "#   KEY bits:");
+                for (int k = 0; k < 0x300; k++)
+                    if ((kb[k/(8*sizeof(long))] >> (k%(8*sizeof(long)))) & 1)
+                        fprintf(kl, " %d(0x%03x)", k, k);
+                fprintf(kl, "\n");
+            }
+        }
+        if (evbits & (1ul << EV_ABS)) {
+            unsigned long ab[24] = {0};
+            if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof ab), ab) == 0) {
+                fprintf(kl, "#   ABS bits:");
+                for (int a = 0; a < 0x60; a++)
+                    if ((ab[a/(8*sizeof(long))] >> (a%(8*sizeof(long)))) & 1)
+                        fprintf(kl, " %d", a);
+                fprintf(kl, "\n");
+            }
+        }
         fds[nfd++] = fd;
     }
     if (nfd == 0) { fprintf(kl, "# NO evdev devices found\n"); fflush(kl); fclose(kl); return; }
