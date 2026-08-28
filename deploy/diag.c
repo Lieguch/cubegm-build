@@ -211,7 +211,13 @@ static void cmd_input(void) {
         logf("  device %d: %s (EV bits=%08lx)\n", i, names[nfd], evbits);
         if (evbits & (1ul << EV_KEY)) {
             logf("    KEY capabilities:\n");
-            unsigned long kb[4] = {0};
+            /* v11.5: kb was `unsigned long kb[4]` = 128 bits, but the scan
+             * loop below goes to 0x300 = 768 bits -> out-of-bounds read,
+             * so any button above code 127 (BTN_TRIGGER=288 and up, used
+             * by classic gamepads like Twin USB 0810:0001) never showed
+             * up in diag_report.  Sizing the array for the full scan
+             * range fixes the diagnosis path. */
+            unsigned long kb[24] = {0};
             if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kb), kb) == 0)
                 for (int k = 0; k < 0x300; k++)
                     if ((kb[k/(8*sizeof(long))] >> (k%(8*sizeof(long)))) & 1)
@@ -267,6 +273,35 @@ static void cmd_keylog(void) {
         names[nfd][0] = 0;
         ioctl(fd, EVIOCGNAME(sizeof names[nfd]-1), names[nfd]);
         fprintf(kl, "# device %d: %s (EV bits=%08lx)\n", nfd, names[nfd], evbits);
+        /* v11.5: dump full KEY + ABS capability bitsets so the log itself
+         * proves whether the kernel exposes buttons/axes at all.  Before
+         * this, diag/keylog only showed the EV type mask, so a gamepad
+         * whose buttons live above code 127 looked identical to a dead
+         * device in the logs. */
+        unsigned long kbdump[24] = {0};
+        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kbdump), kbdump) == 0) {
+            fprintf(kl, "#   KEY bits:");
+            int any = 0;
+            for (int k = 0; k < 0x300; k++)
+                if ((kbdump[k/(8*sizeof(long))] >> (k%(8*sizeof(long)))) & 1) {
+                    if (any++ % 16 == 0) fprintf(kl, "\n#     ");
+                    fprintf(kl, "%d(0x%03x) ", k, k);
+                }
+            if (!any) fprintf(kl, " (none)");
+            fprintf(kl, "\n");
+        }
+        unsigned long absdump[4] = {0};
+        if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof absdump), absdump) == 0) {
+            fprintf(kl, "#   ABS bits:");
+            int any = 0;
+            for (int a = 0; a < 0x40; a++)
+                if ((absdump[a/(8*sizeof(long))] >> (a%(8*sizeof(long)))) & 1) {
+                    if (any++ % 16 == 0) fprintf(kl, "\n#     ");
+                    fprintf(kl, "%d(0x%02x) ", a, a);
+                }
+            if (!any) fprintf(kl, " (none)");
+            fprintf(kl, "\n");
+        }
         fds[nfd++] = fd;
     }
     if (nfd == 0) { fprintf(kl, "# NO evdev devices found\n"); fflush(kl); fclose(kl); return; }
