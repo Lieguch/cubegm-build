@@ -28,9 +28,16 @@ die(){ err "$*"; exit 1; }
 SRC="$HERE/libudev-zero"
 OUT="$SYSROOT/usr/lib/libudev.so.1"
 
-if [ -f "$OUT" ]; then
-    log "already in sysroot ($OUT) -- skip"
+# v11.2: 缓存逻辑修正。旧版 [ -f "$OUT" ] 直接跳过 —— 若 sysroot 里已有
+# 旧版 libudev.so.1（未含 v11.2 JOYSTICK 判定补丁），CI 会静默跳过编译，
+# 手柄补丁永远不生效。改为时间戳比较：任何源文件比输出新则强制重编。
+if [ -f "$OUT" ] && [ "$SRC/udev_device.c" -ot "$OUT" ] \
+   && [ "$SRC/udev.c" -ot "$OUT" ] && [ "$SRC/Makefile" -ot "$OUT" ]; then
+    log "libudev.so.1 up to date (source not newer) -- skip"
     exit 0
+fi
+if [ -f "$OUT" ]; then
+    log "source changed (udev_device.c/udev.c newer) -- force rebuild"
 fi
 
 [ -f "$SRC/udev.c" ] || die "libudev-zero source missing at $SRC (should be vendored)"

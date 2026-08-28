@@ -415,27 +415,36 @@ static void cmd_audio(void) {
         dlclose(h); return;
     }
     if (p_cfgfree) p_cfgfree();
-    void *pcm = NULL;
-    int rc = p_open(&pcm, "default", 0 /*PLAYBACK*/, 0);
-    logf("  snd_pcm_open(default) rc=%d pcm=%p\n", rc, pcm);
-    if (rc < 0 || !pcm) { dlclose(h); return; }
-    rc = p_sp(pcm, 2 /*S16_LE*/, 3 /*INTERLEAVED*/, 2, 44100, 1, 50000);
-    logf("  snd_pcm_set_params(44.1k stereo) rc=%d\n", rc);
-    if (rc < 0) { p_cl(pcm); dlclose(h); return; }
-    /* 1 kHz sine, 2 s */
-    int16_t buf[4410]; /* 0.1 s */
-    for (int i = 0; i < 4410; i++) {
-        double t = (double)i / 44100.0;
-        int16_t v = (int16_t)(12000.0 * (t * 1000.0 < 0.5 ? 1.0 : -1.0)); /* 1kHz square */
+    /* 1 kHz sine, 0.1 s buffer @48k (matches stock dmix rate) */
+    int16_t buf[4800];
+    for (int i = 0; i < 4800; i++) {
+        double t = (double)i / 48000.0;
+        int16_t v = (int16_t)(12000.0 * (t * 1000.0 < 0.5 ? 1.0 : -1.0));
         buf[i] = v;
     }
-    for (int rep = 0; rep < 20; rep++) { /* 20 x 0.1 s = 2 s */
-        long w = p_wr(pcm, buf, 4410);
-        if (w < 0) { logf("  writei rc=%ld (xrun?)\n", w); break; }
+    /* v11.2: probe EVERY device + default. No shell on device, so this
+     * per-device open/play result IS the audio truth: it tells us which
+     * PCM drives the built-in speaker (user confirmed stock plays BOTH
+     * HDMI + speaker simultaneously). 48k, S16_LE, stereo. */
+    const char *devs[] = { "hw:0,0", "hw:0,1", "default" };
+    for (unsigned di = 0; di < sizeof(devs)/sizeof(devs[0]); di++) {
+        void *pcm = NULL;
+        int rc = p_open(&pcm, devs[di], 0 /*PLAYBACK*/, 0);
+        logf("  [%s] open rc=%d pcm=%p\n", devs[di], rc, pcm);
+        if (rc < 0 || !pcm) continue;
+        rc = p_sp(pcm, 2 /*S16_LE*/, 3 /*INTERLEAVED*/, 2, 48000, 1, 50000);
+        logf("  [%s] set_params(48k stereo) rc=%d\n", devs[di], rc);
+        if (rc < 0) { p_cl(pcm); continue; }
+        long w = 0;
+        for (int rep = 0; rep < 10; rep++) { /* 10 x 0.1 s = 1 s */
+            w = p_wr(pcm, buf, 4800);
+            if (w < 0) { logf("  [%s] writei rc=%ld (xrun?)\n", devs[di], w); break; }
+        }
+        logf("  [%s] played 1 kHz 1 s rc=%ld -- HEARD? (speaker test)\n", devs[di], w);
+        p_cl(pcm);
     }
-    logf("  1 kHz square played 2 s -- did you HEAR it?\n");
-    p_cl(pcm); dlclose(h);
     logf("=== audio done ===\n");
+    dlclose(h);
 }
 
 /* ===========================================================================

@@ -459,14 +459,23 @@ static void set_properties_from_evdev(struct udev_device *udev_device)
     }
 
     if (test_bit(ev_bits, EV_ABS)) {
-        if (test_bit(key_bits, BTN_SELECT) || test_bit(key_bits, BTN_TR) ||
-            test_bit(key_bits, BTN_START) || test_bit(key_bits, BTN_TL)) {
-            if (test_bit(key_bits, BTN_TOUCH)) {
-                udev_list_entry_add(&udev_device->properties, "ID_INPUT_TOUCHSCREEN", "1", 0);
-            }
-            else {
-                udev_list_entry_add(&udev_device->properties, "ID_INPUT_JOYSTICK", "1", 0);
-            }
+        /* v11.2: align with systemd's udev-builtin-input_id.c joystick
+         * detection.  Old logic only matched BTN_SELECT/BTN_TR/BTN_START/
+         * BTN_TL (modern pads), so classic pads like Twin USB Gamepad
+         * (BTN_TRIGGER..BTN_BASE4 = 0x120..0x129) were never tagged
+         * ID_INPUT_JOYSTICK -> RetroArch udev driver filtered them out
+         * (add_match_property ID_INPUT_JOYSTICK=1) -> zero pads found.
+         * systemd counts every button in [BTN_JOYSTICK, BTN_DIGI) plus
+         * TRIGGER_HAPPY + DPAD ranges.  We mirror that here. */
+        int joy_buttons = 0;
+        for (int b = BTN_JOYSTICK; b < BTN_DIGI && joy_buttons < 16; b++)
+            if (test_bit(key_bits, b)) joy_buttons++;
+        for (int b = BTN_TRIGGER_HAPPY1; b <= BTN_TRIGGER_HAPPY40 && joy_buttons < 16; b++)
+            if (test_bit(key_bits, b)) joy_buttons++;
+        for (int b = BTN_DPAD_UP; b <= BTN_DPAD_RIGHT && joy_buttons < 16; b++)
+            if (test_bit(key_bits, b)) joy_buttons++;
+        if (joy_buttons > 0) {
+            udev_list_entry_add(&udev_device->properties, "ID_INPUT_JOYSTICK", "1", 0);
         }
         else if (test_bit(abs_bits, ABS_Y) && test_bit(abs_bits, ABS_X)) {
             if (test_bit(abs_bits, ABS_Z) && !test_bit(ev_bits, EV_KEY)) {
