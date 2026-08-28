@@ -642,7 +642,8 @@ cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
 cp -f "$HERE/retroarch.cfg"              "$DST/" 2>/dev/null || true
-    cp -f "$HERE/cubegm/asound.conf"          "$DST/" 2>/dev/null && log "  asound.conf deployed"
+    # v11.6 音频根治：部署 ~/.asoundrc（官方 alsa.conf @hooks 自动加载的双输出定义）。
+    cp -f "$HERE/cubegm/.asoundrc"           "$DST/" 2>/dev/null && log "  .asoundrc deployed"
 chmod +x "$DST/retroarch" "$DST/zhijack.sh" "$DST/autorun" 2>/dev/null || true
 
 # -----------------------------------------------------------------------------

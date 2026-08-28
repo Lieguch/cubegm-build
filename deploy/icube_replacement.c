@@ -76,23 +76,14 @@ static void set_cpu_performance(void) {
     }
 }
 
-/* v10.8 ALSA 官方机制（源码级，alsa-lib src/conf.c:4560-4568 + pcm.c:2720-2722）：
- *   ALSA_CONFIG_PATH 必须指向【已存在的配置文件】（默认 /usr/share/alsa/alsa.conf）。
- *   snd_config_update_r 用 fopen() 读它；文件不存在/是目录都会 fopen 失败、只报
- *   "cannot access file" 不中断 -> 配置树为空 -> snd_pcm_open("default") 报 Unknown PCM。
- *   设备 rootfs 无任何 ALSA 配置（squashfs 只读，/etc 不可写），payload 在
- *   /mnt/sdcard/cubegm/asound.conf 直接提供 pcm.default -> hw:0,0（build.sh
- *   STAGE 9 已打包）。因此不必复制到 /etc 或 /tmp —— 直接把 ALSA_CONFIG_PATH
- *   指向 TF 卡上该文件即可，最简且消除只读问题。本函数仅校验存在性。 */
-static void ensure_asound_conf(void) {
-    FILE *f = fopen("/mnt/sdcard/cubegm/asound.conf", "r");
-    if (!f) {
-        hlog("icube: cubegm/asound.conf MISSING (audio may be silent)\n");
-        return;
-    }
-    fclose(f);
-    hlog("icube: asound.conf OK at /mnt/sdcard/cubegm/asound.conf\n");
-}
+/* v11.6 音频根治（2026-08-28，rootfs 官方机制 + ~/.asoundrc，不打补丁）：
+ *   设备 rootfs 自带完整 /usr/share/alsa/alsa.conf（官方 pcm.default = empty->plug->hw card0，
+ *   及 @hooks 自动加载 /etc/asound.conf 与 ~/.asoundrc）。此前用 ALSA_CONFIG_PATH 覆盖整棵
+ *   配置树反而断链（hw:0,0/hw:0,1/default 全 Unknown/ENOENT，设备 diag 实证）。
+ *   v11.6 不再设置 ALSA_CONFIG_PATH：HOME=/mnt/sdcard/cubegm 已由下方 setenv 设定，
+ *   官方 alsa.conf 的 @hooks 会自动 include /mnt/sdcard/cubegm/.asoundrc（payload 已部署），
+ *   其中把 pcm.!default 定义为 plug->route->multi(hw:0,0 HDMI + hw:0,1 内置扬声器) 双输出
+ *   （内联 type hw，禁字符串 "hw:0,0"）。本机 ALSA 模拟已验证合并与解析正确。 */
 
 /* v10.9 开机即 Debug（用户硬性指令 2026-08-27）：
  * 主路径「替换 icube」开机后立即在后台派生 diag：
@@ -163,11 +154,8 @@ int main(int argc, char **argv) {
     setenv("XDG_CONFIG_HOME", WORK_DIR "/configs", 1);
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
-    /* ALSA v10.8 官方机制：ALSA_CONFIG_PATH 直接指向 TF 卡上已存在的
-       /mnt/sdcard/cubegm/asound.conf（build.sh STAGE 9 已打包部署），
-       定义 pcm.default->hw:0,0。无需写入 /etc 或 /tmp（rootfs squashfs 只读）。 */
-    ensure_asound_conf();
-    setenv("ALSA_CONFIG_PATH", "/mnt/sdcard/cubegm/asound.conf", 1);
+    /* v11.6：不再覆盖 ALSA_CONFIG_PATH。rootfs 官方 alsa.conf 的 @hooks 会根据
+       HOME=/mnt/sdcard/cubegm 自动加载 ~/.asoundrc（双输出定义，payload 已部署）。 */
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
 

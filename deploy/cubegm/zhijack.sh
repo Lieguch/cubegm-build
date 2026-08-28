@@ -77,12 +77,12 @@ export SDL_NOMOUSE=1
 # cubegm/lib; picoarch's NEEDED entries resolve against it.
 export LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib:$LD_LIBRARY_PATH
 
-# ALSA v10.8 官方机制（alsa-lib src/conf.c:4560-4568 源码级）：ALSA_CONFIG_PATH
-# 必须指向【已存在的配置文件】（默认 /usr/share/alsa/alsa.conf），不是目录。
-# 设备 rootfs 无任何 ALSA 配置（squashfs 只读，/etc 不可写），payload 在
-# /mnt/sdcard/cubegm/asound.conf 直接提供 pcm.default->hw:0,0（build.sh STAGE 9
-# 已打包）。直接把 ALSA_CONFIG_PATH 指向该文件即可，无需 /etc /tmp 复制。
-export ALSA_CONFIG_PATH=/mnt/sdcard/cubegm/asound.conf
+# v11.6 音频根治：不覆盖 ALSA_CONFIG_PATH（rootfs 自带官方 alsa.conf）。
+# 官方 alsa.conf 的 @hooks 会按 HOME 自动加载 ~/.asoundrc。fallback 路径此前
+# 未设 HOME（主路径 icube_replacement 有）——这里补齐 HOME + XDG_CONFIG_HOME，
+# 使两条路径一致，且 /mnt/sdcard/cubegm/.asoundrc（双输出，payload 已部署）生效。
+export HOME=/mnt/sdcard/cubegm
+export XDG_CONFIG_HOME=/mnt/sdcard/cubegm/configs
 
 # CPU: force max-performance governor (helps every emulator).
 for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
