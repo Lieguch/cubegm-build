@@ -77,10 +77,11 @@ export SDL_NOMOUSE=1
 # cubegm/lib; picoarch's NEEDED entries resolve against it.
 export LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib:$LD_LIBRARY_PATH
 
-# v11.7 音频根治（真根因）：payload 的 libasound.so.2 由 crosstool sysroot 编译，
+# v11.8 音频根治（共享 I2S 总线）：payload 的 libasound.so.2 由 crosstool sysroot 编译，
 # ALSA_CONFIG_DIR 写死为 CI 机路径（设备不存在）-> 官方 alsa.conf 加载不到 ->
-# Unknown PCM default。用官方 ALSA_CONFIG_PATH 直指自包含 asound.conf。
-# HOME/XDG_CONFIG_HOME 保留：保证两条启动路径一致 + 配置路径正确。
+# Unknown PCM default。用官方 ALSA_CONFIG_PATH 直指自包含 asound.conf（pcm.hw 官方模板
+# + pcm.!default=plug→hw:0,0 单点；I2S 总线共享让扬声器同流，本机模拟 0 Unknown PCM）。
+# 绝不 multi 双开。HOME/XDG_CONFIG_HOME 保留：保证两条启动路径一致 + 配置路径正确。
 export HOME=/mnt/sdcard/cubegm
 export XDG_CONFIG_HOME=/mnt/sdcard/cubegm/configs
 export ALSA_CONFIG_PATH=/mnt/sdcard/cubegm/asound.conf

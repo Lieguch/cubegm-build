@@ -76,14 +76,17 @@ static void set_cpu_performance(void) {
     }
 }
 
-/* v11.7 音频根治（2026-08-28，真根因，不打补丁）：
+/* v11.8 音频根治（2026-08-29，共享 I2S 总线，不打补丁）：
  *   payload 的 libasound.so.2 由 crosstool sysroot 编译，ALSA_CONFIG_DIR 写死为
  *   CI 机路径 /home/runner/cubegm-tc/.../sysroot/usr/share/alsa（设备不存在）→
  *   官方 alsa.conf 与 @hooks 全部加载不到 → Unknown PCM default（397 实机日志实证）。
- *   v11.6 曾改 rootfs 官方 alsa.conf + ~/.asoundrc，同样加载不到。
- *   v11.7 定案：官方环境变量 ALSA_CONFIG_PATH 直指自包含 asound.conf（pcm.hw +
- *   pcm.!default 双输出 multi(hw:0,0 HDMI + hw:0,1 扬声器)，无 datadir 依赖，本机模拟已验证）。
- */
+ *   rootfs 官方 alsa.conf 的 default 又是间接引用 cards.<driver>，cards/ 无
+ *   rockchiphdmi.conf → 官方链也无法解析（v11.6/397 复用官方链仍无声的根因）。
+ *   v11.8 定案（本机模拟 PASS，0 Unknown PCM）：官方环境变量 ALSA_CONFIG_PATH 直指
+ *   自包含 asound.conf —— pcm.hw(官方模板) + pcm.!default = plug→hw:0,0 单点
+ *   （HDMI）。RK3036 I2S 是单 DAI/单 TX DMA 共享物理总线（v4.4 rockchip_i2s.c），
+ *   内置扬声器(rk3036-voice) 靠总线广播同流出声 —— 原厂"单 PCM 双端响"是硬件机制。
+ *   绝不使用 multi 双开（393/394/398 黑屏家族诱因：同时开两个挂同一 I2S 的 PCM）。 */
 
 /* v10.9 开机即 Debug（用户硬性指令 2026-08-27）：
  * 主路径「替换 icube」开机后立即在后台派生 diag：
@@ -162,12 +165,13 @@ int main(int argc, char **argv) {
     setenv("XDG_CONFIG_HOME", WORK_DIR "/configs", 1);
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
-    /* v11.7 音频根治（真根因）：payload 的 libasound.so.2 由 crosstool sysroot 编译，
+    /* v11.8 音频根治（共享 I2S 总线）：payload 的 libasound.so.2 由 crosstool sysroot 编译，
        ALSA_CONFIG_DIR 写死为 CI 机路径 /home/runner/cubegm-tc/.../sysroot/usr/share/alsa，
-       设备上不存在 -> 官方 alsa.conf 与 @hooks 全部加载不到 -> Unknown PCM default
-       （397 实机 retroarch.log 实证 Cannot access file /home/runner/...）。
-       因此用官方环境变量 ALSA_CONFIG_PATH 直指自包含 asound.conf（cubegm/asound.conf，
-       已定义 pcm.hw + pcm.!default 双输出，无 datadir 依赖，本机模拟已验证解析成功）。 */
+       设备上不存在 -> 官方 alsa.conf 与 @hooks 全部加载不到 -> Unknown PCM default。
+       rootfs 官方 default 是间接引用 cards.<driver>（无 rockchiphdmi.conf）→ 官方链
+       也无法解析。因此用官方环境变量 ALSA_CONFIG_PATH 直指自包含 asound.conf（含
+       pcm.hw 官方模板 + pcm.!default = plug→hw:0,0 单点；I2S 总线共享让扬声器同流），
+       本机模拟 0 Unknown PCM。绝不 multi 双开。 */
     ensure_asound_conf();
     setenv("ALSA_CONFIG_PATH", "/mnt/sdcard/cubegm/asound.conf", 1);
     set_cpu_performance();
