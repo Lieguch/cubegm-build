@@ -128,8 +128,15 @@ static void run_supervisor(void) {
             int fd = open(RETROARCH_LOG, O_WRONLY | O_CREAT | O_APPEND, 0644);
             if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
             /* RetroArch 自带 RGUI 菜单。--menu 显式声明「无 content 也要驻留菜单」，
-             * 缺它会启动后立即退出（崩溃重启循环）。 */
-            execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu", (char *)NULL);
+             * 缺它会启动后立即退出（崩溃重启循环）。
+             * v11.11 DEBUG 日志：--verbose --log-file 让 RetroArch 把 [INFO]/
+             * [udev]/[Autoconf] 全部写进独立文件。之前的坑：stdout 重定向到
+             * 文件后是全缓冲（4 KB），RetroArch 不退出就不 flush，导致
+             * retroarch.log 里只剩 stderr 的 ALSA 错误、[INFO] 全部丢失，
+             * 手柄 udev 枚举/autoconfig 匹配是否发生完全看不见。 */
+            execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu",
+                  "--verbose",
+                  "--log-file=/mnt/sdcard/retroarch_ra.log", (char *)NULL);
             hlog("icube: exec retroarch FAILED\n");
             _exit(1);
         }
