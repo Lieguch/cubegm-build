@@ -218,7 +218,9 @@ static void cmd_input(void) {
              * up in diag_report.  Sizing the array for the full scan
              * range fixes the diagnosis path. */
             unsigned long kb[24] = {0};
-            if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kb), kb) == 0)
+            /* EVIOCGBIT returns bytes copied (>=0) on success; ==0 was a bug
+             * that made KEY capabilities NEVER print (same trap as keylog). */
+            if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kb), kb) >= 0)
                 for (int k = 0; k < 0x300; k++)
                     if ((kb[k/(8*sizeof(long))] >> (k%(8*sizeof(long)))) & 1)
                         logf("      KEY/BTN %3d (0x%03x)\n", k, k);
@@ -260,7 +262,7 @@ static void cmd_input(void) {
  * ========================================================================== */
 #define KEYLOG "/mnt/sdcard/keylog.txt"
 static void cmd_keylog(void) {
-    int fds[16]; int nfd = 0; char names[16][128];
+    int fds[16]; int nfd = 0; char names[16][128]; int devidx[16];
     FILE *kl = fopen(KEYLOG, "ab");
     if (!kl) { fprintf(stderr, "keylog: cannot open %s\n", KEYLOG); return; }
     fprintf(kl, "# CubeGM keylog started %s", ctime(&(time_t){time(NULL)}));
@@ -272,6 +274,7 @@ static void cmd_keylog(void) {
         if (ioctl(fd, EVIOCGBIT(0, sizeof evbits), &evbits) < 0) { close(fd); continue; }
         names[nfd][0] = 0;
         ioctl(fd, EVIOCGNAME(sizeof names[nfd]-1), names[nfd]);
+        devidx[nfd] = i;
         fprintf(kl, "# device %d: %s (EV bits=%08lx)\n", nfd, names[nfd], evbits);
         /* v11.5: dump full KEY + ABS capability bitsets so the log itself
          * proves whether the kernel exposes buttons/axes at all.  Before
@@ -279,7 +282,7 @@ static void cmd_keylog(void) {
          * whose buttons live above code 127 looked identical to a dead
          * device in the logs. */
         unsigned long kbdump[24] = {0};
-        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kbdump), kbdump) == 0) {
+        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof kbdump), kbdump) >= 0) {
             fprintf(kl, "#   KEY bits:");
             int any = 0;
             for (int k = 0; k < 0x300; k++)
@@ -291,7 +294,7 @@ static void cmd_keylog(void) {
             fprintf(kl, "\n");
         }
         unsigned long absdump[4] = {0};
-        if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof absdump), absdump) == 0) {
+        if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof absdump), absdump) >= 0) {
             fprintf(kl, "#   ABS bits:");
             int any = 0;
             for (int a = 0; a < 0x40; a++)
@@ -307,7 +310,67 @@ static void cmd_keylog(void) {
     if (nfd == 0) { fprintf(kl, "# NO evdev devices found\n"); fflush(kl); fclose(kl); return; }
     fflush(kl);
     /* continuous loop: never exits (daemon). Log every input event. */
+    long long last_rescan = 0, last_grabprobe = 0;
     for (;;) {
+        long long ms = (long long)time(NULL) * 1000;
+        /* ---- DEBUG A：设备出现时间线。每 3 s 重扫 /dev/input/eventN，新出现的
+         * 设备（如 USB 手柄枚举较慢）此前永远不被 keylog 看到 → 误判"手柄没插"。
+         * 现在记录 NEW 设备 + 能力位，回答"手柄何时被内核枚举、早于/晚于
+         * RetroArch 启动"。 ---- */
+        if (ms - last_rescan > 3000) {
+            last_rescan = ms;
+            for (int i = 0; i < 16; i++) {
+                int dup = 0;
+                for (int j = 0; j < nfd; j++) if (devidx[j] == i) { dup = 1; break; }
+                if (dup) continue;
+                char path[64]; snprintf(path, sizeof path, "/dev/input/event%d", i);
+                int nf = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+                if (nf < 0) continue;
+                char nm[128]; nm[0] = 0;
+                ioctl(nf, EVIOCGNAME(sizeof nm - 1), nm);
+                if (!nm[0]) { close(nf); continue; }
+                if (nfd < 16) {
+                    unsigned long evbits = 0;
+                    ioctl(nf, EVIOCGBIT(0, sizeof evbits), &evbits);
+                    fds[nfd] = nf; strncpy(names[nfd], nm, 127); names[nfd][127] = 0; devidx[nfd] = i;
+                    time_t now = time(NULL);
+                    struct tm tm; localtime_r(&now, &tm);
+                    fprintf(kl, "# [DEBUG:%02d:%02d:%02d] NEW device %d: %s (EV bits=%08lx)\n",
+                            tm.tm_hour, tm.tm_min, tm.tm_sec, nfd, nm, evbits);
+                    fflush(kl);
+                    nfd++;
+                } else close(nf);
+            }
+        }
+        /* ---- DEBUG B：EVIOCGRAB 主动探测。每 5 s 对一个设备尝试 grab 并立即
+         * 释放：成功=未被任何进程独占(FREE)；EBUSY=被某进程独占(BUSY)。
+         * 内核语义：grab 后非 grabber 的 read 返回 EAGAIN（与"无事件"不可分），
+         * 所以只有主动 EVIOCGRAB 能判定"设备被独占"vs"内核无事件"。
+         * 注：RetroArch 官方 udev 驱动并不 grab 设备（已验证 udev_joypad.c
+         * 无 EVIOCGRAB），BUSY 若出现说明是其他进程独占。 ---- */
+        if (nfd > 0 && ms - last_grabprobe > 5000) {
+            last_grabprobe = ms;
+            static int frac = 0; int idx = (frac++) % nfd;
+            char path[64]; snprintf(path, sizeof path, "/dev/input/event%d", devidx[idx]);
+            int gp = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+            if (gp >= 0) {
+                time_t now = time(NULL);
+                struct tm tm; localtime_r(&now, &tm);
+                if (ioctl(gp, EVIOCGRAB, (void*)1) == 0) {
+                    ioctl(gp, EVIOCGRAB, (void*)0);   /* free immediately, no steal */
+                    fprintf(kl, "# [DEBUG:%02d:%02d:%02d] GRABPROBE event%d(%s): FREE\n",
+                            tm.tm_hour, tm.tm_min, tm.tm_sec, devidx[idx], names[idx]);
+                } else if (errno == EBUSY) {
+                    fprintf(kl, "# [DEBUG:%02d:%02d:%02d] GRABPROBE event%d(%s): BUSY (grabbed by another process)\n",
+                            tm.tm_hour, tm.tm_min, tm.tm_sec, devidx[idx], names[idx]);
+                } else {
+                    fprintf(kl, "# [DEBUG:%02d:%02d:%02d] GRABPROBE event%d(%s): errno=%d\n",
+                            tm.tm_hour, tm.tm_min, tm.tm_sec, devidx[idx], names[idx], errno);
+                }
+                fflush(kl);
+                close(gp);
+            }
+        }
         for (int i = 0; i < nfd; i++) {
             struct input_event ev;
             ssize_t rd;
@@ -320,6 +383,19 @@ static void cmd_keylog(void) {
                             tm.tm_hour, tm.tm_min, tm.tm_sec, names[i],
                             ev.type, ev.code, ev.code, ev.value);
                     fflush(kl);
+                }
+            }
+            /* only ENODEV (device removed) is meaningful here: grab leaves read()
+             * returning EAGAIN, so "device vanished" is the one diagnosable error. */
+            if (rd == -1 && errno == ENODEV) {
+                static int reported_once[16];
+                if (!reported_once[i]) {
+                    time_t now = time(NULL);
+                    struct tm tm; localtime_r(&now, &tm);
+                    fprintf(kl, "[%02d:%02d:%02d] [%s] READ-ERR ENODEV (device removed)\n",
+                            tm.tm_hour, tm.tm_min, tm.tm_sec, names[i]);
+                    fflush(kl);
+                    reported_once[i] = 1;
                 }
             }
         }
