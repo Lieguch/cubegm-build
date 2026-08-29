@@ -76,17 +76,14 @@ static void set_cpu_performance(void) {
     }
 }
 
-/* v11.8 音频根治（2026-08-29，共享 I2S 总线，不打补丁）：
- *   payload 的 libasound.so.2 由 crosstool sysroot 编译，ALSA_CONFIG_DIR 写死为
- *   CI 机路径 /home/runner/cubegm-tc/.../sysroot/usr/share/alsa（设备不存在）→
- *   官方 alsa.conf 与 @hooks 全部加载不到 → Unknown PCM default（397 实机日志实证）。
- *   rootfs 官方 alsa.conf 的 default 又是间接引用 cards.<driver>，cards/ 无
- *   rockchiphdmi.conf → 官方链也无法解析（v11.6/397 复用官方链仍无声的根因）。
- *   v11.8 定案（本机模拟 PASS，0 Unknown PCM）：官方环境变量 ALSA_CONFIG_PATH 直指
- *   自包含 asound.conf —— pcm.hw(官方模板) + pcm.!default = plug→hw:0,0 单点
- *   （HDMI）。RK3036 I2S 是单 DAI/单 TX DMA 共享物理总线（v4.4 rockchip_i2s.c），
- *   内置扬声器(rk3036-voice) 靠总线广播同流出声 —— 原厂"单 PCM 双端响"是硬件机制。
- *   绝不使用 multi 双开（393/394/398 黑屏家族诱因：同时开两个挂同一 I2S 的 PCM）。 */
+/* v11.6 音频根治（2026-08-28，rootfs 官方机制 + ~/.asoundrc，不打补丁）：
+ *   设备 rootfs 自带完整 /usr/share/alsa/alsa.conf（官方 pcm.default = empty->plug->hw card0，
+ *   及 @hooks 自动加载 /etc/asound.conf 与 ~/.asoundrc）。此前用 ALSA_CONFIG_PATH 覆盖整棵
+ *   配置树反而断链（hw:0,0/hw:0,1/default 全 Unknown/ENOENT，设备 diag 实证）。
+ *   v11.6 不再设置 ALSA_CONFIG_PATH：HOME=/mnt/sdcard/cubegm 已由下方 setenv 设定，
+ *   官方 alsa.conf 的 @hooks 会自动 include /mnt/sdcard/cubegm/.asoundrc（payload 已部署），
+ *   其中把 pcm.!default 定义为 plug->route->multi(hw:0,0 HDMI + hw:0,1 内置扬声器) 双输出
+ *   （内联 type hw，禁字符串 "hw:0,0"）。本机 ALSA 模拟已验证合并与解析正确。 */
 
 /* v10.9 开机即 Debug（用户硬性指令 2026-08-27）：
  * 主路径「替换 icube」开机后立即在后台派生 diag：
@@ -111,14 +108,6 @@ static void run_diag_bg(const char *arg) {
 }
 
 /* supervisor：循环 exec retroarch，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。 */
-/* 校验 asound.conf 存在（ALSA_CONFIG_PATH 目标）。仅存在性检查。 */
-static void ensure_asound_conf(void) {
-    FILE *f = fopen("/mnt/sdcard/cubegm/asound.conf", "r");
-    if (!f) { hlog("icube: cubegm/asound.conf MISSING (audio will fail)\n"); return; }
-    fclose(f);
-    hlog("icube: asound.conf OK at /mnt/sdcard/cubegm/asound.conf\n");
-}
-
 static void run_supervisor(void) {
     int restart_count = 0;
     for (;;) {
@@ -133,7 +122,9 @@ static void run_supervisor(void) {
              * [udev]/[Autoconf] 全部写进独立文件。之前的坑：stdout 重定向到
              * 文件后是全缓冲（4 KB），RetroArch 不退出就不 flush，导致
              * retroarch.log 里只剩 stderr 的 ALSA 错误、[INFO] 全部丢失，
-             * 手柄 udev 枚举/autoconfig 匹配是否发生完全看不见。 */
+             * 手柄 udev 枚举/autoconfig 匹配是否发生完全看不见。
+             * 注：本版不设 ALSA_CONFIG_PATH（397 基线音频机制，rootfs 官方链
+             * + ~/.asoundrc），避免引入 399/400 疑似宕机变量。 */
             execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu",
                   "--verbose",
                   "--log-file=/mnt/sdcard/retroarch_ra.log", (char *)NULL);
@@ -172,15 +163,8 @@ int main(int argc, char **argv) {
     setenv("XDG_CONFIG_HOME", WORK_DIR "/configs", 1);
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
-    /* v11.8 音频根治（共享 I2S 总线）：payload 的 libasound.so.2 由 crosstool sysroot 编译，
-       ALSA_CONFIG_DIR 写死为 CI 机路径 /home/runner/cubegm-tc/.../sysroot/usr/share/alsa，
-       设备上不存在 -> 官方 alsa.conf 与 @hooks 全部加载不到 -> Unknown PCM default。
-       rootfs 官方 default 是间接引用 cards.<driver>（无 rockchiphdmi.conf）→ 官方链
-       也无法解析。因此用官方环境变量 ALSA_CONFIG_PATH 直指自包含 asound.conf（含
-       pcm.hw 官方模板 + pcm.!default = plug→hw:0,0 单点；I2S 总线共享让扬声器同流），
-       本机模拟 0 Unknown PCM。绝不 multi 双开。 */
-    ensure_asound_conf();
-    setenv("ALSA_CONFIG_PATH", "/mnt/sdcard/cubegm/asound.conf", 1);
+    /* v11.6：不再覆盖 ALSA_CONFIG_PATH。rootfs 官方 alsa.conf 的 @hooks 会根据
+       HOME=/mnt/sdcard/cubegm 自动加载 ~/.asoundrc（双输出定义，payload 已部署）。 */
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
 
