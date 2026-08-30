@@ -27,6 +27,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -69,6 +70,51 @@ static void cleanup_stale_libasound(void) {
         if (unlink(paths[i]) == 0)
             hlog("icube: removed stale libasound (fallback to device original 1.1.5)\n");
     }
+}
+
+/* v0.4 (2026-08-30): 音频配置强制回落 —— 根治 402/403「切驱动无声 + Driver 卡死」。
+ * 根因（源码级）：用户在菜单保存配置 → 设备端 retroarch.cfg 的 audio_driver 被覆盖
+ * 成 "tinyalsa"。tinyalsa 是同步阻塞驱动（pcm_wait(-1) 死等）+ 只写 hw:0,0
+ * (HDMI 数字端点，内置扬声器在 hw:0,1) + pcm_close 不恢复硬件状态 → 无声 + 切驱动卡死。
+ * 本函数每次启动把 RETROARCH_CFG 的 audio_driver 强制为 alsathread、
+ * audio_device 强制为 default、config_save_on_exit 强制为 false
+ * （防止用户菜单保存再次覆盖）。与 build.sh --disable-tinyalsa 构成双保险：
+ * 即使设备端 cfg 残留 tinyalsa，二进制里也找不到该驱动 → audio_driver_find_driver
+ * 回落 audio_drivers[0]（alsa 同步非阻塞）。 */
+static void force_audio_cfg(void) {
+    FILE *f = fopen(RETROARCH_CFG, "r");
+    FILE *tmp;
+    char line[512];
+    char tmp_path[160];
+    int have_driver = 0, have_device = 0, have_save = 0;
+
+    if (!f) return; /* cfg 不存在则 RetroArch 用内置默认（alsa），下轮生成 */
+    snprintf(tmp_path, sizeof tmp_path, "%s.tmp", RETROARCH_CFG);
+    tmp = fopen(tmp_path, "w");
+    if (!tmp) { fclose(f); return; }
+
+    while (fgets(line, sizeof line, f)) {
+        if (strncmp(line, "audio_driver", 12) == 0) {
+            fputs("audio_driver = \"alsathread\"\n", tmp);
+            have_driver = 1;
+        } else if (strncmp(line, "audio_device", 12) == 0) {
+            fputs("audio_device = \"default\"\n", tmp);
+            have_device = 1;
+        } else if (strncmp(line, "config_save_on_exit", 19) == 0) {
+            fputs("config_save_on_exit = \"false\"\n", tmp);
+            have_save = 1;
+        } else {
+            fputs(line, tmp);
+        }
+    }
+    fclose(f);
+    if (!have_driver) fputs("audio_driver = \"alsathread\"\n", tmp);
+    if (!have_device) fputs("audio_device = \"default\"\n", tmp);
+    if (!have_save)   fputs("config_save_on_exit = \"false\"\n", tmp);
+    fclose(tmp);
+    if (rename(tmp_path, RETROARCH_CFG) != 0)
+        remove(tmp_path);
+    hlog("icube: forced audio cfg (alsathread + default + no-save-exit)\n");
 }
 
 /* 写 /tmp/tfdevice.env（对齐 zhijack.sh，保留设备几何约定便于诊断与人工覆盖）。 */
@@ -179,6 +225,11 @@ int main(int argc, char **argv) {
     /* v0.3 (2026-08-30): 启动即清理残留 libasound（旧 payload 的 1.2.10 CI-路径版），
        强制回落设备 rootfs 原厂 1.1.5（正确 ALSA_CONFIG_DIR=/usr/share/alsa）。 */
     cleanup_stale_libasound();
+
+    /* v0.4 (2026-08-30): 音频配置强制回落（alsathread + default + no-save-exit）。
+       在 diag/retroarch 任何派生之前执行，确保设备端 cfg 残留的 tinyalsa 每次开机
+       都被纠正为 alsathread —— 根治 402/403「切驱动无声 + Driver 卡死」。 */
+    force_audio_cfg();
 
     /* 1. 设备环境：tfdevice.env + TF_* 导出 + 库路径 + 黑屏修复 + CPU 调度 */
     write_tfdevice_env();

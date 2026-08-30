@@ -162,6 +162,23 @@ sleep 0.3
 RETROARCH=/mnt/sdcard/cubegm/retroarch
 RETROARCH_CFG=/mnt/sdcard/cubegm/retroarch.cfg
 
+# v0.4 (2026-08-30): 音频配置强制回落 —— 与主路径 icube_replacement 一致。
+# 设备端 cfg 残留的 tinyalsa 会在每次启动被纠正为 alsathread + default，
+# 并禁用 config_save_on_exit（防止用户菜单保存再次覆盖）。
+# tinyalsa 是同步阻塞驱动 + 只写 hw:0,0(HDMI数字端点) + pcm_close 不恢复硬件，
+# 是 402/403「切驱动无声 + Driver 卡死」的根源；build.sh --disable-tinyalsa 后
+# 二进制里已无该驱动，此处再强制 cfg 双保险。
+_sed_cfg() { # $1=key $2=value
+    if grep -q "^$1 *=" "$RETROARCH_CFG" 2>/dev/null; then
+        sed -i "s|^$1 *=.*|$1 = \"$2\"|" "$RETROARCH_CFG"
+    else
+        printf '%s = "%s"\n' "$1" "$2" >> "$RETROARCH_CFG"
+    fi
+}
+_sed_cfg audio_driver alsathread
+_sed_cfg audio_device default
+_sed_cfg config_save_on_exit false
+
 if [ -e /dev/watchdog ]; then
     echo "zhijack: /dev/watchdog PRESENT -- petting each loop" >> "$LOG"
 fi

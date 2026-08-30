@@ -344,6 +344,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
         --enable-alsa \
+        --disable-tinyalsa \
         --enable-udev \
         --disable-plain_drm --disable-kms --disable-egl \
         --disable-opengl --disable-opengl1 \
