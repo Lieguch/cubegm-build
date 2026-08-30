@@ -608,6 +608,26 @@ DST="$HERE/cubegm"
 mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system" "$DST/autoconfig"
 # v10.1: 部署中文字体（RGUI 渲染中文必须）
 cp -f "$HERE/cubegm/font.ttf"              "$DST/" 2>/dev/null && log "  font.ttf deployed ($(ls -lh "$DST/font.ttf" 2>/dev/null | awk '{print $5}'))" || true
+# v0.2 (中文根治): 部署 RGUI 官方位图字体（RetroArch 官方 retroarch-assets 仓库
+#   rgui/font/ 下的 rzip 位图字体）。RGUI 按 user_language 动态加载对应字形：
+#   bitmap10x10_chn.bin=简体/繁体中文(0x4E00-0x9FFF, 解压 272896B)、jpn/kor/rus。
+#   此前 payload 缺失这些 .bin → 中文翻译(16676组)虽已编译进二进制，但
+#   bitmapfont_10x10_load() 读文件失败返回 NULL → 中文无字形显示。配合
+#   retroarch.cfg assets_directory=/mnt/sdcard/cubegm/assets 生效。
+mkdir -p "$DST/assets/rgui/font"
+if ls "$HERE/assets/rgui/font/"*.bin >/dev/null 2>&1; then
+    cp -f "$HERE/assets/rgui/font/"*.bin "$DST/assets/rgui/font/" 2>/dev/null \
+        && log "  RGUI bitmap fonts deployed ($(ls "$DST/assets/rgui/font/"*.bin 2>/dev/null | wc -l) .bin)"
+else
+    log "WARN: $HERE/assets/rgui/font/*.bin missing -- downloading from retroarch-assets..."
+    mkdir -p "$HERE/assets/rgui/font"
+    for _f in bitmap10x10_chn bitmap10x10_eng bitmap10x10_jpn bitmap10x10_kor bitmap10x10_rus bitmap6x10_eng bitmap6x10_lse; do
+        curl -sL --max-time 60 "https://raw.githubusercontent.com/libretro/retroarch-assets/master/rgui/font/$_f.bin" \
+            -o "$HERE/assets/rgui/font/$_f.bin" || log "WARN: download failed for $_f.bin"
+    done
+    cp -f "$HERE/assets/rgui/font/"*.bin "$DST/assets/rgui/font/" 2>/dev/null \
+        && log "  RGUI bitmap fonts deployed ($(ls "$DST/assets/rgui/font/"*.bin 2>/dev/null | wc -l) .bin)"
+fi
 if [ -f RetroArch/retroarch ]; then
     cp -f RetroArch/retroarch        "$DST/"
 else
@@ -683,21 +703,31 @@ if [ -f "$HERE/icube_replacement.c" ]; then
     fi
 fi
 
-# STAGE 9b -- bundle runtime libs picoarch + frogui need into cubegm/lib
-#   The device rootfs does NOT ship SDL/libpng12/z/asound (see zhijack.sh:
-#   LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib). picoarch is linked against those,
+# STAGE 9b -- bundle runtime libs into cubegm/lib
+#   The device rootfs does NOT ship SDL/libpng12/z (see zhijack.sh:
+#   LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib). RetroArch is linked against those,
 #   so without them it dies at load time ("cannot open shared object file")
 #   and the screen never lights. Copy every NEEDED .so (and transitive deps)
 #   from the sysroot into $DST/lib. Base libs (libc/libm/pthread/dl/gcc/ld)
 #   are provided by the device rootfs, so we exclude them to avoid shipping a
 #   second glibc that could mismatch the device's dynamic linker.
+#   例外：libasound.so.2 也由设备 rootfs 提供（原厂 1.1.5）——因其编译期
+#   ALSA_CONFIG_DIR 正确指向 rootfs /usr/share/alsa，优于 sysroot 1.2.10 的
+#   CI 路径，已归入 BASE_LIBS 排除（音频方案A，见 STAGE 9b 上方 BASE_LIBS 说明）。
 # -----------------------------------------------------------------------------
 log "Bundling runtime libs into $DST/lib ..."
 mkdir -p "$DST/lib"
 READELF="${CROSS_COMPILE}readelf"
-# base libs the device rootfs always provides -- do NOT bundle these
+# base libs the device rootfs always provides -- do NOT bundle these.
+# v0.2 (音频方案A): libasound.so.2 也归入 BASE_LIBS。设备 rootfs 自带原厂
+#   alsa-lib 1.1.5 (/usr/lib/libasound.so.2 -> 2.0.0)，其编译期 ALSA_CONFIG_DIR
+#   = /usr/share/alsa（正确指向 rootfs 内完整配置树），且 ABI 经 readelf 验证
+#   覆盖 RetroArch 全部 76 个 snd_* 引用符号（0 缺失）。crosstool sysroot 的
+#   1.2.10 版会因 ALSA_CONFIG_DIR 指向 CI 路径 (/home/runner/...) 覆盖 rootfs
+#   配置树 → "Unknown PCM" 无声。故不再打包 libasound，让 LD_LIBRARY_PATH
+#   找不到时回落到 rootfs 原厂库（原版音质，无重采样）。
 BASE_LIBS="libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 libgcc_s.so.1 \
-           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.29.so"
+           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.29.so libasound.so.2"
 # v8.8: libstdc++.so.6/libatomic.so.1 removed from BASE_LIBS and forced into the
 # bundle. diag-285 on-device cores scan showed nestopia/snes9x/vice_x64 failing
 # with "GLIBCXX_3.4.32 not found": the device's /usr/lib/libstdc++.so.6 is too
@@ -728,8 +758,9 @@ done
 # direct NEEDED (it may be loaded via DT_NEEDED of another bundled lib).
 _queue+=("libstdc++.so.6" "libatomic.so.1")
 # fallback: if readelf was unavailable, seed the known direct deps
+# (libasound.so.2 不在此列：音频方案A 改为回落 device rootfs 原厂 1.1.5)
 if [ ${#_queue[@]} -eq 0 ]; then
-    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2)
+    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1)
     log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
