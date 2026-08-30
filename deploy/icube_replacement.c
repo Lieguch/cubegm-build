@@ -46,6 +46,31 @@ static void hlog(const char *msg) {
     fclose(f);
 }
 
+/* v0.3 (2026-08-30): 音频确定性根治 —— 清理残留 libasound
+ * 旧 payload (399/400/401) 把 crosstool 的 1.2.10 libasound.so.2 打进 cubegm/lib，
+ * 其编译期 ALSA_CONFIG_DIR=/home/runner/...（CI 路径）在设备上不存在 →
+ * 配置树加载失败 → "Unknown PCM default"。402 起 payload 不再打包 libasound，
+ * 但用户覆盖拷贝不删除旧文件 → 残留 1.2.10 仍被 LD_LIBRARY_PATH 优先加载。
+ * 此处每次启动主动清除 cubegm/lib 与 cubegm/usr/lib 下的 libasound 残留，
+ * 强制回落设备 rootfs 原厂 1.1.5（ALSA_CONFIG_DIR=/usr/share/alsa，rootfs 有
+ * 完整配置树 + @hooks 自动加载 ~/.asoundrc 双输出）。已验证 ABI：RetroArch 76 个
+ * snd_* 符号 1.1.5 全覆盖（0 缺失）。
+ * 不设 ALSA_CONFIG_PATH、不碰 asound.conf → 天然避开 399/400 宕机组合。 */
+static void cleanup_stale_libasound(void) {
+    static const char *paths[] = {
+        WORK_DIR "/lib/libasound.so.2",
+        WORK_DIR "/lib/libasound.so",
+        WORK_DIR "/usr/lib/libasound.so.2",
+        WORK_DIR "/usr/lib/libasound.so",
+        NULL
+    };
+    int i;
+    for (i = 0; paths[i]; i++) {
+        if (unlink(paths[i]) == 0)
+            hlog("icube: removed stale libasound (fallback to device original 1.1.5)\n");
+    }
+}
+
 /* 写 /tmp/tfdevice.env（对齐 zhijack.sh，保留设备几何约定便于诊断与人工覆盖）。 */
 static void write_tfdevice_env(void) {
     FILE *f = fopen("/tmp/tfdevice.env", "w");
@@ -151,6 +176,10 @@ int main(int argc, char **argv) {
 
     hlog("icube (replacement) v10.0 starting (RetroArch launcher)\n");
 
+    /* v0.3 (2026-08-30): 启动即清理残留 libasound（旧 payload 的 1.2.10 CI-路径版），
+       强制回落设备 rootfs 原厂 1.1.5（正确 ALSA_CONFIG_DIR=/usr/share/alsa）。 */
+    cleanup_stale_libasound();
+
     /* 1. 设备环境：tfdevice.env + TF_* 导出 + 库路径 + 黑屏修复 + CPU 调度 */
     write_tfdevice_env();
     setenv("TF_DEVICE", "rk3036g", 1);
@@ -161,6 +190,13 @@ int main(int argc, char **argv) {
     setenv("HOME", WORK_DIR, 1);     /* v11.0: 修 "//.config" 双斜杠 —— RetroArch
                                         getenv("HOME") 拼用户路径，未设则解析为空 */
     setenv("XDG_CONFIG_HOME", WORK_DIR "/configs", 1);
+    /* v0.3 (2026-08-30): 中文确定性根治 —— 强制 RGUI 字体路径。
+     * 用户保存配置（切音频驱动）会重写 retroarch.cfg，assets_directory 可能被
+     * 重置为 "default" → configuration.c 使 directory_assets='\0'（空）→ RGUI
+     * 在空路径拼 "rgui/font" 找不到 bitmap10x10_chn.bin → MISSING_FONTS 回退英文。
+     * configuration.c:6858 官方机制：LIBRETRO_ASSETS_DIRECTORY 环境变量优先级最高，
+     * 强制覆盖配置值。payload 字体部署在 <assets>/rgui/font/（7 个官方 .bin）。 */
+    setenv("LIBRETRO_ASSETS_DIRECTORY", WORK_DIR "/assets", 1);
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
     /* v11.6：不再覆盖 ALSA_CONFIG_PATH。rootfs 官方 alsa.conf 的 @hooks 会根据
