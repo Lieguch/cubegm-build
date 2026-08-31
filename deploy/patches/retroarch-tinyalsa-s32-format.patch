@@ -1,0 +1,14 @@
+--- a/audio/drivers/tinyalsa.c
++++ b/audio/drivers/tinyalsa.c
+@@ -2226,8 +2226,9 @@ static void * tinyalsa_init(const char *devicestr, unsigned rate,
+    if (orig_rate != rate)
+       *new_rate = rate;
+ 
+-   config.format            = is_little_endian() ?\
+-                              PCM_FORMAT_S16_LE : PCM_FORMAT_S16_BE;
++   /* v0.6 (2026-08-31): 升位深到设备上限 S32_LE —— RK3036 I2S/PCM
++    * 硬件规格支持 16bit 到 32bit（rockchip.wikidot.com/rk3036） */
++   config.format            = PCM_FORMAT_S32_LE;
+    config.channels          = 2;
+    config.period_size       = 1024;
+    config.period_count      = 4;

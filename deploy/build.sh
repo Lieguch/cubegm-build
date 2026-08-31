@@ -323,6 +323,15 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # RetroArch 的 -I 传递不可靠，已在 20+ 次 CI 里反复验证为死路。
     # 输入：udev 驱动（libudev-zero 无 udevd 也能枚举/热插拔，见 STAGE 4.7）。
     # 禁用 GL/EGL/Vulkan/X11/Wayland：设备无 GPU/无 X server。禁用 SDL2/SDL3
+
+    # v0.6 (2026-08-31): 升 tinyalsa format 到 S32_LE —— 设备硬件上限
+    # RK3036 I2S/PCM 支持 16bit 到 32bit（rockchip.wikidot.com/rk3036）
+    # 补丁文件: patches/retroarch-tinyalsa-s32-format.patch
+    if [ -f patches/retroarch-tinyalsa-s32-format.patch ]; then
+        git apply --check patches/retroarch-tinyalsa-s32-format.patch && \
+            git apply patches/retroarch-tinyalsa-s32-format.patch || \
+            die "tinyalsa format patch failed"
+    fi
     # 强制使用 SDL1.2（与 sysroot 已有的 libSDL.so 一致）。
     # RetroArch configure 用环境变量传交叉编译器，不是命令行 CC=
     export CC="${CROSS_COMPILE}gcc"
