@@ -329,15 +329,19 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # RetroArch 的 -I 传递不可靠，已在 20+ 次 CI 里反复验证为死路。
     # 输入：udev 驱动（libudev-zero 无 udevd 也能枚举/热插拔，见 STAGE 4.7）。
     # 禁用 GL/EGL/Vulkan/X11/Wayland：设备无 GPU/无 X server。禁用 SDL2/SDL3
-    # v0.7 (2026-08-31): 升 tinyalsa format 到 S32_LE —— 设备硬件上限
-    # RK3036 I2S/PCM 支持 16bit 到 32bit（rockchip.wikidot.com/rk3036）
+    # v0.8 (2026-08-31): tinyalsa S32_LE + S16->S32 zero-pad 转换（根治 407 无声）
+    # 一体 patch 含两个改动：
+    #   1) tinyalsa_init:  config.format = S32_LE（升位深到设备上限 32bit）
+    #   2) tinyalsa_write: 帧长 > 32bit 且非 float 时把 S16 交错流转换为 S32
+    #      （int16->int32 符号扩展），使 pcm_writei 字节对齐正确。
+    # 根因: 407 实测 Frame size=8B 但内核 I2S VDW=16 运行 -> 帧错位 -> 静音。
     # 用 $HERE 绝对路径（v0.6 曾因 cd RetroArch 后相对路径失效静默跳过）
-    if [ -f "$HERE/patches/retroarch-tinyalsa-s32-format.patch" ]; then
-        git apply --check "$HERE/patches/retroarch-tinyalsa-s32-format.patch" && \
-            git apply "$HERE/patches/retroarch-tinyalsa-s32-format.patch" || \
-            die "tinyalsa S32 format patch failed"
+    if [ -f "$HERE/patches/retroarch-tinyalsa-s32-zeropad.patch" ]; then
+        git apply --check "$HERE/patches/retroarch-tinyalsa-s32-zeropad.patch" && \
+            git apply "$HERE/patches/retroarch-tinyalsa-s32-zeropad.patch" || \
+            die "tinyalsa S32 zero-pad patch failed"
     else
-        die "tinyalsa S32 format patch missing ($HERE/patches/retroarch-tinyalsa-s32-format.patch)"
+        die "tinyalsa S32 zero-pad patch missing ($HERE/patches/retroarch-tinyalsa-s32-zeropad.patch)"
     fi
     # 强制使用 SDL1.2（与 sysroot 已有的 libSDL.so 一致）。
     # RetroArch configure 用环境变量传交叉编译器，不是命令行 CC=
