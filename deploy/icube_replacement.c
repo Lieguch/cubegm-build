@@ -77,7 +77,7 @@ static void cleanup_stale_libasound(void) {
  * 成 "tinyalsa"。tinyalsa 是同步阻塞驱动（pcm_wait(-1) 死等）+ 只写 hw:0,0
  * (HDMI 数字端点，内置扬声器在 hw:0,1) + pcm_close 不恢复硬件状态 → 无声 + 切驱动卡死。
  * 本函数每次启动把 RETROARCH_CFG 的 audio_driver 强制为 alsathread、
- * audio_device 强制为 default、config_save_on_exit 强制为 false
+ * audio_device 强制为 hw:0,0（i2s-hifi 主端点，共享广播双渠道）、config_save_on_exit 强制为 false
  * （防止用户菜单保存再次覆盖）。与 build.sh --disable-tinyalsa 构成双保险：
  * 即使设备端 cfg 残留 tinyalsa，二进制里也找不到该驱动 → audio_driver_find_driver
  * 回落 audio_drivers[0]（alsa 同步非阻塞）。 */
@@ -98,7 +98,7 @@ static void force_audio_cfg(void) {
             fputs("audio_driver = \"alsathread\"\n", tmp);
             have_driver = 1;
         } else if (strncmp(line, "audio_device", 12) == 0) {
-            fputs("audio_device = \"default\"\n", tmp);
+            fputs("audio_device = \"hw:0,0\"\n", tmp);
             have_device = 1;
         } else if (strncmp(line, "config_save_on_exit", 19) == 0) {
             fputs("config_save_on_exit = \"false\"\n", tmp);
@@ -109,12 +109,12 @@ static void force_audio_cfg(void) {
     }
     fclose(f);
     if (!have_driver) fputs("audio_driver = \"alsathread\"\n", tmp);
-    if (!have_device) fputs("audio_device = \"default\"\n", tmp);
+    if (!have_device) fputs("audio_device = \"hw:0,0\"\n", tmp);
     if (!have_save)   fputs("config_save_on_exit = \"false\"\n", tmp);
     fclose(tmp);
     if (rename(tmp_path, RETROARCH_CFG) != 0)
         remove(tmp_path);
-    hlog("icube: forced audio cfg (alsathread + default + no-save-exit)\n");
+    hlog("icube: forced audio cfg (alsathread + hw:0,0 + no-save-exit)\n");
 }
 
 /* 写 /tmp/tfdevice.env（对齐 zhijack.sh，保留设备几何约定便于诊断与人工覆盖）。 */
@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
        强制回落设备 rootfs 原厂 1.1.5（正确 ALSA_CONFIG_DIR=/usr/share/alsa）。 */
     cleanup_stale_libasound();
 
-    /* v0.4 (2026-08-30): 音频配置强制回落（alsathread + default + no-save-exit）。
+    /* v0.5 (2026-08-31): 音频配置强制回落（alsathread + hw:0,0 + no-save-exit）。
        在 diag/retroarch 任何派生之前执行，确保设备端 cfg 残留的 tinyalsa 每次开机
        都被纠正为 alsathread —— 根治 402/403「切驱动无声 + Driver 卡死」。 */
     force_audio_cfg();
