@@ -303,16 +303,22 @@ elif [ -d RetroArch ]; then
     ln -sf "$WORKDIR/RetroArch" RetroArch
 else
     log "Cloning RetroArch (shallow, to save time; submodules init later)..."
-    git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
+    git clone "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
         die "RetroArch clone failed."
-    # Initialize submodules (libretro-common, deps)
-    cd "$WORKDIR/RetroArch" && git submodule update --init --recursive 2>&1 || \
+    # v0.7 (2026-08-31): 锁定 RetroArch 到 282a12d —— 402 实测可用稳定版
+    # 根因: 402 用 282a12d 正常, 406 漂移到 285d685 (63 commits 含
+    # audio_driver.c 重写 +86/-48) 导致无法启动。必须固定 commit。
+    cd "$WORKDIR/RetroArch" && git checkout 282a12d || \
+        die "RetroArch checkout 282a12d failed."
+    git submodule update --init --recursive 2>&1 || \
         die "RetroArch submodule init failed."
     cd "$HERE"
     ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
 fi
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
+    # v0.7 (2026-08-31): 缓存复用路径也强制锁定 282a12d（幂等）
+    git checkout 282a12d 2>/dev/null || die "RetroArch checkout 282a12d failed (cached)"
     # ---- 显示/音频策略（2026-08-25 定案，基于权威源码验证）----
     # 设备 = RK3036G 无 GPU framebuffer。项目已在 build_sdl_libpng.sh 将
     # SDL 1.2.15 (fbcon 视频 + ALSA 音频) 交叉编译进 sysroot，且 picoarch
@@ -323,6 +329,16 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # RetroArch 的 -I 传递不可靠，已在 20+ 次 CI 里反复验证为死路。
     # 输入：udev 驱动（libudev-zero 无 udevd 也能枚举/热插拔，见 STAGE 4.7）。
     # 禁用 GL/EGL/Vulkan/X11/Wayland：设备无 GPU/无 X server。禁用 SDL2/SDL3
+    # v0.7 (2026-08-31): 升 tinyalsa format 到 S32_LE —— 设备硬件上限
+    # RK3036 I2S/PCM 支持 16bit 到 32bit（rockchip.wikidot.com/rk3036）
+    # 用 $HERE 绝对路径（v0.6 曾因 cd RetroArch 后相对路径失效静默跳过）
+    if [ -f "$HERE/patches/retroarch-tinyalsa-s32-format.patch" ]; then
+        git apply --check "$HERE/patches/retroarch-tinyalsa-s32-format.patch" && \
+            git apply "$HERE/patches/retroarch-tinyalsa-s32-format.patch" || \
+            die "tinyalsa S32 format patch failed"
+    else
+        die "tinyalsa S32 format patch missing ($HERE/patches/retroarch-tinyalsa-s32-format.patch)"
+    fi
     # 强制使用 SDL1.2（与 sysroot 已有的 libSDL.so 一致）。
     # RetroArch configure 用环境变量传交叉编译器，不是命令行 CC=
     export CC="${CROSS_COMPILE}gcc"
