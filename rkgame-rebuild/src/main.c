@@ -36,6 +36,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdarg.h>
 
 #include "rkgame.h"
 
@@ -63,6 +64,49 @@ sram_state_t sram_state = { 0 };
 joy_device_t joy_devs[MAX_DEVICES] = { 0 };
 int joy_dev_count = 0;
 rkgame_config_t g_cfg = { 0 };
+
+/* ---- 日志（rklog 实现） ---- */
+
+void rklog(int level, const char *fmt, ...)
+{
+    va_list ap;
+    const char *prefix;
+    switch (level) {
+        case RKLOG_ERROR: prefix = "[RK-E]"; break;
+        case RKLOG_WARN:  prefix = "[RK-W]"; break;
+        case RKLOG_INFO:  prefix = "[RK-I]"; break;
+        default:          prefix = "[RK-D]"; break;
+    }
+    fprintf(stderr, "%s ", prefix);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "\n");
+}
+
+/* ---- 显示层占位实现（DRM/KMS 待 Phase 4 实现） ---- */
+
+void disp_init(void)         { LOG("disp_init: placeholder"); }
+void disp_shutdown(void)     { LOG("disp_shutdown"); }
+void disp_set_rotation(uint32_t rot) { LOG("disp_set_rotation: %u", rot); }
+void disp_set_colormode(int mode)    { LOG("disp_set_colormode: %d", mode); }
+void disp_flip(const void *buf, unsigned w, unsigned h, size_t p)
+{
+    (void)buf; (void)w; (void)h; (void)p;
+}
+
+/* ---- 音频层占位实现（ALSA 待 Phase 4 实现） ---- */
+
+void audio_init(void)         { LOG("audio_init: placeholder"); }
+void audio_shutdown(void)     { LOG("audio_shutdown"); }
+void audio_play(const void *buf, size_t frames)
+{
+    (void)buf; (void)frames;
+}
+
+/* ---- 配置保存占位 ---- */
+
+void config_save(void) { LOG("config_save: not implemented"); }
 
 /* ---- 工具函数 ---- */
 

@@ -45,9 +45,7 @@
 
 #include "rkgame.h"
 
-/* ---- 全局 ---- */
-joy_device_t joy_devs[MAX_DEVICES] = { 0 };
-int joy_dev_count = 0;
+/* joy_devs / joy_dev_count 定义在 main.c */
 
 /* ---- 内置手柄映射表（常见设备） ---- */
 

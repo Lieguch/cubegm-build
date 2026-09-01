@@ -29,9 +29,7 @@
 
 #include "rkgame.h"
 
-/* ---- 全局 core 句柄 ---- */
-void *core_handle = NULL;
-retro_ctx_t ctx = { 0 };
+/* core_handle / ctx 定义在 main.c，这里只作为本文件局部使用（extern 由 rkgame.h 声明） */
 
 /* ---- 配置项表 ---- */
 static char corecfg[16000];
@@ -194,7 +192,7 @@ int core_load(const char *rom_path, const char *core_name)
     }
 
     /* ---- 步骤 9：加载 ROM ---- */
-    struct retro_game_info game_info = { 0 };
+    retro_game_info_t game_info = { 0 };
     game_info.path = rom_path;
     game_info.data = NULL;   /* 原版本地文件，core 自行打开 */
     game_info.size = 0;

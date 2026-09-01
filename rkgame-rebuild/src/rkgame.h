@@ -24,6 +24,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* libretro 核心所需结构体（不链接 libretro，本地定义） */
+typedef struct {
+    const char *path;
+    const void *data;
+    size_t     size;
+    const char *metadata;
+} retro_game_info_t;
+
 /* ---- 全局状态 ---- */
 
 extern char     work_path[512];    /* /sdcard/cubegm/ */

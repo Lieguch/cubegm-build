@@ -37,14 +37,7 @@
 
 #include "rkgame.h"
 
-/* ---- 全局 SRAM 状态 ---- */
-sram_state_t sram_state = {
-    .path = SRAMSHIM_DEFAULT_DIR,
-    .interval_sec = SRAMSHIM_DEFAULT_INTERVAL,
-    .dirty = false,
-    .active = false,
-    .save_fd = -1,
-};
+/* sram_state 定义在 main.c，本文件只作为外部引用 */
 
 /* ---- 后台落盘线程 ---- */
 
@@ -204,7 +197,14 @@ static void sram_write_file(void)
 
 void sram_init(void)
 {
-    /* 从环境变量读取配置 */
+    /* 初始化全局 sram_state 默认值 */
+    memset(&sram_state, 0, sizeof(sram_state));
+    sram_state.interval_sec = SRAMSHIM_DEFAULT_INTERVAL;
+    sram_state.save_fd = -1;
+    sram_state.dirty = false;
+    sram_state.active = false;
+    sram_state.size = 0;
+    sram_state.buf = NULL;
     char *dir_env = getenv("SRAMSHIM_DIR");
     if (dir_env) {
         snprintf(save_directory, sizeof(save_directory), "%s", dir_env);

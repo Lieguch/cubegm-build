@@ -49,6 +49,9 @@ list(FILTER SRC_FILES EXCLUDE REGEX ".*\\.h$")
 # ---- 头文件 ----
 include_directories(src)
 
+# ---- 输出目录（必须在 add_executable 之前） ----
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output")
+
 # ---- 构建可执行文件 ----
 add_executable(rkgame ${SRC_FILES})
 
@@ -58,9 +61,6 @@ target_link_libraries(rkgame
         pthread
         m
 )
-
-# ---- 输出目录 ----
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output")
 
 # ---- 安装 ----
 install(TARGETS rkgame DESTINATION .)
