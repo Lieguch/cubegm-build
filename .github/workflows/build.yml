@@ -14,7 +14,7 @@ name: Build CubeGM firmware (RK3036G)
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, v0.8-multichannel-zeropad ]
   workflow_dispatch:
 
 permissions:

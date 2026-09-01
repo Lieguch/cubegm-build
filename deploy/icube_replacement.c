@@ -53,19 +53,31 @@ static void hlog(const char *msg) {
  * 不再打包 libasound，但用户覆盖拷贝不删旧文件 → 残留 1.2.10 仍被 LD_LIBRARY_PATH
  * 优先加载。此处每次启动主动 unlink cubegm/lib 与 cubegm/usr/lib 下的 libasound
  * 残留，强制回落设备 rootfs 原厂 1.1.5（ALSA_CONFIG_DIR=/usr/share/alsa，rootfs
- * 有完整配置树 + @hooks 自动加载 ~/.asoundrc）。不设 ALSA_CONFIG_PATH、不碰其余 lib。 */
+ * 有完整配置树 + @hooks 自动加载 ~/.asoundrc）。不设 ALSA_CONFIG_PATH、不碰其余 lib。
+ *
+ * v0.11 (2026-09-01, 442 音频回归修复): 同步清 asound.conf / .asoundrc 残留。
+ * 旧 payload 的 asound.conf（v11.8 写死 pcm.!default = plug → hw:0,0，无 format
+ * 锁）会与新 payload（v0.11 锁 S16）冲突 → 用户覆盖拷贝不删旧文件 → 旧 asound.conf
+ * 被 ALSA_CONFIG_PATH=~/.asoundrc 加载（rootfs alsa.conf @hooks 自动 include），
+ * 导致 S32 underrun 复发。同步 unlink 强制回落新 payload 的 asound.conf。 */
 static void cleanup_stale_libasound(void) {
     static const char *paths[] = {
+        /* libasound 残留（v0.3 根治） */
         WORK_DIR "/lib/libasound.so.2",
         WORK_DIR "/lib/libasound.so",
         WORK_DIR "/usr/lib/libasound.so.2",
         WORK_DIR "/usr/lib/libasound.so",
+        /* asound 配置残留（v0.11 根治） */
+        WORK_DIR "/.asoundrc",
+        WORK_DIR "/asound.conf",
+        /* retroarch 旧 cfg 备份（含旧 audio_format=s32 等脏值） */
+        WORK_DIR "/configs/retroarch/retroarch.cfg.bak",
         NULL
     };
     int i;
     for (i = 0; paths[i]; i++) {
         if (unlink(paths[i]) == 0)
-            hlog("icube: removed stale libasound (fallback to device original 1.1.5)\n");
+            hlog("icube: removed stale libasound/asound (fallback to rootfs/device original)\n");
     }
 }
 

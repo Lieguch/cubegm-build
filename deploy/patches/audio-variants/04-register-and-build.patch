@@ -1,24 +1,24 @@
-From: CubeGM v0.10 <hermes@local>
+From: CubeGM v0.11 <hermes@local>
 Subject: [PATCH] 04-register-and-build.patch
 
-v0.10: 注册+Makefile。
+v0.11: 矩阵 driver 注册默认禁用（回归 401/402 基线），OBJ/Makefile 保留。
 
 diff --git a/Makefile.common b/Makefile.common
 index c7f7d58..06d1310 100644
 --- a/Makefile.common
 +++ b/Makefile.common
 @@ -853,6 +853,8 @@ endif
- 
+
  ifeq ($(HAVE_ALSA), 1)
     OBJ += audio/drivers/alsa.o \
 +          audio/drivers/alsa-s24.o \
 +          audio/drivers/alsa-s32.o \
            audio/common/alsa.o
- 
+
     ifneq ($(HAVE_HAKCHI), 1)
 @@ -869,7 +871,12 @@ ifeq ($(HAVE_ALSA), 1)
  endif
- 
+
  ifeq ($(HAVE_TINYALSA), 1)
 -   OBJ += audio/drivers/tinyalsa.o
 +   OBJ += audio/drivers/tinyalsa.o \
@@ -29,30 +29,36 @@ index c7f7d58..06d1310 100644
 +          audio/drivers/tinyalsa-s16-p512.o
     DEFINES += -DHAVE_TINYALSA
  endif
- 
+
 diff --git a/audio/audio_driver.c b/audio/audio_driver.c
 index 990781c..f100077 100644
 --- a/audio/audio_driver.c
 +++ b/audio/audio_driver.c
-@@ -194,12 +194,21 @@ audio_driver_t audio_null = {
+@@ -194,12 +194,27 @@ audio_driver_t audio_null = {
  audio_driver_t *audio_drivers[] = {
  #ifdef HAVE_ALSA
     &audio_alsa,
-+   &audio_alsa_s24,
-+   &audio_alsa_s32,
++   /* v0.11 (2026-09-01): 矩阵注册项默认禁用 —— 回归 401/402 单 driver 基线。
++    * 442 实机：11 driver autoprobe 导致 retroarch 启动后 15s 内遍历全部，
++    * 最终停在 alsa S32 持续 underrun 静默。OBJ 仍编译进二进制（用户可
++    * 手动取消本注释自测），但 audio_drivers[] 不注册 -> autoprobe 跳过。
++    * &audio_alsa_s24,
++    * &audio_alsa_s32, */
  #if !defined(__QNX__) && !defined(MIYOO) && defined(HAVE_THREADS)
     &audio_alsathread,
-+   &audio_alsathread_s24,
-+   &audio_alsathread_s32,
++   /* &audio_alsathread_s24,
++    * &audio_alsathread_s32, */
  #endif
  #endif
  #ifdef HAVE_TINYALSA
     &audio_tinyalsa,
-+   &audio_tinyalsa_s24_3le,
-+   &audio_tinyalsa_s24,
-+   &audio_tinyalsa_s32,
-+   &audio_tinyalsa_s16_p256,
-+   &audio_tinyalsa_s16_p512,
++   /* v0.11: tinyalsa 变体默认禁（tinyalsa 是基石，不应被替换）。
++    * 409 已证 S32 zero-pad 把 tinyalsa 弄哑，s24_3le 在 RK3036 直接 EINVAL。
++    * &audio_tinyalsa_s24_3le,
++    * &audio_tinyalsa_s24,
++    * &audio_tinyalsa_s32,
++    * &audio_tinyalsa_s16_p256,
++    * &audio_tinyalsa_s16_p512, */
  #endif
  #if defined(HAVE_AUDIOIO)
     &audio_audioio,
@@ -77,4 +83,3 @@ index 3dbe764..9b4236a 100644
  extern audio_driver_t audio_roar;
  extern audio_driver_t audio_openal;
  extern audio_driver_t audio_opensl;
-

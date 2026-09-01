@@ -86,8 +86,13 @@ export XDG_CONFIG_HOME=/mnt/sdcard/cubegm/configs
 
 # v0.3 (2026-08-30，回归修复): 清理残留 libasound（旧 payload 的 1.2.10 CI-路径版，
 # 覆盖拷贝不删旧文件）。强制回落设备 rootfs 原厂 1.1.5（ALSA_CONFIG_DIR=/usr/share/alsa 正确）。
+# v0.11 (2026-09-01, 442 音频回归修复): 同步清 .asoundrc/asound.conf 残留。
+# 旧 .asoundrc（v11.8 无 format 锁）会与新 .asoundrc（v0.11 锁 S16_LE）冲突 ->
+# 用户覆盖拷贝不删旧文件 -> 旧 .asoundrc 被加载 -> S32 underrun 复发。同步 unlink 强制回落。
 rm -f /mnt/sdcard/cubegm/lib/libasound.so.2 /mnt/sdcard/cubegm/lib/libasound.so \
-      /mnt/sdcard/cubegm/usr/lib/libasound.so.2 /mnt/sdcard/cubegm/usr/lib/libasound.so
+      /mnt/sdcard/cubegm/usr/lib/libasound.so.2 /mnt/sdcard/cubegm/usr/lib/libasound.so \
+      /mnt/sdcard/cubegm/.asoundrc /mnt/sdcard/cubegm/asound.conf \
+      /mnt/sdcard/cubegm/configs/retroarch/retroarch.cfg.bak
 
 # CPU: force max-performance governor (helps every emulator).
 for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do

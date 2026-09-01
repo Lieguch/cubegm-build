@@ -1,20 +1,66 @@
-# CubeGM ~/.asoundrc — 音频根治 v11.8 定稿（官方 @hooks 自动加载，不打补丁）
-# 设备 rootfs 自带 /usr/share/alsa/alsa.conf；其 @hooks 加载 /etc/asound.conf 与 ~/.asoundrc。
+# CubeGM ~/.asoundrc — v0.11（锁 S16_LE + 命名前缀避免冲突）
+# =================================================================
+# 设备 rootfs 自带 /usr/share/alsa/alsa.conf；其 @hooks 加载 ~/.asoundrc。
 # HOME=/mnt/sdcard/cubegm -> 本文件 = /mnt/sdcard/cubegm/.asoundrc，开机自动生效。
+# build.sh STAGE 9 部署：cp -f $HERE/cubegm/.asoundrc $DST/ (line 694-695)
 #
 # 硬件事实（linux v4.4 sound/soc/rockchip/rockchip_i2s.c 权威源码）：
 #   RK3036 I2S = 单 TX DMA 通道、单 playback DAI、共享物理总线。
 #   SDI/SDO/BCLK/LRCK 同时连 HDMI(device 0 = i2s-hifi) 和内置扬声器(device 1 = rk3036-voice)。
 #   -> 写 hw:0,0 时同一条数据也被扬声器接收 -> 原厂"单 PCM 双端响"是硬件广播，不是 ALSA multi。
 #
-# 铁律：禁 pcm.multi / dual / dualroute —— 同时打开两个挂同一 I2S 控制器的 PCM
+# 关键铁律（v0.11 用户定案 2026-09-01）：
+#   - acodec-ana 物理只支持 S16_LE；S24/S32 必 underrun/zero-pad 静默
+#   - 442 实机：plug 路径 open S32 成功但 snd_pcm_recover 持续触发 -> 静音
+#   - 修复：slave 节点锁 format S16_LE + rate 48000 + channels 2，plug 层无
+#     需做用户态格式转换 -> 零 underrun
+#
+# 命名避坑（alsa.conf 144 行 pcm.hdmi = cards.pcm.hdmi 引用）：
+#   - 备选设备不能叫 pcm.hdmi / pcm.default / pcm.sysdefault（已被引用）
+#   - 用 cubegm_ 前缀：pcm.cubegm_hdmi / pcm.cubegm_speaker
+#   - pcm.!default 用 ! 强制覆盖系统的 pcm.default 引用
+#
+# 禁用 pcm.multi / dual / dualroute —— 同时打开两个挂同一 I2S 控制器的 PCM
 #       是 393/394/398「小幅改音频→黑屏零日志」家族的共同诱因。
 #       正确形态 = 单点 plug->hw:0,0（原厂 driver.so 即 snd_pcm_open("default") 单开）。
+# =================================================================
+
+# --- 默认输出（强制覆盖系统 pcm.default 引用）：plug 锁 S16_LE -> hw:0,0 ---
 pcm.!default {
     type plug
-    slave.pcm { type hw card 0 device 0 }
+    slave {
+        pcm "hw:0,0"
+        format S16_LE
+        rate 48000
+        channels 2
+    }
 }
 
+# --- 独立命名设备（诊断 + 用户手动选择 audio_device=...）---
+# cubegm_hdmi = 共享总线到扬声器路径（与 default 等价，仅作显式命名）
+pcm.cubegm_hdmi {
+    type plug
+    slave {
+        pcm "hw:0,0"
+        format S16_LE
+        rate 48000
+        channels 2
+    }
+}
+
+# cubegm_speaker = 直通内置扬声器（绕过 HDMI 端点；fallback 用）
+# 选 audio_device="cubegm_speaker" 即可让 retroarch 走 hw:0,1
+pcm.cubegm_speaker {
+    type plug
+    slave {
+        pcm "hw:0,1"
+        format S16_LE
+        rate 48000
+        channels 2
+    }
+}
+
+# --- 控制接口（强制覆盖）---
 ctl.!default {
     type hw
     card 0
