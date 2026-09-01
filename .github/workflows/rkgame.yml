@@ -1,8 +1,17 @@
 name: rkgame-rebuild
-on:/n  push:/n    paths:/n      - "rkgame-rebuild/**"
-  workflow_dispatch:/njobs:/n  build:/n    runs-on: ubuntu-22.04
-    steps:/n      - uses: actions/checkout@v4
+
+on:
+  push:
+    paths:
+      - "rkgame-rebuild/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
       - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf cmake
       - run: arm-linux-gnueabihf-gcc --version
-      - run: cmake -S rkgame-rebuild -B rkgame-rebuild/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Linux && cmake --build rkgame-rebuild/build -j8
+      - run: cmake -S rkgame-rebuild -B rkgame-rebuild/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Linux && cmake --build rkgame-rebuild/build -j$(nproc)
       - run: arm-linux-gnueabihf-objdump -T rkgame-rebuild/build/output/rkgame | head -30
