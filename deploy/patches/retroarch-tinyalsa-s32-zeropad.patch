@@ -1,7 +1,7 @@
-diff --git a/RetroArch/audio/drivers/tinyalsa.c b/RetroArch/audio/drivers/tinyalsa.c
+diff --git a/audio/drivers/tinyalsa.c b/audio/drivers/tinyalsa.c
 index 9ecfeba..f757575 100644
---- a/RetroArch/audio/drivers/tinyalsa.c
-+++ b/RetroArch/audio/drivers/tinyalsa.c
+--- a/audio/drivers/tinyalsa.c
++++ b/audio/drivers/tinyalsa.c
 @@ -2226,8 +2226,7 @@ static void * tinyalsa_init(const char *devicestr, unsigned rate,
        *new_rate = rate;
  
