@@ -38,11 +38,11 @@ jobs:
           echo "=== ELF header ==="
           file "$OUT"
           # Verify e_flags = hard-float (bit 10 set, 0x400)
-          # readelf 输出带逗号（"0x5000400, hard-float ABI"），awk 取 $2 得 "0x5000400,"，
-          # printf "%d" 遇逗号返回 0 → 必须 tr 去逗号
+          # readelf 输出 "Flags: 0x5000400, hard-float ABI"
+          # awk $2 → "0x5000400,"，tr -d 去逗号 → "0x5000400"（已含 0x 前缀）
           FLAGS=$(arm-linux-gnueabihf-readelf -h "$OUT" | grep "Flags:" | awk '{print $2}' | tr -d ',')
-          echo "e_flags=0x${FLAGS}"
-          HEX_FLAGS=$(printf "%d" "0x${FLAGS}")
+          echo "e_flags=${FLAGS}"
+          HEX_FLAGS=$(printf "%d" "${FLAGS}")
           FLOAT_ABI=$(( (HEX_FLAGS >> 9) & 0x3 ))
           echo "Float ABI: $FLOAT_ABI (0=soft, 1=softfp, 2=hardfp)"
           if [ "$FLOAT_ABI" != "2" ]; then
