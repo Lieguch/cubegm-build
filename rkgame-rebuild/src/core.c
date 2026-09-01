@@ -24,8 +24,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dlfcn.h>
+
+/* ★★★ 不 include <dlfcn.h>！
+ * 原因：GCC 14 在 glibc 2.35+ sysroot 下，dlfcn.h 内 dlopen 声明无版本标签，
+ * 编译器生成对 dlopen 的引用时链接器选 sysroot 默认版本 @GLIBC_2.34。
+ * 设备 glibc 2.29 只导出 dlopen@@GLIBC_2.4 → 运行时 symbol lookup error。
+ * 替代：显式声明版本化 dlopen/dlsym/dlclose，并手动定义 RTLD_NOW。 */
+#define RTLD_NOW 2
+extern void *dlopen(const char *file, int mode)
+    __asm__("dlopen@GLIBC_2.4");
+extern void *dlsym(void *handle, const char *name)
+    __asm__("dlsym@GLIBC_2.4");
+extern int  dlclose(void *handle)
+    __asm__("dlclose@GLIBC_2.4");
+
 #include <pthread.h>
+
+/* pthread_create 在 pthread.h 内已被声明；这里额外指定 asm-name 锁死版本。
+ * 必须放在 pthread.h 之后（否则与 pthread.h 声明冲突），但 pthread_create
+ * 在 glibc 2.4 就已存在，链接器不会把它升级到 2.34。 */
+extern int  pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                           void *(*start)(void *), void *arg)
+    __asm__("pthread_create@GLIBC_2.4");
 
 #include "rkgame.h"
 
@@ -33,21 +53,6 @@
 
 /* ---- 配置项表 ---- */
 static char corecfg[16000];
-
-/* ---- 版本化符号声明（锁定到设备 glibc 2.29 导出的版本） ---- */
-
-/* 编译环境 glibc 2.35 默认将 dlopen 绑定到 GLIBC_2.34，
- * 设备 glibc 2.29 只导出 GLIBC_2.4。用 __asm__ 设置符号名锁定版本。 */
-
-extern void *dlopen(const char *file, int mode)
-    __asm__("dlopen@GLIBC_2.4");
-extern void *dlsym(void *handle, const char *name)
-    __asm__("dlsym@GLIBC_2.4");
-extern int  dlclose(void *handle)
-    __asm__("dlclose@GLIBC_2.4");
-extern int  pthread_create(pthread_t *thread, const pthread_attr_t *attr,
-                           void *(*start)(void *), void *arg)
-    __asm__("pthread_create@GLIBC_2.4");
 
 static void *retro_get_env_cb(void *cb, unsigned cmd, void *data);
 static int  get_cfg_value(const char *key, char *out, size_t out_size, const char *cfg);
