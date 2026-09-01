@@ -32,13 +32,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_BUILD_TYPE Release CACHE STRING "Release" FORCE)
 
 # ---- ABI 门禁 ----
-add_compile_options(
-    -march=armv7-a
-    -mtune=cortex-a7
-    -mfpu=neon-vfpv4
-    -mfloat-abi=hard
-    -O2
-)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2")
 
 # 禁用 C23 下的 atoi/strtol → __isoc23_strtol@GLIBC_2.38 陷阱
 # 我们的代码已用 strtoul 替代 atoi，这里加保险
