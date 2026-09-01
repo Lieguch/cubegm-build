@@ -51,6 +51,8 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-as-needed")
 file(GLOB SRC_FILES "src/*.c")
 # 排除不存在的文件
 list(FILTER SRC_FILES EXCLUDE REGEX ".*\\.h$")
+# 自定义入口点（替换 crt1.o 的 _start，绕过 __libc_start_main@GLIBC_2.34）
+list(APPEND SRC_FILES "src/entry.c")
 
 # ---- 头文件 ----
 include_directories(src)
@@ -61,10 +63,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/output")
 # ---- 构建可执行文件 ----
 add_executable(rkgame ${SRC_FILES})
 
+# 用 entry.c 的 _rkgame_start 作为入口，禁用默认 CRT 入口
+set_target_properties(rkgame PROPERTIES
+    LINK_FLAGS "-nostartfiles -Wl,-e,_rkgame_start"
+)
+
 target_link_libraries(rkgame
     PRIVATE
         -Wl,--no-as-needed dl
-        pthread
+        -Wl,--no-as-needed pthread
         m
 )
 
