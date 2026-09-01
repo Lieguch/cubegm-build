@@ -34,32 +34,30 @@
 /* ---- 配置项表 ---- */
 static char corecfg[16000];
 
-/* ---- .symver 锁定到 GLIBC_2.4 的 dlsym/dlopen/dlvsym/pthread_* ---- */
+/* ---- 版本化符号声明（锁定到设备 glibc 2.29 导出的版本） ---- */
 
-/* GCC 在 glibc 2.40 默认将 dlopen/dlsym 绑定到 GLIBC_2.34，
- * 但设备 glibc 2.29 只导出版本 2.4 的符号。必须用 .symver 锁定。 */
+/* 编译环境 glibc 2.35 默认将 dlopen 绑定到 GLIBC_2.34，
+ * 设备 glibc 2.29 只导出 GLIBC_2.4。用 __asm__ 设置符号名锁定版本。 */
 
-static void *_shim_dlopen(const char *file, int mode)
-    __asm__(".symver _shim_dlopen, dlopen@GLIBC_2.4");
-static void *_shim_dlsym(void *handle, const char *name)
-    __asm__(".symver _shim_dlsym, dlsym@GLIBC_2.4");
-static int  _shim_dlclose(void *handle)
-    __asm__(".symver _shim_dlclose, dlclose@GLIBC_2.4");
-
-static int _shim_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
-                                 void *(*start)(void *), void *arg)
-    __asm__(".symver _shim_pthread_create, pthread_create@GLIBC_2.4");
+extern void *dlopen(const char *file, int mode)
+    __asm__("dlopen@GLIBC_2.4");
+extern void *dlsym(void *handle, const char *name)
+    __asm__("dlsym@GLIBC_2.4");
+extern int  dlclose(void *handle)
+    __asm__("dlclose@GLIBC_2.4");
+extern int  pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                           void *(*start)(void *), void *arg)
+    __asm__("pthread_create@GLIBC_2.4");
 
 static void *retro_get_env_cb(void *cb, unsigned cmd, void *data);
 static int  get_cfg_value(const char *key, char *out, size_t out_size, const char *cfg);
 
 /*
  * get_core_symbol：从 handle 获取符号指针。
- * 用 _shim_dlsym 确保不会递归进入我们自己的 dlsym 实现（我们没重写 dlsym）。
  */
 static void *get_core_symbol(void *handle, const char *name)
 {
-    return _shim_dlsym(handle, name);
+    return dlsym(handle, name);
 }
 
 /*
@@ -89,7 +87,7 @@ int core_load(const char *rom_path, const char *core_name)
 
     /* ---- 步骤 2：dlopen core .so ---- */
     snprintf(path, sizeof(path), "%s/cores/%s", work_path, core_name);
-    core_handle = _shim_dlopen(path, RTLD_NOW);
+    core_handle = dlopen(path, RTLD_NOW);
     if (!core_handle) {
         ERR("Core_Load: dlopen %s fail: %s", path, dlerror());
         return -1;
@@ -131,7 +129,7 @@ int core_load(const char *rom_path, const char *core_name)
     ctx.retro_set_environment = get_core_symbol(core_handle, "retro_set_environment");
     if (!ctx.retro_set_environment) {
         ERR("Core_Load: retro_set_environment not found");
-        _shim_dlclose(core_handle);
+        dlclose(core_handle);
         core_handle = NULL;
         return -2;
     }
@@ -159,7 +157,7 @@ int core_load(const char *rom_path, const char *core_name)
         int support = ctx.retro_is_support(rom_path);
         if (support < 0) {
             ERR("Core_Load: core rejects ROM %s", rom_path);
-            _shim_dlclose(core_handle);
+            dlclose(core_handle);
             core_handle = NULL;
             return -3;
         }
@@ -236,7 +234,7 @@ void core_unload(void)
         ctx.retro_unload_game();
     if (ctx.retro_deinit)
         ctx.retro_deinit();
-    _shim_dlclose(core_handle);
+    dlclose(core_handle);
     core_handle = NULL;
     memset(&ctx, 0, sizeof(ctx));
     LOG("core unloaded");

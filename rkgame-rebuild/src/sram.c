@@ -47,27 +47,21 @@ static pthread_mutex_t g_flush_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  g_flush_cond  = PTHREAD_COND_INITIALIZER;
 static volatile sig_atomic_t g_flush_stop = 0;
 
-/* .symver 锁 GLIBC_2.4 的 pthread_*（避免 GCC 14 默认绑 2.34/2.38） */
+/* ---- 版本化符号声明（锁定到设备 glibc 2.29 导出的版本） ---- */
 
-static int _sram_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
-                                 void *(*start)(void *), void *arg)
-    __asm__(".symver _sram_pthread_create, pthread_create@GLIBC_2.4");
-
-static int _sram_pthread_join(pthread_t thread, void **value)
-    __asm__(".symver _sram_pthread_join, pthread_join@GLIBC_2.4");
-
-static int _sram_pthread_mutex_lock(pthread_mutex_t *m)
-    __asm__(".symver _sram_pthread_mutex_lock, pthread_mutex_lock@GLIBC_2.4");
-
-static int _sram_pthread_mutex_unlock(pthread_mutex_t *m)
-    __asm__(".symver _sram_pthread_mutex_unlock, pthread_mutex_unlock@GLIBC_2.4");
-
-static int _sram_pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m)
-    __asm__(".symver _sram_pthread_cond_wait, pthread_cond_wait@GLIBC_2.4");
-
-/* clock_gettime@GLIBC_2.17 — 设备 glibc 2.29 支持 */
-static int _sram_clock_gettime(clockid_t clk, struct timespec *ts)
-    __asm__(".symver _sram_clock_gettime, clock_gettime@GLIBC_2.17");
+extern int  pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                           void *(*start)(void *), void *arg)
+    __asm__("pthread_create@GLIBC_2.4");
+extern int  pthread_join(pthread_t thread, void **value)
+    __asm__("pthread_join@GLIBC_2.4");
+extern int  pthread_mutex_lock(pthread_mutex_t *m)
+    __asm__("pthread_mutex_lock@GLIBC_2.4");
+extern int  pthread_mutex_unlock(pthread_mutex_t *m)
+    __asm__("pthread_mutex_unlock@GLIBC_2.4");
+extern int  pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m)
+    __asm__("pthread_cond_wait@GLIBC_2.4");
+extern int  clock_gettime(clockid_t clk, struct timespec *ts)
+    __asm__("clock_gettime@GLIBC_2.17");
 
 /* ---- 快照与信号 ---- */
 
@@ -86,14 +80,14 @@ static void sram_snapshot_and_signal(void)
     void *data = ctx.retro_get_memory_data(RETRO_MEMORY_SAVE_RAM);
     if (!data) return;
 
-    _sram_pthread_mutex_lock(&g_flush_mutex);
+    pthread_mutex_lock(&g_flush_mutex);
     /* 更新缓冲区（如果大小变了则 realloc） */
     if (sram_state.size != size) {
         free(sram_state.buf);
         sram_state.buf = malloc(size);
         if (!sram_state.buf) {
             sram_state.size = 0;
-            _sram_pthread_mutex_unlock(&g_flush_mutex);
+            pthread_mutex_unlock(&g_flush_mutex);
             return;
         }
         sram_state.size = size;
@@ -101,8 +95,8 @@ static void sram_snapshot_and_signal(void)
     memcpy(sram_state.buf, data, size);
     sram_state.dirty = true;
     g_flush_req = 1;
-    _sram_pthread_cond_wait(&g_flush_cond, &g_flush_mutex);  /* 等落盘完成 */
-    _sram_pthread_mutex_unlock(&g_flush_mutex);
+    pthread_cond_wait(&g_flush_cond, &g_flush_mutex);  /* 等落盘完成 */
+    pthread_mutex_unlock(&g_flush_mutex);
 }
 
 /* ---- 后台落盘线程 ---- */
@@ -115,7 +109,7 @@ static void *sram_flush_thread_fn(void *arg)
 
     while (!g_flush_stop) {
         /* 等待 flush 请求或超时 */
-        _sram_clock_gettime(CLOCK_MONOTONIC, &ts);
+        clock_gettime(CLOCK_MONOTONIC, &ts);
         int64_t now = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
         int64_t timeout_us;
         if (next_save > 0) {
@@ -127,38 +121,38 @@ static void *sram_flush_thread_fn(void *arg)
 
         /* 用 cond_wait 等待，但设置超时避免死锁 */
         struct timespec to;
-        _sram_clock_gettime(CLOCK_REALTIME, &to);
+        clock_gettime(CLOCK_REALTIME, &to);
         to.tv_sec  += (time_t)(timeout_us / 1000000);
         to.tv_nsec += (long)((timeout_us % 1000000) * 1000);
         if (to.tv_nsec >= 1000000000L) {
             to.tv_sec++; to.tv_nsec -= 1000000000L;
         }
 
-        _sram_pthread_mutex_lock(&g_flush_mutex);
+        pthread_mutex_lock(&g_flush_mutex);
         if (!g_flush_req && next_save <= now) {
             /* 没有请求且未到定期保存时间，等待 */
-            _sram_pthread_mutex_unlock(&g_flush_mutex);
+            pthread_mutex_unlock(&g_flush_mutex);
             usleep(50000);
             continue;
         }
-        _sram_pthread_mutex_unlock(&g_flush_mutex);
+        pthread_mutex_unlock(&g_flush_mutex);
 
         if (g_flush_req) {
-            _sram_pthread_mutex_lock(&g_flush_mutex);
+            pthread_mutex_lock(&g_flush_mutex);
             g_flush_req = 0;
-            _sram_pthread_mutex_unlock(&g_flush_mutex);
+            pthread_mutex_unlock(&g_flush_mutex);
             sram_write_file();
         }
 
-        _sram_pthread_mutex_lock(&g_flush_mutex);
+        pthread_mutex_lock(&g_flush_mutex);
         if (sram_state.dirty && sram_state.interval_sec > 0) {
-            _sram_clock_gettime(CLOCK_MONOTONIC, &ts);
+            clock_gettime(CLOCK_MONOTONIC, &ts);
             int64_t now2 = ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
             if (next_save == 0 || now2 >= next_save) {
                 next_save = now2 + (int64_t)sram_state.interval_sec * 1000000;
             }
         }
-        _sram_pthread_mutex_unlock(&g_flush_mutex);
+        pthread_mutex_unlock(&g_flush_mutex);
     }
     return NULL;
 }
@@ -314,20 +308,20 @@ void sram_save(void)
     void *data = ctx.retro_get_memory_data(RETRO_MEMORY_SAVE_RAM);
     if (!data) return;
 
-    _sram_pthread_mutex_lock(&g_flush_mutex);
+    pthread_mutex_lock(&g_flush_mutex);
     if (sram_state.size != size) {
         free(sram_state.buf);
         sram_state.buf = malloc(size);
         if (!sram_state.buf) {
             sram_state.size = 0;
-            _sram_pthread_mutex_unlock(&g_flush_mutex);
+            pthread_mutex_unlock(&g_flush_mutex);
             return;
         }
         sram_state.size = size;
     }
     memcpy(sram_state.buf, data, size);
     sram_state.dirty = true;
-    _sram_pthread_mutex_unlock(&g_flush_mutex);
+    pthread_mutex_unlock(&g_flush_mutex);
 }
 
 void sram_save_to_file(void)
@@ -342,12 +336,12 @@ void sram_save_to_file(void)
 void sram_unload(void)
 {
     sram_save_to_file();
-    _sram_pthread_mutex_lock(&g_flush_mutex);
+    pthread_mutex_lock(&g_flush_mutex);
     free(sram_state.buf);
     sram_state.buf = NULL;
     sram_state.size = 0;
     sram_state.active = false;
-    _sram_pthread_mutex_unlock(&g_flush_mutex);
+    pthread_mutex_unlock(&g_flush_mutex);
 }
 
 void *sram_get_data(void)
