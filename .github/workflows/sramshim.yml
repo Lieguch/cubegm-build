@@ -52,18 +52,32 @@ jobs:
           arm-linux-gnueabihf-gcc --version | head -1
           arm-linux-gnueabihf-readelf --version | head -1
 
-      - name: Locate glibc .so files in toolchain sysroot
+      - name: Probe sysroot for libdl.so.2 / libpthread.so.0
         id: sysroot
         run: |
+          set -euo pipefail
           SYSROOT=$(arm-linux-gnueabihf-gcc -print-sysroot)
           echo "SYSROOT=$SYSROOT" >> $GITHUB_OUTPUT
-          ls -la $SYSROOT/lib/arm-linux-gnueabihf/libdl.so.2
-          ls -la $SYSROOT/lib/arm-linux-gnueabihf/libpthread.so.0
+          # Ubuntu 22.04 packages the ARM cross sysroot at /usr/arm-linux-gnueabihf/
+          # but -print-sysroot returns empty.  Probe both known paths.
+          DL=
+          PT=
+          for base in "$SYSROOT/lib/arm-linux-gnueabihf" \
+                      /usr/lib/arm-linux-gnueabihf \
+                      /usr/arm-linux-gnueabihf/lib \
+                      /usr/arm-linux-gnueabihf/lib/arm-linux-gnueabihf; do
+              [ -f "$base/libdl.so.2" ]      && DL="$base/libdl.so.2"
+              [ -f "$base/libpthread.so.0" ] && PT="$base/libpthread.so.0"
+          done
+          [ -n "$DL" ] || { echo "libdl.so.2 not found"; exit 1; }
+          [ -n "$PT" ] || { echo "libpthread.so.0 not found"; exit 1; }
+          echo "LIBDL=$DL" >> $GITHUB_OUTPUT
+          echo "LIBPTHREAD=$PT" >> $GITHUB_OUTPUT
+          echo "Found libdl=$DL libpthread=$PT"
 
       - name: Build libz.so.1
         run: |
           set -euo pipefail
-          SYSROOT=$(arm-linux-gnueabihf-gcc -print-sysroot)
           CC=arm-linux-gnueabihf-gcc
           CFLAGS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2"
           mkdir -p dist
@@ -71,8 +85,8 @@ jobs:
             -Wl,-soname,libsramzlib.so \
             -Wl,--version-script,sramshim/libz_shim_v2.map \
             -o dist/libz.so.1 sramshim/libz_shim_v3.c \
-            -Wl,--no-as-needed $SYSROOT/lib/arm-linux-gnueabihf/libpthread.so.0 \
-            -Wl,--no-as-needed $SYSROOT/lib/arm-linux-gnueabihf/libdl.so.2
+            -Wl,--no-as-needed ${{ steps.sysroot.outputs.LIBPTHREAD }} \
+            -Wl,--no-as-needed ${{ steps.sysroot.outputs.LIBDL }}
           sha256sum dist/libz.so.1 > dist/sha256sum.txt
           cat dist/sha256sum.txt
           ls -la dist/
