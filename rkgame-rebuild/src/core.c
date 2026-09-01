@@ -48,8 +48,6 @@ extern int  dlclose(void *handle)
 extern int  pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                            void *(*start)(void *), void *arg)
     __asm__("pthread_create@GLIBC_2.4");
-extern char *dlerror(void)
-    __asm__("dlerror@GLIBC_2.4");
 
 static void *retro_get_env_cb(void *cb, unsigned cmd, void *data);
 static int  get_cfg_value(const char *key, char *out, size_t out_size, const char *cfg);
@@ -91,7 +89,7 @@ int core_load(const char *rom_path, const char *core_name)
     snprintf(path, sizeof(path), "%s/cores/%s", work_path, core_name);
     core_handle = dlopen(path, RTLD_NOW);
     if (!core_handle) {
-        ERR("Core_Load: dlopen %s fail: %s", path, dlerror());
+        ERR("Core_Load: dlopen %s fail", path);
         return -1;
     }
     LOG("Core_Load: dlopen %s OK", path);
