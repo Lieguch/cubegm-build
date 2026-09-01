@@ -1,39 +1,20 @@
-# CubeGM ~/.asoundrc — 音频根治 v11.6（官方 @hooks 自动加载，不打补丁）
-# 设备 rootfs 自带 /usr/share/alsa/alsa.conf；其 @hooks 会加载 /etc/asound.conf 与 ~/.asoundrc。
+# CubeGM ~/.asoundrc — 音频根治 v11.8 定稿（官方 @hooks 自动加载，不打补丁）
+# 设备 rootfs 自带 /usr/share/alsa/alsa.conf；其 @hooks 加载 /etc/asound.conf 与 ~/.asoundrc。
 # HOME=/mnt/sdcard/cubegm -> 本文件 = /mnt/sdcard/cubegm/.asoundrc，开机自动生效。
-# 目标：pcm.!default = plug -> route -> multi(hw:0,0 HDMI + hw:0,1 内置扬声器) 双输出，
-#       恢复原厂"双通道同时出声"行为。
-# 铁律：slave 必须【内联 type hw】（禁止字符串 "hw:0,0"——官方 pcm.default 用 plug 包裹 hw，
-#       但 multi 的 slave 若用字符串会因配置树评估顺序不可靠而失败；本机 ALSA 模拟已验证）。
-#       禁改 44100/48000（plug 自动采样率转换）。hint 块 device_output 是整数域，勿写字符串。
-pcm.dual {
-    type multi
-    slaves.a.pcm { type hw  card 0  device 0 }   # HDMI
-    slaves.b.pcm { type hw  card 0  device 1 }   # 内置扬声器 (rk3036-voice)
-    slaves.a.channels 2
-    slaves.b.channels 2
-    bindings.0.slave a
-    bindings.0.channel 0
-    bindings.1.slave a
-    bindings.1.channel 1
-    bindings.2.slave b
-    bindings.2.channel 0
-    bindings.3.slave b
-    bindings.3.channel 1
-}
-pcm.dualroute {
-    type route
-    slave.pcm "dual"
-    slave.channels 4
-    ttable.0.0 1.0
-    ttable.1.1 1.0
-    ttable.0.2 1.0
-    ttable.1.3 1.0
-}
+#
+# 硬件事实（linux v4.4 sound/soc/rockchip/rockchip_i2s.c 权威源码）：
+#   RK3036 I2S = 单 TX DMA 通道、单 playback DAI、共享物理总线。
+#   SDI/SDO/BCLK/LRCK 同时连 HDMI(device 0 = i2s-hifi) 和内置扬声器(device 1 = rk3036-voice)。
+#   -> 写 hw:0,0 时同一条数据也被扬声器接收 -> 原厂"单 PCM 双端响"是硬件广播，不是 ALSA multi。
+#
+# 铁律：禁 pcm.multi / dual / dualroute —— 同时打开两个挂同一 I2S 控制器的 PCM
+#       是 393/394/398「小幅改音频→黑屏零日志」家族的共同诱因。
+#       正确形态 = 单点 plug->hw:0,0（原厂 driver.so 即 snd_pcm_open("default") 单开）。
 pcm.!default {
     type plug
-    slave.pcm "dualroute"
+    slave.pcm { type hw card 0 device 0 }
 }
+
 ctl.!default {
     type hw
     card 0

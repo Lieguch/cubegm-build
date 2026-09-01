@@ -84,6 +84,11 @@ export LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib:$LD_LIB
 export HOME=/mnt/sdcard/cubegm
 export XDG_CONFIG_HOME=/mnt/sdcard/cubegm/configs
 
+# v0.3 (2026-08-30，回归修复): 清理残留 libasound（旧 payload 的 1.2.10 CI-路径版，
+# 覆盖拷贝不删旧文件）。强制回落设备 rootfs 原厂 1.1.5（ALSA_CONFIG_DIR=/usr/share/alsa 正确）。
+rm -f /mnt/sdcard/cubegm/lib/libasound.so.2 /mnt/sdcard/cubegm/lib/libasound.so \
+      /mnt/sdcard/cubegm/usr/lib/libasound.so.2 /mnt/sdcard/cubegm/usr/lib/libasound.so
+
 # CPU: force max-performance governor (helps every emulator).
 for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
     [ -w "$g" ] && echo performance > "$g" 2>/dev/null

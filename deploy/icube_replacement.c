@@ -46,6 +46,29 @@ static void hlog(const char *msg) {
     fclose(f);
 }
 
+/* v0.3 (2026-08-30，回归修复): 清理残留 libasound —— 音频确定性根治。
+ * 旧 payload (399/400/401) 把 crosstool 的 1.2.10 libasound.so.2 打进 cubegm/lib，
+ * 其编译期 ALSA_CONFIG_DIR=/home/runner/...（CI 路径）在设备上不存在 → 配置树
+ * 加载失败 → "Unknown PCM default" + 设备列表空（default 消失）。402 起 payload
+ * 不再打包 libasound，但用户覆盖拷贝不删旧文件 → 残留 1.2.10 仍被 LD_LIBRARY_PATH
+ * 优先加载。此处每次启动主动 unlink cubegm/lib 与 cubegm/usr/lib 下的 libasound
+ * 残留，强制回落设备 rootfs 原厂 1.1.5（ALSA_CONFIG_DIR=/usr/share/alsa，rootfs
+ * 有完整配置树 + @hooks 自动加载 ~/.asoundrc）。不设 ALSA_CONFIG_PATH、不碰其余 lib。 */
+static void cleanup_stale_libasound(void) {
+    static const char *paths[] = {
+        WORK_DIR "/lib/libasound.so.2",
+        WORK_DIR "/lib/libasound.so",
+        WORK_DIR "/usr/lib/libasound.so.2",
+        WORK_DIR "/usr/lib/libasound.so",
+        NULL
+    };
+    int i;
+    for (i = 0; paths[i]; i++) {
+        if (unlink(paths[i]) == 0)
+            hlog("icube: removed stale libasound (fallback to device original 1.1.5)\n");
+    }
+}
+
 /* 写 /tmp/tfdevice.env（对齐 zhijack.sh，保留设备几何约定便于诊断与人工覆盖）。 */
 static void write_tfdevice_env(void) {
     FILE *f = fopen("/tmp/tfdevice.env", "w");
@@ -150,6 +173,10 @@ int main(int argc, char **argv) {
     (void)argc; (void)argv;
 
     hlog("icube (replacement) v10.0 starting (RetroArch launcher)\n");
+
+    /* v0.3 (2026-08-30，回归修复): 启动即清理残留 libasound（旧 payload 的 1.2.10
+       CI-路径版），强制回落设备 rootfs 原厂 1.1.5（正确 ALSA_CONFIG_DIR=/usr/share/alsa）。 */
+    cleanup_stale_libasound();
 
     /* 1. 设备环境：tfdevice.env + TF_* 导出 + 库路径 + 黑屏修复 + CPU 调度 */
     write_tfdevice_env();
