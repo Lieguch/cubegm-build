@@ -132,7 +132,7 @@ static void get_executable_path(char *out, size_t out_size)
 
 /* ---- 配置加载 ---- */
 
-static void config_load(void)
+void config_load(void)
 {
     char path[600];
     snprintf(path, sizeof(path), "%s/config.xml", work_path);

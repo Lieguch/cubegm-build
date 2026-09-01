@@ -79,7 +79,7 @@ typedef struct {
 #define KEY_SELECT  (1 << 13)
 
 /* 通用手柄映射（匹配大多数 USB 手柄） */
-static const uint32_t generic_button_map[32] = {
+static const uint32_t generic_button_map[320] = {
     [BTN_A]       = KEY_A,
     [BTN_B]       = KEY_B,
     [BTN_X]       = KEY_X,
@@ -95,7 +95,7 @@ static const uint32_t generic_button_map[32] = {
 };
 
 /* 8BitDo SN30 Pro */
-static const uint32_t sn30_button_map[32] = {
+static const uint32_t sn30_button_map[320] = {
     [BTN_A]       = KEY_A,
     [BTN_B]       = KEY_B,
     [BTN_X]       = KEY_X,
@@ -273,9 +273,8 @@ bool joy_poll(void)
         for (size_t j = 0; j < count; j++) {
             struct input_event *e = &ev[j];
             if (e->type == EV_KEY && e->value > 0) {
-                /* 按键按下 */
                 unsigned int code = (unsigned int)e->code;
-                if (code < 32 && joy_devs[i].button_map[code]) {
+                if (code < 320 && joy_devs[i].button_map[code]) {
                     any = true;
                 }
             } else if (e->type == EV_ABS) {
@@ -310,7 +309,7 @@ int joy_get_key(uint8_t player, uint32_t key_id)
         struct input_event *e = &ev[j];
         if (e->type == EV_KEY && e->value > 0) {
             unsigned int code = (unsigned int)e->code;
-            if (code < 32 && dev->button_map[code] == key_id)
+            if (code < 320 && dev->button_map[code] == key_id)
                 return 1;
         }
     }

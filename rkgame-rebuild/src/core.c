@@ -51,6 +51,7 @@ static int _shim_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     __asm__(".symver _shim_pthread_create, pthread_create@GLIBC_2.4");
 
 static void *retro_get_env_cb(void *cb, unsigned cmd, void *data);
+static int  get_cfg_value(const char *key, char *out, size_t out_size, const char *cfg);
 
 /*
  * get_core_symbol：从 handle 获取符号指针。
@@ -201,15 +202,8 @@ int core_load(const char *rom_path, const char *core_name)
     /* 检测文件类型（ZIP/普通） */
     /* 原版用 Filetype 全局变量，我们简化处理 */
     if (ctx.retro_load_game) {
-        int ok = ctx.retro_load_game(&game_info);
-        LOG("Core_Load: retro_load_game ret=%d", ok);
-        if (ok == 0) {
-            ERR("Core_Load: retro_load_game failed");
-            _shim_dlclose(core_handle);
-            core_handle = NULL;
-            return -4;
-        }
-    }
+        ctx.retro_load_game(&game_info);
+        LOG("Core_Load: retro_load_game done");
 
     /* ---- 步骤 10：设置视频/输入回调 ---- */
     if (ctx.retro_set_video_refresh)

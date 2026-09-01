@@ -142,13 +142,12 @@ typedef struct {
     uint16_t pid;
     uint16_t revision;
     char     name[64];
-    int      fd;                          /* -1 = 未打开 */
-    int      event_fd;                    /* /dev/input/eventN fd */
+    int      fd;
+    int      event_fd;
     bool     is_evdev;
-    bool     is_js;                       /* /dev/input/jsN */
-    /* 按键映射（button_id -> rkgame key bitmap） */
-    uint32_t button_map[32];
-    /* 摇杆/手柄映射 */
+    bool     is_js;
+    /* 按键映射：下标 = Linux BTN 代码(最高 ~311), 值 = rkgame key bitmap */
+    uint32_t button_map[320];
     uint8_t  axis_count;
     uint8_t  button_count;
 } joy_device_t;
