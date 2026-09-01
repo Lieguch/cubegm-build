@@ -36,16 +36,45 @@
  * 手动定义 RTLD_NOW / RTLD_DEFAULT。 */
 #define RTLD_NOW 2
 #define RTLD_DEFAULT ((void *)-1L)
-/* dlsym/dlclose 在 glibc 2.34 被升级到 @GLIBC_2.34，设备只有 2.29 → 必须锁 2.4 */
-extern void *dlsym(void *handle, const char *name) __asm__("dlsym@GLIBC_2.4");
-extern int  dlclose(void *handle) __asm__("dlclose@GLIBC_2.4");
 
-/* 运行时获取 dlopen 函数指针（避免编译期引用 dlopen@GLIBC_2.34） */
+/* ★★★ GCC 11.4 ARM cross-compiler 不采纳 __asm__("dlsym@GLIBC_2.4") 属性（BuildID 不变）。
+ * 改用内联汇编直接调用 bl dlsym@GLIBC_2.4，强制链接器解析旧版本符号。
+ * dlsym 在 glibc 2.34 从 @GLIBC_2.4 升级到 @GLIBC_2.34；设备 2.29 只导 2.4 版本。 */
+static inline void *my_dlsym(void *handle, const char *name)
+{
+    void *result;
+    __asm__ volatile (
+        "mov r0, %1\n"
+        "mov r1, %2\n"
+        "bl  dlsym@GLIBC_2.4\n"
+        "mov %0, r0\n"
+        : "=&r"(result)
+        : "r"(handle), "r"(name)
+        : "r0", "r1", "r2", "r3", "ip", "lr", "memory"
+    );
+    return result;
+}
+
+static inline int my_dlclose(void *handle)
+{
+    int result;
+    __asm__ volatile (
+        "mov r0, %1\n"
+        "bl  dlclose@GLIBC_2.4\n"
+        "mov %0, r0\n"
+        : "=&r"(result)
+        : "r"(handle)
+        : "r0", "r1", "r2", "r3", "ip", "lr", "memory"
+    );
+    return result;
+}
+
+/* 运行时获取 dlopen 函数指针 */
 static void *get_dlopen_fn(void)
 {
     static void *fn = NULL;
     if (!fn) {
-        fn = dlsym(RTLD_DEFAULT, "dlopen");
+        fn = my_dlsym(RTLD_DEFAULT, "dlopen");
     }
     return fn;
 }
@@ -81,7 +110,7 @@ static int  get_cfg_value(const char *key, char *out, size_t out_size, const cha
  */
 static void *get_core_symbol(void *handle, const char *name)
 {
-    return dlsym(handle, name);
+    return my_dlsym(handle, name);
 }
 
 /*
@@ -153,7 +182,7 @@ int core_load(const char *rom_path, const char *core_name)
     ctx.retro_set_environment = get_core_symbol(core_handle, "retro_set_environment");
     if (!ctx.retro_set_environment) {
         ERR("Core_Load: retro_set_environment not found");
-        dlclose(core_handle);
+        my_dlclose(core_handle);
         core_handle = NULL;
         return -2;
     }
@@ -181,7 +210,7 @@ int core_load(const char *rom_path, const char *core_name)
         int support = ctx.retro_is_support(rom_path);
         if (support < 0) {
             ERR("Core_Load: core rejects ROM %s", rom_path);
-            dlclose(core_handle);
+            my_dlclose(core_handle);
             core_handle = NULL;
             return -3;
         }
@@ -258,7 +287,7 @@ void core_unload(void)
         ctx.retro_unload_game();
     if (ctx.retro_deinit)
         ctx.retro_deinit();
-    dlclose(core_handle);
+    my_dlclose(core_handle);
     core_handle = NULL;
     memset(&ctx, 0, sizeof(ctx));
     LOG("core unloaded");
