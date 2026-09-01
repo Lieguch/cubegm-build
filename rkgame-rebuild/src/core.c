@@ -36,8 +36,9 @@
  * 手动定义 RTLD_NOW / RTLD_DEFAULT。 */
 #define RTLD_NOW 2
 #define RTLD_DEFAULT ((void *)-1L)
-extern void *dlsym(void *handle, const char *name);
-extern int  dlclose(void *handle);
+/* dlsym/dlclose 在 glibc 2.34 被升级到 @GLIBC_2.34，设备只有 2.29 → 必须锁 2.4 */
+extern void *dlsym(void *handle, const char *name) __asm__("dlsym@GLIBC_2.4");
+extern int  dlclose(void *handle) __asm__("dlclose@GLIBC_2.4");
 
 /* 运行时获取 dlopen 函数指针（避免编译期引用 dlopen@GLIBC_2.34） */
 static void *get_dlopen_fn(void)
