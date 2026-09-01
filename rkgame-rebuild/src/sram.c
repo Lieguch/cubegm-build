@@ -71,6 +71,7 @@ static int _sram_clock_gettime(clockid_t clk, struct timespec *ts)
 
 /* ---- 快照与信号 ---- */
 
+static void sram_write_file(void);
 static void sram_snapshot_and_signal(void)
 {
     if (!sram_state.active || !sram_state.dirty) return;

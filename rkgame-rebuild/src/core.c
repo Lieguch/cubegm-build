@@ -204,6 +204,7 @@ int core_load(const char *rom_path, const char *core_name)
     if (ctx.retro_load_game) {
         ctx.retro_load_game(&game_info);
         LOG("Core_Load: retro_load_game done");
+    }
 
     /* ---- 步骤 10：设置视频/输入回调 ---- */
     if (ctx.retro_set_video_refresh)
