@@ -48,6 +48,8 @@ extern int  dlclose(void *handle)
 extern int  pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                            void *(*start)(void *), void *arg)
     __asm__("pthread_create@GLIBC_2.4");
+extern char *dlerror(void)
+    __asm__("dlerror@GLIBC_2.4");
 
 static void *retro_get_env_cb(void *cb, unsigned cmd, void *data);
 static int  get_cfg_value(const char *key, char *out, size_t out_size, const char *cfg);
