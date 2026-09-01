@@ -38,7 +38,9 @@ jobs:
           echo "=== ELF header ==="
           file "$OUT"
           # Verify e_flags = hard-float (bit 10 set, 0x400)
-          FLAGS=$(arm-linux-gnueabihf-readelf -h "$OUT" | grep "Flags:" | awk '{print $2}')
+          # readelf 输出带逗号（"0x5000400, hard-float ABI"），awk 取 $2 得 "0x5000400,"，
+          # printf "%d" 遇逗号返回 0 → 必须 tr 去逗号
+          FLAGS=$(arm-linux-gnueabihf-readelf -h "$OUT" | grep "Flags:" | awk '{print $2}' | tr -d ',')
           echo "e_flags=0x${FLAGS}"
           HEX_FLAGS=$(printf "%d" "0x${FLAGS}")
           FLOAT_ABI=$(( (HEX_FLAGS >> 9) & 0x3 ))
