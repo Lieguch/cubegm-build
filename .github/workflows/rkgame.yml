@@ -1,0 +1,188 @@
+# .github/workflows/rkgame.yml
+#
+# rkgame 重构版独立构建流水线
+# 与 build.yml（主构建）完全独立，不共享触发器/产物名
+#
+name: rkgame-rebuild
+
+on:
+  push:
+    paths:
+      - 'rkgame-rebuild/**'
+      - '.github/workflows/rkgame.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            rkgame-rebuild
+            .github/workflows/rkgame.yml
+
+      - name: Install ARM cross toolchain
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            cmake
+          arm-linux-gnueabihf-gcc --version | head -1
+
+      - name: Build rkgame
+        run: |
+          set -euo pipefail
+          CC=arm-linux-gnueabihf-gcc \
+          CXX=arm-linux-gnueabihf-g++ \
+          cmake -S rkgame-rebuild \
+                -B rkgame-rebuild/build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_SYSTEM_NAME=Linux
+          cmake --build rkgame-rebuild/build -j$(nproc)
+
+      - name: Verify ABI + symbol versions
+        run: |
+          set -euo pipefail
+          export PYTHONIOENCODING=utf-8
+          BIN=rkgame-rebuild/build/output/rkgame
+          [ -f "$BIN" ] || { echo "Binary not found"; exit 1; }
+
+          # 使用本地 verifier（在 rkgame-rebuild/ 下创建一份精简版）
+          cat > /tmp/verify_rkgame.py << 'PYEOF'
+import struct, subprocess, re, sys
+
+BIN = sys.argv[1]
+OBJDUMP = sys.argv[2] if len(sys.argv) > 2 else "arm-linux-gnueabihf-objdump"
+d = open(BIN, "rb").read()
+
+# ELF header
+assert d[:4] == b"\x7fELF"
+assert d[4] == 1 and d[5] == 1
+etype, = struct.unpack_from("<H", d, 16)
+e_machine, = struct.unpack_from("<H", d, 18)
+e_flags, = struct.unpack_from("<I", d, 36)
+assert etype == 2, "must be ET_EXEC"
+assert e_machine == 0x28, "must be EM_ARM"
+assert e_flags == 0x5000400, f"e_flags wrong: {e_flags:#x}"
+print(f"[ok] ET_EXEC EM_ARM e_flags=0x{e_flags:x}")
+
+# .dynamic for SONAME / NEEDED
+e_shoff, = struct.unpack_from("<I", d, 32)
+e_shentsize, e_shnum, e_shstrndx = struct.unpack_from("<HHH", d, 46)
+secs = []
+for i in range(e_shnum):
+    o = e_shoff + i * e_shentsize
+    (name, typ, flags, addr, off, size, link, info, align, entsize) = \
+        struct.unpack_from("<IIIIIIIIII", d, o)
+    secs.append(dict(name=name, type=typ, off=off, size=size, link=link,
+                     info=info, entsize=entsize, addr=addr))
+shstr = secs[e_shstrndx]
+def sname(s):
+    e = d.index(b"\x00", shstr["off"] + s["name"])
+    return d[shstr["off"] + s["name"]:e].decode()
+for s in secs: s["n"] = sname(s)
+
+dyn = next(s for s in secs if s["n"] == ".dynamic")
+ents, q = [], dyn["off"]
+while q < dyn["off"] + dyn["size"]:
+    tag, val = struct.unpack_from("<II", d, q)
+    ents.append((tag, val))
+    if tag == 0: break
+    q += 8
+strtab_va = next((v for t, v in ents if t == 5), None)
+base = None
+if strtab_va:
+    for s in secs:
+        if s["type"] != 8 and s["addr"] and s["addr"] <= strtab_va < s["addr"] + s["size"]:
+            base = s["off"] + (strtab_va - s["addr"]); break
+need = []
+if base:
+    for t, v in ents:
+        if t == 1:
+            e = d.index(b"\x00", base + v); need.append(d[base + v:e].decode())
+assert "dl" in "".join(need), f"missing libdl: {need}"
+print(f"[ok] NEEDED={' '.join(need)}")
+
+# objdump -T for symbol versions
+r = subprocess.run([OBJDUMP, "-T", BIN], capture_output=True, text=True)
+assert r.returncode == 0
+EXPORTS, IMPORTS = {}, {}
+for line in r.stdout.splitlines():
+    tokens = line.split()
+    if len(tokens) < 4: continue
+    if not re.match(r"^[0-9a-f]{8}$", tokens[0]): continue
+    si = None
+    for i, t in enumerate(tokens):
+        if t == "*UND*" or (t.startswith(".") and i < len(tokens)-2):
+            si = i; break
+    if si is None: continue
+    section = tokens[si]
+    si1 = si + 1
+    if si1 >= len(tokens) or not re.match(r"^[0-9a-f]{8}$", tokens[si1]): continue
+    vi = si1 + 1
+    version = ""
+    if vi < len(tokens) - 1:
+        v = tokens[vi]
+        v_clean = v.strip("()")
+        if re.match(r"^GLIBC_\d+\.\d+$", v_clean):
+            version = v_clean; ni = vi + 1
+        else:
+            ni = vi
+    else:
+        ni = vi
+    name = tokens[ni] if ni < len(tokens) else ""
+    if not name: continue
+    if section == "*UND*":
+        IMPORTS[name] = version
+    elif version:
+        EXPORTS[name] = version
+
+# Check all imported symbols are GLIBC <= 2.29
+bad = []
+for nm, v in IMPORTS.items():
+    m = re.match(r"^GLIBC_(\d+)\.(\d+)$", v)
+    if m and (int(m.group(1)), int(m.group(2))) > (2, 29):
+        bad.append(f"  {nm} -> {v} (OVER GLIBC 2.29)")
+
+# Check key symbols
+key_imports = {"dlopen": "GLIBC_2.4", "dlsym": "GLIBC_2.4", "dlclose": "GLIBC_2.4",
+               "pthread_create": "GLIBC_2.4"}
+for nm, exp in key_imports.items():
+    if nm in IMPORTS and IMPORTS[nm] != exp:
+        bad.append(f"  import {nm}: expected {exp}, got {IMPORTS[nm]!r}")
+
+if bad:
+    print("FAILED:")
+    print("\n".join(bad))
+    sys.exit(1)
+
+print(f"[ok] size={len(d)} B")
+print(f"[ok] all imports GLIBC <= 2.29")
+print(f"[ok] key imports: {', '.join(f'{k}={v}' for k,v in key_imports.items() if k in IMPORTS)}")
+print(f"[ok] total imports: {len(IMPORTS)}")
+PYEOF
+
+          python3 /tmp/verify_rkgame.py "$BIN" arm-linux-gnueabihf-objdump
+
+      - name: Package
+        run: |
+          cd rkgame-rebuild/build/output
+          tar czf rkgame-rebuild.tar.gz rkgame
+          sha256sum rkgame > sha256sum.txt
+          cat sha256sum.txt
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: rkgame-rebuild
+          path: rkgame-rebuild/build/output/
+          if-no-files-found: error
+          retention-days: 90
