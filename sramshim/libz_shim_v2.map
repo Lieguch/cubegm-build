@@ -1,0 +1,22 @@
+/* libz_shim_v2.map — 版本脚本
+ *
+ * 关键修复：v1 导出 dlsym 是无版本的（UNVERSIONED），而 rkgame 引用的是
+ * dlsym@GLIBC_2.4（带版本号）。glibc 的符号版本规则规定带版本的引用只能
+ * 匹配带相同版本的提供者，所以 v1 的 dlsym 拦截**完全无效**——rkgame 的
+ * dlsym 调用全部落到系统 libdl.so.2。
+ *
+ * 这里把 dlsym/compress/uncompress 都放进 GLIBC_2.4 版本段，让它们变成
+ * dlsym@GLIBC_2.4，才能被 rkgame 的 dlsym@GLIBC_2.4 引用匹配到。
+ *
+ * 副作用：我们的代码内部调用 dlsym 时会命中我们自己（递归）。解决方法是用
+ * dlvsym 从 libdl.so.2 精确取出真身：dlvsym 我们没有导出，符号解析直接
+ * 落到系统 libdl.so.2，不会走我们的 dlsym。
+ */
+GLIBC_2.4 {
+    global:
+        dlsym;
+        compress;
+        uncompress;
+    local:
+        *;
+};
