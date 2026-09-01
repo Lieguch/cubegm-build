@@ -159,6 +159,11 @@ jobs:
           # objdump -T for symbol versions
           r = subprocess.run(["arm-linux-gnueabihf-objdump", "-T", p], capture_output=True, text=True)
           assert r.returncode == 0, f"objdump failed: {r.stderr}"
+          # Debug: print sample of objdump output
+          lines = [l for l in r.stdout.splitlines() if l.strip()]
+          print(f"[debug] objdump produced {len(lines)} non-empty lines")
+          for l in lines[:10]:
+              print(f"[debug] objdump line: {l[:120]}")
           EXPORTS, IMPORTS = {}, {}
           for line in r.stdout.splitlines():
               tokens = line.split()
