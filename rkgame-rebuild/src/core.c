@@ -20,6 +20,7 @@
  * ============================================================ */
 
 #define _GNU_SOURCE
+/* rkgame v1.5.0 core loader — SRAM + evdev, 2026-09-01 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
