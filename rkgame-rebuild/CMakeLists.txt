@@ -3,6 +3,7 @@
 # ============================================================
 #
 # 构建目标：ARM32 hard-float, glibc 2.29
+# 首次提交: 2026-09-01
 # 交叉工具链：arm-linux-gnueabihf-gcc (crosstool-NG, sysroot glibc 2.29)
 #
 # ABI 铁律：
