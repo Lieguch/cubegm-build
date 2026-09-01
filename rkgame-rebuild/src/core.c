@@ -26,17 +26,35 @@
 #include <string.h>
 
 /* ★★★ 不 include <dlfcn.h>！
- * 原因：GCC 14 在 glibc 2.35+ sysroot 下，dlfcn.h 内 dlopen 声明无版本标签，
- * 编译器生成对 dlopen 的引用时链接器选 sysroot 默认版本 @GLIBC_2.34。
+ * 原因：GCC 11.4（CI Ubuntu 22.04 armhf cross-compiler）在 glibc 2.35 sysroot 下，
+ * 对 dlopen 的引用自动生成 @GLIBC_2.34 版本（glibc 2.34 将 dlopen 移到 2.34）。
  * 设备 glibc 2.29 只导出 dlopen@@GLIBC_2.4 → 运行时 symbol lookup error。
- * 替代：显式声明版本化 dlopen/dlsym/dlclose，并手动定义 RTLD_NOW。 */
+ * __asm__("dlopen@GLIBC_2.4") 在 extern 声明上不被 GCC 11 ARM cross-compiler 采纳。
+ *
+ * 最终方案：完全避免直接引用 dlopen。用 dlsym(RTLD_DEFAULT, "dlopen") 在运行时
+ * 从已加载的 libdl.so.2 获取 dlopen 函数指针。dlsym 是 GLIBC_2.4 旧符号，不受影响。
+ * 手动定义 RTLD_NOW / RTLD_DEFAULT。 */
 #define RTLD_NOW 2
-extern void *dlopen(const char *file, int mode)
-    __asm__("dlopen@GLIBC_2.4");
-extern void *dlsym(void *handle, const char *name)
-    __asm__("dlsym@GLIBC_2.4");
-extern int  dlclose(void *handle)
-    __asm__("dlclose@GLIBC_2.4");
+#define RTLD_DEFAULT ((void *)-1L)
+extern void *dlsym(void *handle, const char *name);
+extern int  dlclose(void *handle);
+
+/* 运行时获取 dlopen 函数指针（避免编译期引用 dlopen@GLIBC_2.34） */
+static void *get_dlopen_fn(void)
+{
+    static void *fn = NULL;
+    if (!fn) {
+        fn = dlsym(RTLD_DEFAULT, "dlopen");
+    }
+    return fn;
+}
+
+static inline void *my_dlopen(const char *file, int mode)
+{
+    void *fn = get_dlopen_fn();
+    if (!fn) return NULL;
+    return ((void *(*)(const char *, int))fn)(file, mode);
+}
 
 #include <pthread.h>
 
@@ -92,7 +110,7 @@ int core_load(const char *rom_path, const char *core_name)
 
     /* ---- 步骤 2：dlopen core .so ---- */
     snprintf(path, sizeof(path), "%s/cores/%s", work_path, core_name);
-    core_handle = dlopen(path, RTLD_NOW);
+    core_handle = my_dlopen(path, RTLD_NOW);
     if (!core_handle) {
         ERR("Core_Load: dlopen %s fail", path);
         return -1;
