@@ -18,6 +18,12 @@
 
 cmake_minimum_required(VERSION 3.16)
 
+# ---- 强制交叉编译器（CMake 默认用 /usr/bin/cc = host x86，必须显式指定） ----
+if(NOT DEFINED CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER arm-linux-gnueabihf-gcc
+        CACHE STRING "ARM32 cross compiler" FORCE)
+endif()
+
 project(rkgame-rebuild C)
 
 set(CMAKE_C_STANDARD 11)

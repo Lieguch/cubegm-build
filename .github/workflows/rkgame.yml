@@ -1,9 +1,9 @@
 name: rkgame-rebuild
-
-on:
+"on":
   push:
     paths:
-      - "rkgame-rebuild/**"
+      - 'rkgame-rebuild/**'
+      - '.github/workflows/rkgame.yml'
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,41 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf cmake
-      - run: arm-linux-gnueabihf-gcc --version
-      - run: cmake -S rkgame-rebuild -B rkgame-rebuild/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_SYSTEM_NAME=Linux && cmake --build rkgame-rebuild/build -j$(nproc)
-      - run: arm-linux-gnueabihf-objdump -T rkgame-rebuild/build/output/rkgame | head -30
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Install ARM cross-toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            cmake
+
+      - name: Show compiler
+        run: arm-linux-gnueabihf-gcc --version
+
+      - name: CMake build
+        run: |
+          cmake -S rkgame-rebuild -B rkgame-rebuild/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc
+          cmake --build rkgame-rebuild/build -j$(nproc)
+          echo "BUILD_OK=1"
+
+      - name: ABI check
+        run: |
+          set -e
+          OUT=rkgame-rebuild/build/output/rkgame
+          test -f "$OUT"
+          arm-linux-gnueabihf-objdump -T "$OUT" | head -30
+          file "$OUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rkgame-arm
+          path: rkgame-rebuild/build/output/rkgame
+          if-no-files-found: error
