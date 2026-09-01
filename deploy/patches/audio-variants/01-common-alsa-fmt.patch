@@ -1,0 +1,77 @@
+From: CubeGM v0.10 <hermes@local>
+Subject: [PATCH] 01-common-alsa-fmt.patch
+
+v0.10: common/alsa.c/h 加 alsa_init_pcm_fmt(requested_format) 供 alsa 变体驱动用。
+
+diff --git a/audio/common/alsa.c b/audio/common/alsa.c
+index ec76e3c..1fb8637 100644
+--- a/audio/common/alsa.c
++++ b/audio/common/alsa.c
+@@ -24,12 +24,13 @@
+ #include "../../configuration.h"
+ #include "../../verbosity.h"
+ 
+-int alsa_init_pcm(snd_pcm_t **pcm,
++int alsa_init_pcm_fmt(snd_pcm_t **pcm,
+    const char* device,
+    snd_pcm_stream_t stream,
+    unsigned rate,
+    unsigned latency,
+    unsigned channels,
++   snd_pcm_format_t requested_format,
+    alsa_stream_info_t *stream_info,
+    unsigned *new_rate,
+    int mode)
+@@ -80,7 +81,9 @@ int alsa_init_pcm(snd_pcm_t **pcm,
+     * only, so a float capture stream is converted back to int16 before the
+     * core ever sees it. Either way we fall back to S16 if float is
+     * unavailable. */
+-   if (     config_get_ptr()->uints.audio_format_negotiation
++   if (requested_format != SND_PCM_FORMAT_UNKNOWN)
++      format = requested_format;
++   else if (     config_get_ptr()->uints.audio_format_negotiation
+                == AUDIO_FORMAT_NEGOTIATION_INT16)
+       format = SND_PCM_FORMAT_S16;
+    else
+@@ -494,3 +497,19 @@ struct string_list *alsa_device_list_type_new(const char* type)
+ 
+    return s;
+ }
++
++
++int alsa_init_pcm(snd_pcm_t **pcm,
++   const char* device,
++   snd_pcm_stream_t stream,
++   unsigned rate,
++   unsigned latency,
++   unsigned channels,
++   alsa_stream_info_t *stream_info,
++   unsigned *new_rate,
++   int mode)
++{
++   return alsa_init_pcm_fmt(pcm, device, stream, rate, latency, channels,
++                            SND_PCM_FORMAT_UNKNOWN,
++                            stream_info, new_rate, mode);
++}
+diff --git a/audio/common/alsa.h b/audio/common/alsa.h
+index 64f5fe4..7854bb2 100644
+--- a/audio/common/alsa.h
++++ b/audio/common/alsa.h
+@@ -37,6 +37,16 @@ typedef struct alsa_stream_info
+    bool can_pause;
+ } alsa_stream_info_t;
+ 
++int alsa_init_pcm_fmt(snd_pcm_t **pcm,
++   const char* device,
++   snd_pcm_stream_t stream,
++   unsigned rate,
++   unsigned latency,
++   unsigned channels,
++   snd_pcm_format_t requested_format,
++   alsa_stream_info_t *stream_info,
++   unsigned *new_rate,
++   int mode);
+ int alsa_init_pcm(snd_pcm_t **pcm,
+       const char* device,
+       snd_pcm_stream_t stream,
+

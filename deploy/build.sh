@@ -319,6 +319,29 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
     # v0.7 (2026-08-31): 缓存复用路径也强制锁定 282a12d（幂等）
     git checkout 282a12d 2>/dev/null || die "RetroArch checkout 282a12d failed (cached)"
+    # v0.10 (2026-09-01): 音频多变体驱动 —— 14 个可切 ident 一次刷机 A/B
+    # - alsa 家族: alsa/alsathread(S16 官方) + alsa-s24/alsa-s32/alsathread-s24/alsathread-s32
+    # - tinyalsa 家族: tinyalsa(S16 官方基石) + s24_3le/s24/s32/s16-p256/s16-p512
+    # - common: alsa_init_pcm_fmt(requested_format) 供 alsa 变体指定位深
+    # apply 顺序: 01(common) → 02(alsa新文件) → 03(tinyalsa新文件) → 04(注册+Makefile)
+    for _ap in \
+        "$HERE/patches/audio-variants/01-common-alsa-fmt.patch" \
+        "$HERE/patches/audio-variants/02-alsa-variants.patch" \
+        "$HERE/patches/audio-variants/03-tinyalsa-variants.patch" \
+        "$HERE/patches/audio-variants/04-register-and-build.patch"; do
+        if [ -f "$_ap" ]; then
+            if ! git apply "$_ap"; then
+                if ! git apply --reverse --check "$_ap" 2>/dev/null; then
+                    die "audio-variant patch apply FAILED: $_ap"
+                fi
+                log "audio-variant patch already applied (skip): $_ap"
+            else
+                log "audio-variant patch applied: $_ap"
+            fi
+        else
+            die "audio-variant patch missing: $_ap"
+        fi
+    done
     # ---- 显示/音频策略（2026-08-25 定案，基于权威源码验证）----
     # 设备 = RK3036G 无 GPU framebuffer。项目已在 build_sdl_libpng.sh 将
     # SDL 1.2.15 (fbcon 视频 + ALSA 音频) 交叉编译进 sysroot，且 picoarch

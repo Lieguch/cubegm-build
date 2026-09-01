@@ -1,0 +1,80 @@
+From: CubeGM v0.10 <hermes@local>
+Subject: [PATCH] 04-register-and-build.patch
+
+v0.10: audio_driver.h extern + audio_driver.c 注册 9 变体 + Makefile.common OBJ 编译。
+
+diff --git a/Makefile.common b/Makefile.common
+index c7f7d58..06d1310 100644
+--- a/Makefile.common
++++ b/Makefile.common
+@@ -853,6 +853,8 @@ endif
+ 
+ ifeq ($(HAVE_ALSA), 1)
+    OBJ += audio/drivers/alsa.o \
++          audio/drivers/alsa-s24.o \
++          audio/drivers/alsa-s32.o \
+           audio/common/alsa.o
+ 
+    ifneq ($(HAVE_HAKCHI), 1)
+@@ -869,7 +871,12 @@ ifeq ($(HAVE_ALSA), 1)
+ endif
+ 
+ ifeq ($(HAVE_TINYALSA), 1)
+-   OBJ += audio/drivers/tinyalsa.o
++   OBJ += audio/drivers/tinyalsa.o \
++          audio/drivers/tinyalsa-s24_3le.o \
++          audio/drivers/tinyalsa-s24.o \
++          audio/drivers/tinyalsa-s32.o \
++          audio/drivers/tinyalsa-s16-p256.o \
++          audio/drivers/tinyalsa-s16-p512.o
+    DEFINES += -DHAVE_TINYALSA
+ endif
+ 
+diff --git a/audio/audio_driver.c b/audio/audio_driver.c
+index 990781c..f100077 100644
+--- a/audio/audio_driver.c
++++ b/audio/audio_driver.c
+@@ -194,12 +194,21 @@ audio_driver_t audio_null = {
+ audio_driver_t *audio_drivers[] = {
+ #ifdef HAVE_ALSA
+    &audio_alsa,
++   &audio_alsa_s24,
++   &audio_alsa_s32,
+ #if !defined(__QNX__) && !defined(MIYOO) && defined(HAVE_THREADS)
+    &audio_alsathread,
++   &audio_alsathread_s24,
++   &audio_alsathread_s32,
+ #endif
+ #endif
+ #ifdef HAVE_TINYALSA
+    &audio_tinyalsa,
++   &audio_tinyalsa_s24_3le,
++   &audio_tinyalsa_s24,
++   &audio_tinyalsa_s32,
++   &audio_tinyalsa_s16_p256,
++   &audio_tinyalsa_s16_p512,
+ #endif
+ #if defined(HAVE_AUDIOIO)
+    &audio_audioio,
+diff --git a/audio/audio_driver.h b/audio/audio_driver.h
+index 3dbe764..9b4236a 100644
+--- a/audio/audio_driver.h
++++ b/audio/audio_driver.h
+@@ -722,7 +722,16 @@ extern audio_driver_t audio_audioio;
+ extern audio_driver_t audio_oss;
+ extern audio_driver_t audio_alsa;
+ extern audio_driver_t audio_alsathread;
++extern audio_driver_t audio_alsa_s24;
++extern audio_driver_t audio_alsa_s32;
++extern audio_driver_t audio_alsathread_s24;
++extern audio_driver_t audio_alsathread_s32;
+ extern audio_driver_t audio_tinyalsa;
++extern audio_driver_t audio_tinyalsa_s24_3le;
++extern audio_driver_t audio_tinyalsa_s24;
++extern audio_driver_t audio_tinyalsa_s32;
++extern audio_driver_t audio_tinyalsa_s16_p256;
++extern audio_driver_t audio_tinyalsa_s16_p512;
+ extern audio_driver_t audio_roar;
+ extern audio_driver_t audio_openal;
+ extern audio_driver_t audio_opensl;
+
