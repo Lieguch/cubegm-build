@@ -18,32 +18,46 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             gcc-arm-linux-gnueabihf \
             g++-arm-linux-gnueabihf \
-            binutils-arm-linux-gnueabihf \
-            cmake
+            binutils-arm-linux-gnueabihf
 
       - name: Show compiler
         run: arm-linux-gnueabihf-gcc --version
 
-      - name: CMake build
+      - name: Build
         run: |
-          cmake -S rkgame-rebuild -B rkgame-rebuild/build \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_SYSTEM_NAME=Linux \
-            -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc
-          cmake --build rkgame-rebuild/build -j$(nproc)
-          echo "BUILD_OK=1"
+          cd rkgame-rebuild
+          bash build.sh output/rkgame
 
       - name: ABI check
         run: |
           set -e
-          OUT=rkgame-rebuild/build/output/rkgame
+          OUT=rkgame-rebuild/output/rkgame
           test -f "$OUT"
+          echo "=== Dynamic symbols ==="
           arm-linux-gnueabihf-objdump -T "$OUT" | head -30
+          echo "=== ELF header ==="
           file "$OUT"
+          # Verify e_flags = hard-float (bit 10 set, 0x400)
+          FLAGS=$(arm-linux-gnueabihf-readelf -h "$OUT" | grep "Flags:" | awk '{print $2}')
+          echo "e_flags=0x${FLAGS}"
+          HEX_FLAGS=$(printf "%d" "0x${FLAGS}")
+          FLOAT_ABI=$(( (HEX_FLAGS >> 9) & 0x3 ))
+          echo "Float ABI: $FLOAT_ABI (0=soft, 1=softfp, 2=hardfp)"
+          if [ "$FLOAT_ABI" != "2" ]; then
+            echo "FATAL: binary is not hard-float (got $FLOAT_ABI)"
+            exit 1
+          fi
+          # Verify no GLIBC_2.34+ symbols (allow GLIBC_2.4)
+          if arm-linux-gnueabihf-objdump -T "$OUT" | grep -qE "GLIBC_2\.(3[4-9]|4[0-9]|5[0-9])"; then
+            echo "FATAL: found GLIBC_2.34+ symbols"
+            arm-linux-gnueabihf-objdump -T "$OUT" | grep "GLIBC_2.3\|GLIBC_2.4"
+            exit 1
+          fi
+          echo "ABI check PASSED: hard-float, no 2.34+ symbols"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: rkgame-arm
-          path: rkgame-rebuild/build/output/rkgame
+          path: rkgame-rebuild/output/rkgame
           if-no-files-found: error
