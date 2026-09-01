@@ -26,6 +26,7 @@
  * ============================================================ */
 
 #define _GNU_SOURCE
+/* rkgame v1.5.0 — SRAM + evdev rebuild, 2026-09-01 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
