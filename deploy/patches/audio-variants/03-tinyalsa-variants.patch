@@ -1,7 +1,7 @@
 From: CubeGM v0.10 <hermes@local>
 Subject: [PATCH] 03-tinyalsa-variants.patch
 
-v0.10: 新增 5 个 tinyalsa 变体驱动。
+v0.10: 5 个 tinyalsa 变体。
 
 diff --git a/audio/drivers/tinyalsa-s16-p256.c b/audio/drivers/tinyalsa-s16-p256.c
 new file mode 100644

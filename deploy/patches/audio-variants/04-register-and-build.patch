@@ -1,7 +1,7 @@
 From: CubeGM v0.10 <hermes@local>
 Subject: [PATCH] 04-register-and-build.patch
 
-v0.10: audio_driver.h extern + audio_driver.c 注册 9 变体 + Makefile.common OBJ 编译。
+v0.10: 注册+Makefile。
 
 diff --git a/Makefile.common b/Makefile.common
 index c7f7d58..06d1310 100644

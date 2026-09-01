@@ -1,7 +1,7 @@
 From: CubeGM v0.10 <hermes@local>
 Subject: [PATCH] 01-common-alsa-fmt.patch
 
-v0.10: common/alsa.c/h 加 alsa_init_pcm_fmt(requested_format) 供 alsa 变体驱动用。
+v0.10: common/alsa.c/h 加 alsa_init_pcm_fmt(requested_format)。
 
 diff --git a/audio/common/alsa.c b/audio/common/alsa.c
 index ec76e3c..1fb8637 100644

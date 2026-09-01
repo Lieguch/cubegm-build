@@ -1,11 +1,11 @@
 From: CubeGM v0.10 <hermes@local>
 Subject: [PATCH] 02-alsa-variants.patch
 
-v0.10: 新增 alsa-s24.c / alsa-s32.c（各含 alasa+alsathread 双驱动变体）。
+v0.10: alsa-s24/s32（含 alsa+alsathread）。
 
 diff --git a/audio/drivers/alsa-s24.c b/audio/drivers/alsa-s24.c
 new file mode 100644
-index 0000000..92ec24a
+index 0000000..4a4de31
 --- /dev/null
 +++ b/audio/drivers/alsa-s24.c
 @@ -0,0 +1,1304 @@
@@ -291,7 +291,7 @@ index 0000000..92ec24a
 +        alsa_microphone_free,
 +        alsa_microphone_read,
 +        alsa_microphone_set_nonblock_state,
-+        "alsa-s24",
++        "alsa",
 +        alsa_microphone_device_list_new,
 +        alsa_microphone_device_list_free,
 +        alsa_microphone_open_mic,
@@ -584,7 +584,7 @@ index 0000000..92ec24a
 +   alsa_set_nonblock_state,
 +   alsa_free,
 +   alsa_use_float,
-+   "alsa",
++   "alsa-s24",
 +   alsa_device_list_s24_new,
 +   alsa_device_list_s24_free,
 +   alsa_write_avail,
@@ -1006,7 +1006,7 @@ index 0000000..92ec24a
 +      alsa_thread_microphone_free,
 +      alsa_thread_microphone_read,
 +      alsa_thread_microphone_set_nonblock_state,
-+      "alsathread-s24",
++      "alsathread",
 +      alsa_thread_microphone_device_list_new,
 +      alsa_thread_microphone_device_list_free,
 +      alsa_thread_microphone_open_mic,
@@ -1303,7 +1303,7 @@ index 0000000..92ec24a
 +   alsa_thread_set_nonblock_state,
 +   alsa_thread_free,
 +   alsa_thread_use_float,
-+   "alsathread",
++   "alsathread-s24",
 +   alsa_device_list_new, /* Shared with the sync driver above -
 +                            * they don't use the driver context. */
 +   alsa_device_list_free,
@@ -1315,7 +1315,7 @@ index 0000000..92ec24a
 +#endif /* !__QNX__ && !MIYOO && HAVE_THREADS */
 diff --git a/audio/drivers/alsa-s32.c b/audio/drivers/alsa-s32.c
 new file mode 100644
-index 0000000..6fa0f71
+index 0000000..d5b31ca
 --- /dev/null
 +++ b/audio/drivers/alsa-s32.c
 @@ -0,0 +1,1304 @@
@@ -1601,7 +1601,7 @@ index 0000000..6fa0f71
 +        alsa_microphone_free,
 +        alsa_microphone_read,
 +        alsa_microphone_set_nonblock_state,
-+        "alsa-s32",
++        "alsa",
 +        alsa_microphone_device_list_new,
 +        alsa_microphone_device_list_free,
 +        alsa_microphone_open_mic,
@@ -1894,7 +1894,7 @@ index 0000000..6fa0f71
 +   alsa_set_nonblock_state,
 +   alsa_free,
 +   alsa_use_float,
-+   "alsa",
++   "alsa-s32",
 +   alsa_device_list_s32_new,
 +   alsa_device_list_s32_free,
 +   alsa_write_avail,
@@ -2316,7 +2316,7 @@ index 0000000..6fa0f71
 +      alsa_thread_microphone_free,
 +      alsa_thread_microphone_read,
 +      alsa_thread_microphone_set_nonblock_state,
-+      "alsathread-s32",
++      "alsathread",
 +      alsa_thread_microphone_device_list_new,
 +      alsa_thread_microphone_device_list_free,
 +      alsa_thread_microphone_open_mic,
@@ -2613,7 +2613,7 @@ index 0000000..6fa0f71
 +   alsa_thread_set_nonblock_state,
 +   alsa_thread_free,
 +   alsa_thread_use_float,
-+   "alsathread",
++   "alsathread-s32",
 +   alsa_device_list_new, /* Shared with the sync driver above -
 +                            * they don't use the driver context. */
 +   alsa_device_list_free,
