@@ -12,7 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ARM cross-toolchain
+      - name: Restore crosstool sysroot (glibc 2.29, shared with cubegm-build)
+        id: cache-tc
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/cubegm-tc
+          key: tc-glibc229
+          restore-keys: |
+            tc-glibc229-
+
+      - name: Install fallback ARM cross-toolchain (apt)
+        if: steps.cache-tc.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -21,10 +31,25 @@ jobs:
             binutils-arm-linux-gnueabihf
 
       - name: Show compiler
-        run: arm-linux-gnueabihf-gcc --version
+        run: |
+          if [ -x /home/runner/cubegm-tc/bin/arm-linux-gnueabihf-gcc ]; then
+            export CC=/home/runner/cubegm-tc/bin/arm-linux-gnueabihf-gcc
+            echo "Using crosstool-NG glibc-2.29 toolchain"
+          else
+            export CC=arm-linux-gnueabihf-gcc
+            echo "Using apt gcc-arm-linux-gnueabihf (fallback)"
+          fi
+          "$CC" --version
 
       - name: Build
         run: |
+          if [ -x /home/runner/cubegm-tc/bin/arm-linux-gnueabihf-gcc ]; then
+            export CC=/home/runner/cubegm-tc/bin/arm-linux-gnueabihf-gcc
+            export SYSROOT=/home/runner/cubegm-tc/arm-linux-gnueabihf/sysroot
+          else
+            export CC=arm-linux-gnueabihf-gcc
+            export SYSROOT=
+          fi
           cd rkgame-rebuild
           bash build.sh output/rkgame
 
@@ -32,15 +57,19 @@ jobs:
         run: |
           set -e
           OUT=rkgame-rebuild/output/rkgame
+          if [ -x /home/runner/cubegm-tc/bin/arm-linux-gnueabihf-objdump ]; then
+            OBJDUMP=/home/runner/cubegm-tc/bin/arm-linux-gnueabihf-objdump
+            READELF=/home/runner/cubegm-tc/bin/arm-linux-gnueabihf-readelf
+          else
+            OBJDUMP=arm-linux-gnueabihf-objdump
+            READELF=arm-linux-gnueabihf-readelf
+          fi
           test -f "$OUT"
           echo "=== Dynamic symbols ==="
-          arm-linux-gnueabihf-objdump -T "$OUT" | head -30
+          "$OBJDUMP" -T "$OUT" | head -30
           echo "=== ELF header ==="
           file "$OUT"
-          # Verify e_flags = hard-float (bit 10 set, 0x400)
-          # readelf 输出 "Flags: 0x5000400, hard-float ABI"
-          # awk $2 → "0x5000400,"，tr -d 去逗号 → "0x5000400"（已含 0x 前缀）
-          FLAGS=$(arm-linux-gnueabihf-readelf -h "$OUT" | grep "Flags:" | awk '{print $2}' | tr -d ',')
+          FLAGS=$("$READELF" -h "$OUT" | grep "Flags:" | awk '{print $2}' | tr -d ',')
           echo "e_flags=${FLAGS}"
           HEX_FLAGS=$(printf "%d" "${FLAGS}")
           FLOAT_ABI=$(( (HEX_FLAGS >> 9) & 0x3 ))
@@ -49,10 +78,9 @@ jobs:
             echo "FATAL: binary is not hard-float (got $FLOAT_ABI)"
             exit 1
           fi
-          # Verify no GLIBC_2.34+ symbols (allow GLIBC_2.4)
-          if arm-linux-gnueabihf-objdump -T "$OUT" | grep -qE "GLIBC_2\.(3[4-9]|4[0-9]|5[0-9])"; then
+          if "$OBJDUMP" -T "$OUT" | grep -qE "GLIBC_2\.(3[4-9]|4[0-9]|5[0-9])"; then
             echo "FATAL: found GLIBC_2.34+ symbols"
-            arm-linux-gnueabihf-objdump -T "$OUT" | grep "GLIBC_2.3\|GLIBC_2.4"
+            "$OBJDUMP" -T "$OUT" | grep "GLIBC_2.3\|GLIBC_2.4"
             exit 1
           fi
           echo "ABI check PASSED: hard-float, no 2.34+ symbols"
