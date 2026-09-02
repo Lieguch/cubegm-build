@@ -59,7 +59,10 @@ static void hlog(const char *msg) {
  * 旧 payload 的 asound.conf（v11.8 写死 pcm.!default = plug → hw:0,0，无 format
  * 锁）会与新 payload（v0.11 锁 S16）冲突 → 用户覆盖拷贝不删旧文件 → 旧 asound.conf
  * 被 ALSA_CONFIG_PATH=~/.asoundrc 加载（rootfs alsa.conf @hooks 自动 include），
- * 导致 S32 underrun 复发。同步 unlink 强制回落新 payload 的 asound.conf。 */
+ * 导致 S32 underrun 复发。同步 unlink 强制回落新 payload 的 asound.conf。
+ * v0.12 (2026-09-02, 449 路由修复): 上述清理同时覆盖到 v0.11 旧 .asoundrc
+ * （钉死 hw:0,0/HDMI 端点版）；v0.12 的 .asoundrc 已改走 hw:0,1/acodec-ana 扬声器。
+ * 路径表与 v0.11 相同，cleanup 行为一致。 */
 static void cleanup_stale_libasound(void) {
     static const char *paths[] = {
         /* libasound 残留（v0.3 根治） */
@@ -67,7 +70,7 @@ static void cleanup_stale_libasound(void) {
         WORK_DIR "/lib/libasound.so",
         WORK_DIR "/usr/lib/libasound.so.2",
         WORK_DIR "/usr/lib/libasound.so",
-        /* asound 配置残留（v0.11 根治） */
+        /* asound 配置残留（v0.11 根治，覆盖 v0.12 旧 hw:0,0 路由版） */
         WORK_DIR "/.asoundrc",
         WORK_DIR "/asound.conf",
         /* retroarch 旧 cfg 备份（含旧 audio_format=s32 等脏值） */

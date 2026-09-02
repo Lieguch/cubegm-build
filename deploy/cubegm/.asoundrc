@@ -25,11 +25,20 @@
 #       正确形态 = 单点 plug->hw:0,0（原厂 driver.so 即 snd_pcm_open("default") 单开）。
 # =================================================================
 
-# --- 默认输出（强制覆盖系统 pcm.default 引用）：plug 锁 S16_LE -> hw:0,0 ---
+# --- 默认输出（v0.12 449 路由修复）：单点 plug 锁 S16_LE -> hw:0,1（扬声器）---
+# 449 实机根因：v0.11 锁 S16 正确但 default 钉死 hw:0,0（i2s-hifi/HDMI 端点），
+# 设备无 HDMI sink（未接 4K 屏）时 kernel HDMI 子设备立即 xrun -> 内核 underrun
+# 风暴 -> RetroArch 同步驱动被静音。
+# acodec-ana(rk3036-voice, hw:0,1) 与 HDMI 共享 I2S 总线（DTB 实证 dai-link@0/1
+# 都挂在 i2s@10220000），写 hw:0,1 时数据同时经总线广播到 HDMI codec（不影响
+# HDMI 端点 xrun 计数）。内置扬声器走 acodec-ana 物理端点 -> 必响。
+# 验证：diag [hw:0,1] set_params rc=0（writei 短突发 xrun 是 1kHz 1s 喂数不足，
+# retroarch 16+ ms 缓冲流持续写无 xrun）。
+# 保留 cubegm_hdmi 作为显式命名（诊断/用户手动选 audio_device=cubegm_hdmi 走 HDMI）。
 pcm.!default {
     type plug
     slave {
-        pcm "hw:0,0"
+        pcm "hw:0,1"
         format S16_LE
         rate 48000
         channels 2

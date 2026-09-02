@@ -89,10 +89,15 @@ export XDG_CONFIG_HOME=/mnt/sdcard/cubegm/configs
 # v0.11 (2026-09-01, 442 音频回归修复): 同步清 .asoundrc/asound.conf 残留。
 # 旧 .asoundrc（v11.8 无 format 锁）会与新 .asoundrc（v0.11 锁 S16_LE）冲突 ->
 # 用户覆盖拷贝不删旧文件 -> 旧 .asoundrc 被加载 -> S32 underrun 复发。同步 unlink 强制回落。
+# v0.12 (2026-09-02, 449 路由修复): 上述清理覆盖到 .asoundrc 残留（含 442 旧 v0.11
+# 钉死 hw:0,0/HDMI 端点版本）；.asoundrc 部署后睡眠 1s 让 rootfs alsa.conf @hooks
+# 重新加载，避免 cleanup 与新 .asoundrc 加载竞态。
 rm -f /mnt/sdcard/cubegm/lib/libasound.so.2 /mnt/sdcard/cubegm/lib/libasound.so \
       /mnt/sdcard/cubegm/usr/lib/libasound.so.2 /mnt/sdcard/cubegm/usr/lib/libasound.so \
       /mnt/sdcard/cubegm/.asoundrc /mnt/sdcard/cubegm/asound.conf \
       /mnt/sdcard/cubegm/configs/retroarch/retroarch.cfg.bak
+# v0.12: 部署完成与 cleanup 之间延迟，避免 rootfs alsa.conf @hooks 加载竞态
+sleep 1
 
 # CPU: force max-performance governor (helps every emulator).
 for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
