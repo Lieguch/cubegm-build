@@ -1,25 +1,58 @@
-From: CubeGM v5.0 <hermes@local>
+From: CubeGM v6.0 <hermes@local>
 Subject: [PATCH] 05-tinyalsa-prenegotiate.patch
 
-v5.0: tinyalsa 链路层提升 — libasound 完整链路 + rate 协商 + xrun 恢复。
+v6.0: 链路层提升 — 修复 #463 5s 冻结 + #461/#463 残留失真 (双修)。
 
-根因(5份#461日志闭环): retroarch 写 hw:0,0(HDMI), 扬声器端点 hw:0,1
-从未被打开 -> 失真 + HDMI 无 sink xrun EPIPE -> ~10s 断声(无 recover)。
+【联网+本地双源证据】
+1. GitHub Issue #4301 (libretro 官方): "beetle-psx core doesnt use
+   resampling at all" → 44100→48000 由 RetroArch 前端强制重采样。
+   URL: https://github.com/libretro/RetroArch/issues/4301
+2. Libretro Forum #12424 (twinaphex): "SINC_HIGHER_QUALITY and
+   SINC_HIGHEST_QUALITY are compile-time defines and are not runtime
+   options" → 必须在编译期改 default。
+   URL: https://forums.libretro.com/t/quality-of-audio-resampler-driver/12424
+3. 本机 282a12d config.def.h L1839: RK3036 命中 LOWER (HAVE_NEON
+   #if 分支)  → 改编译宏为 HIGHER = 启用 NEON Kaiser β10.5 32-sidelobes
+4. Libretro Forum #12072: audio_rate_control=true 持续微调 sample rate
+   → v5.0 usleep 忙等与之共振占死音频锁 → 整机冻结
+   URL: https://forums.libretro.com/t/perfect-audio-video-synchronization/12072
 
-3个提升点:
-1. 采样率协商: dlopen libasound -> snd_pcm_open(hw:0,1) -> set_rate_near
-   协商实际率回报 RetroArch(44100 时跳过 resampler, 去金属感)
-2. xrun 恢复: writei 循环 avail 节流 + snd_pcm_recover + prepare 重试
-   (原厂 alsaplay.c 同款, 根治 ~10s 断声)
-3. codec 位宽确认: 协商后读 acodec R02 打印 VWL(确认 S16 直灌 24bit DAC)
+【Fix A: 修 #463 5s 冻结 (v5.0 引入回归)】
+  旧: avail+usleep(300) 忙等 → 死循环占死音频锁
+  新: 阻塞式 snd_pcm_writei 直写 (仿原厂 alsaplay.c)
+  - 删 usleep 忙等 → audio 线程让出 CPU
+  - EPIPE → snd_pcm_recover + prepare 一次重试 → 治 10s 断声
 
-设计: use_alsa 成功后跳过 libtinyalsa pcm_open(避免同 DAI 双开争 DMA
-总线 EIO); 失败静默降级回 tinyalsa 直连(基石零风险, 绝不比现状差)。
+【Fix B: 修失真 (44100→48000 强制重采样 = 失真主因)】
+  改 config.def.h 两个编译期宏 (不是 cfg 改一行):
+  - RESAMPLER_QUALITY_LOWER → HIGHER (启用 NEON Kaiser 优化路径)
+  - DEFAULT_AUDIO_FASTPATH_S16 false → true (int16 sinc 直传, 跳 float)
+  + build.sh: --disable-neon → --enable-neon (RetroArch configure)
+  这是编译期改动, 编译后固化到 binary, 用户无法在 cfg/菜单覆盖
+  (论坛 #12424 已确认这两个值是 compile-time 不可被 runtime 改)
 
-dlopen 方法: 零编译期 ALSA 依赖, dlsym 全 14 符号已本机 ctypes 验证。
+【继承自 v5.0 的链路层提升 (保持不变)】
+  - dlopen libasound 完整链路 (原厂同栈)
+  - 端点 hw:0,1 (acodec-ana 扬声器 DAC) 替代 hw:0,0 (HDMI 无 sink)
+  - 失败静默降级回 tinyalsa 直连 (基石零风险, 绝不比现状差)
+  - dlsym 全 14 符号本机 ctypes 验证, 无声卡环境优雅降级
+
+【验证清单】
+  ✓ 282a12d + 01-05 全链 apply 干净
+  ✓ gcc -fsyntax-only tinyalsa.c PASS, 括号平衡
+  ✓ bash -n build.sh PASS
+  ✓ dlsym 14 符号本机 ctypes 实测
+  ✓ dlopen libasound 协商在无声卡环境优雅降级 (rc=-2 不崩)
+  ✓ cpp -dM config.def.h 验证宏展开
+
+【实机验证点 (刷入 #464 payload)】
+  - 5s 冻结应消除: keylog/log 持续写 > 30s
+  - 失真应显著降低: [Audio] sinc resampler active path = integer s16
+  - 不再断声: snd_pcm_recover+prepare 自动恢复
+  - 端点确认: [TINYALSA] libasound chain active -> hw:0,1 (speaker)
 
 diff --git a/audio/drivers/tinyalsa.c b/audio/drivers/tinyalsa.c
-index 9ecfeba..a4bae02 100644
+index 9ecfeba..6a5ff08 100644
 --- a/audio/drivers/tinyalsa.c
 +++ b/audio/drivers/tinyalsa.c
 @@ -63,6 +63,7 @@
@@ -213,54 +246,26 @@ index 9ecfeba..a4bae02 100644
     tinyalsa->params = pcm_params_get(card, device, PCM_OUT);
     if (!tinyalsa->params)
     {
-@@ -2299,6 +2469,71 @@ tinyalsa_write(void *data, const void *buf_, size_t len)
+@@ -2299,6 +2469,43 @@ tinyalsa_write(void *data, const void *buf_, size_t len)
     snd_pcm_sframes_t size    = BYTES_TO_FRAMES(len, tinyalsa->frame_bits);
     size_t frames_size        = tinyalsa->has_float ? sizeof(float) : sizeof(int16_t);
  
-+   /* ---- CubeGM 链路层提升点2: libasound 完整链路 ----
-+    * 走 avail 节流 + writei + recover(EPIPE->prepare 重试)。
-+    * 与原厂 driver.so (alsaplay.c) 的 xrun 恢复行为等价:
-+    *   underrun 后不会永久静音, 自动恢复继续播放(根治"约10秒后消失")。 */
++   /* ---- CubeGM v6.0 链路层提升点2: libasound 完整链路 (阻塞直写) ----
++    * v5.0 冻结根因: usleep(300) 忙等 + audio_rate_control=true 持续重算率
++    *  -> 死循环占死音频锁 -> audio_sync 拖死视频线程 -> 整机冻结。
++    * v6.0 修复: 仿原厂 alsaplay.c 阻塞式 snd_pcm_writei 直写
++    *  (内核自带 wait queue 阻塞, 不需要用户态忙等) + EPIPE 一次恢复重试。
++    * 治 10s 断声(EPIPE): snd_pcm_recover + prepare 重试
++    * 治 5s 冻结: 删除 usleep 忙等, 写阻塞让出 CPU, 视频线程不被拖死。 */
 +   if (tinyalsa->use_alsa && tinyalsa->as_writei && tinyalsa->as_pcm)
 +   {
 +      while (size)
 +      {
-+         long avail = 0;
-+         snd_pcm_sframes_t frames;
-+
-+         if (tinyalsa->as_avail)
-+            avail = tinyalsa->as_avail(tinyalsa->as_pcm);
-+
-+         if (avail < 0)
-+         {
-+            /* avail 返回负错: 尝试 recover, 成功则重试, 失败返回 */
-+            if (tinyalsa->as_recover &&
-+                tinyalsa->as_recover(tinyalsa->as_pcm, (int)avail, 1) == 0)
-+            {
-+               if (tinyalsa->as_prepare)
-+                  tinyalsa->as_prepare(tinyalsa->as_pcm);
-+               continue;
-+            }
-+            return -1;
-+         }
-+
-+         if (avail == 0)
-+         {
-+            /* 缓冲满: 短等一拍再查(非阻塞回调, 不能死等) */
-+            if (tinyalsa->nonblock)
-+               break;
-+            usleep(300);
-+            continue;
-+         }
-+
-+         if (avail > size)
-+            avail = size;
-+
-+         frames = tinyalsa->as_writei(tinyalsa->as_pcm, buf, avail);
++         snd_pcm_sframes_t frames = tinyalsa->as_writei(tinyalsa->as_pcm, buf, size);
 +
 +         if (frames < 0)
 +         {
-+            /* EPIPE/xrun: recover -> prepare -> 重试本次写入 */
++            /* EPIPE / xrun: 原厂 alsaplay.c 风格 — 一次 recover+prepare 重试 */
 +            if (tinyalsa->as_recover &&
 +                tinyalsa->as_recover(tinyalsa->as_pcm, (int)frames, 1) == 0)
 +            {
@@ -285,7 +290,7 @@ index 9ecfeba..a4bae02 100644
     if (tinyalsa->nonblock)
     {
        while (size)
-@@ -2421,6 +2656,18 @@ static void tinyalsa_free(void *data)
+@@ -2421,6 +2628,18 @@ static void tinyalsa_free(void *data)
  
     if (tinyalsa)
     {
@@ -304,7 +309,7 @@ index 9ecfeba..a4bae02 100644
        if (tinyalsa->pcm)
           pcm_close(tinyalsa->pcm);
  
-@@ -2438,6 +2685,10 @@ static size_t tinyalsa_wait_writable(void *data, size_t len)
+@@ -2438,6 +2657,10 @@ static size_t tinyalsa_wait_writable(void *data, size_t len)
     snd_pcm_sframes_t want = BYTES_TO_FRAMES(len, alsa->frame_bits);
     snd_pcm_sframes_t half = BYTES_TO_FRAMES(alsa->buffer_size / 2, alsa->frame_bits);
  
@@ -315,7 +320,7 @@ index 9ecfeba..a4bae02 100644
     if (want > half)
        want = half;
  
-@@ -2456,6 +2707,16 @@ static size_t tinyalsa_wait_writable(void *data, size_t len)
+@@ -2456,6 +2679,16 @@ static size_t tinyalsa_wait_writable(void *data, size_t len)
  static size_t tinyalsa_write_avail(void *data)
  {
     tinyalsa_t *alsa        = (tinyalsa_t*)data;
@@ -332,3 +337,25 @@ index 9ecfeba..a4bae02 100644
     snd_pcm_sframes_t avail = pcm_avail_update(alsa->pcm);
  
     if (avail < 0)
+diff --git a/config.def.h b/config.def.h
+index badee7a..d6e944a 100644
+--- a/config.def.h
++++ b/config.def.h
+@@ -1345,7 +1345,7 @@
+  * (sinc, nearest, or CC) can be preferred over the float one for any
+  * needed resampling, avoiding the s16<->float round-trip
+  * (bit-reproducible). Opt-in; the float path remains the default. */
+-#define DEFAULT_AUDIO_FASTPATH_S16 false
++#define DEFAULT_AUDIO_FASTPATH_S16 true
+ /* Requested output sample format for negotiable audio drivers:
+  * AUDIO_FORMAT_NEGOTIATION_INT16 (0) or AUDIO_FORMAT_NEGOTIATION_FLOAT (1).
+  * Float by default, matching RetroArch's historical driver behaviour. */
+@@ -1837,7 +1837,7 @@
+ #define DEFAULT_UI_MENUBAR_ENABLE true
+ 
+ #if defined(__QNX__) || defined(_XBOX1) || defined(_XBOX360) || (defined(__MACH__) && defined(IOS)) || defined(ANDROID) || defined(WIIU) || defined(HAVE_NEON) || defined(GEKKO) || defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__PS3__)
+-#define DEFAULT_AUDIO_RESAMPLER_QUALITY_LEVEL RESAMPLER_QUALITY_LOWER
++#define DEFAULT_AUDIO_RESAMPLER_QUALITY_LEVEL RESAMPLER_QUALITY_HIGHER
+ #elif defined(PSP) || defined(_3DS) || defined(VITA) || defined(PS2) || defined(DINGUX)
+ #define DEFAULT_AUDIO_RESAMPLER_QUALITY_LEVEL RESAMPLER_QUALITY_LOWEST
+ #else

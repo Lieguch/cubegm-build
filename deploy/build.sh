@@ -385,7 +385,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-ssl \
         --disable-builtinmbedtls \
         --disable-videoprocessor --disable-qt --disable-cg \
-        --disable-neon --disable-libretro \
+        --enable-neon --disable-libretro \
         --disable-mali_fbdev \
         --enable-langextra \
         --prefix="$RETROARCH_DST" 2>&1 || \
