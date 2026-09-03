@@ -1,15 +1,22 @@
 From: CubeGM v4.0 <hermes@local>
 Subject: [PATCH] 05-tinyalsa-prenegotiate.patch
 
-v4.0: tinyalsa pre-negotiate acodec-ana VWL via libasound.
-tinyalsa 直连 /dev/snd/pcmC0D0p 绕过 ALSA 协商层 -> acodec-ana (hw:0,1)
-的 R02.VWL 停留复位默认 24bit，S16 数据被 24bit 错读 -> 量化台阶感 +
-混叠金属感（diag v3.0/v4.0 实证）。用 dlopen libasound 完整协商链打开
-hw:0,1 一次触发 inno_rk3036 codec 把 VWL 设 16bit，再 tinyalsa 直连。
-dlopen 方式零编译期 ALSA 依赖，失败静默降级（回到现状）。
+v4.0: tinyalsa pre-negotiate acodec-ana VWL/FWL via libasound + /dev/mem.
+
+Root cause (diag v4.0 proved):
+  Pre-negotiate set VWL=16 (R02[6:5]=0) via ALSA hw_params(S16) OK.
+  But FWL stayed at 32bit (R03[3:2]=3) from driver auto-config.
+  VWL/FWL mismatch (16 vs 32) -> sample shift distortion + EPIPE underrun
+  after ~10s causing silence.
+
+Fix: after ALSA negotiation, use /dev/mem to write R03, clear [3:2],
+set FWL=16bit to match VWL. Now both registers aligned to 16bit.
+
+dlopen method: zero compile-time ALSA dep, silent fallback on failure
+(back to current state, never worse).
 
 diff --git a/audio/drivers/tinyalsa.c b/audio/drivers/tinyalsa.c
-index 9ecfeba..903e572 100644
+index 9ecfeba..09e781b 100644
 --- a/audio/drivers/tinyalsa.c
 +++ b/audio/drivers/tinyalsa.c
 @@ -51,6 +51,7 @@
@@ -20,7 +27,7 @@ index 9ecfeba..903e572 100644
  
  #include <sys/ioctl.h>
  #include <sys/mman.h>
-@@ -2235,6 +2236,72 @@ static void * tinyalsa_init(const char *devicestr, unsigned rate,
+@@ -2235,6 +2236,93 @@ static void * tinyalsa_init(const char *devicestr, unsigned rate,
     config.stop_threshold    = 0;
     config.silence_threshold = 0;
  
@@ -89,6 +96,27 @@ index 9ecfeba..903e572 100644
 +         dlclose(asound);
 +      }
 +   }
++   // Sync FWL=16bit to match VWL (R03[3:2]=0)
++   // When FWL=32bit but VWL=16bit, I2S TX slot is wider than data -> sample shift distortion + underrun after ~10s
++   {
++      int _memfd = open("/dev/mem", O_RDWR | O_SYNC);
++      if (_memfd >= 0) {
++         volatile uint32_t *_regs = mmap(NULL, 0xb0, PROT_READ | PROT_WRITE, MAP_SHARED, _memfd, 0x20030000);
++         if (_regs != MAP_FAILED) {
++            uint32_t r03 = _regs[0x14 / 4];
++            uint32_t old_fwl = (r03 >> 2) & 3;
++            uint32_t new_r03 = (r03 & ~0xCu) | (0x0 << 2);  // clear [3:2], set 16bit
++            if (old_fwl != 0 && new_r03 != r03) {
++               _regs[0x14 / 4] = new_r03;
++               RARCH_LOG("[TINYALSA] FWL set 16bit (was %ubit)\n", old_fwl);
++            }
++            munmap(_regs, 0xb0);
++         }
++         close(_memfd);
++      }
++   }
++
++
 +
     tinyalsa->pcm = pcm_open(card, device, PCM_OUT, &config);
  
