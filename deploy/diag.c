@@ -22,6 +22,7 @@
  *   diag input        # dump evdev capabilities + capture keys (interactive)
  *   diag display      # DRM modeset 1280x720 + color/pattern test
  *   diag audio        # ALSA 1 kHz tone, 2 s
+ *   diag audio_distortion  # v3.0: 3-pass time-series sampling (read while game running)
  *   diag cores        # dlopen every core in cubegm/cores/
  *
  * SAFETY
@@ -558,6 +559,280 @@ static void cmd_audio(void) {
     dlclose(h);
 }
 
+/* Recursive read-only dir dumper for /proc/device-tree subtrees.
+ * Avoids re-opening the same dir twice and limits depth so a
+ * /proc/device-tree branch doesn't drown the report. */
+static void cat_dir_tree_r(const char *base, int depth, int maxdepth) {
+    if (depth > maxdepth) return;
+    DIR *d = opendir(base);
+    if (!d) return;
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.') continue;
+        char p[512];
+        size_t need = strlen(base) + strlen(e->d_name) + 2;
+        if (need > sizeof p) continue;
+        snprintf(p, sizeof p, "%s/%s", base, e->d_name);
+        if (e->d_type == DT_DIR) {
+            logf("  %s/\n", p);
+            cat_dir_tree_r(p, depth+1, maxdepth);
+        } else {
+            logf("  %s\n", p);
+            cat_file(p);
+        }
+    }
+    closedir(d);
+}
+static void cat_dir_tree(const char *base, int maxdepth) { cat_dir_tree_r(base, 0, maxdepth); }
+
+/* ===========================================================================
+ * audio_distortion -- v3.0 (2026-09-03): distortion root-cause diagnostic
+ * ===========================================================================
+ * PURPOSE
+ *   User reported 2 artifacts from same RetroArch build:
+ *     (1) 粗糙/颗粒/台阶感 (rough / stepped / 8-bit feel)
+ *     (2) 模糊/混浊/金属感  (muddy / metallic / aliased)
+ *   Both are DISTORTION (signal-integrity), not volume.  Volume (loudness)
+ *   is a separate problem.  This function prints the 5 root-cause
+ *   measurements that distinguish the two artifacts.
+ *
+ * 5 dims (same as v2.0):
+ *   (A) 量化台阶感 (8-bit feel) -- R02.VWL + R03.FWL + I2S TXCR/RXCR.VDW
+ *   (B) 混叠金属感            -- I2S CKR + /proc/asound/card0/stream0
+ *   (C) 削波 (clipping)        -- /proc/asound/card0/pcm*p/sub0/status
+ *   (D) xrun 欠载               -- same path (xruns counter)
+ *   (E) 声道路由错配          -- /proc/device-tree/sound (DAI topology)
+ * ===========================================================================
+ * v3.0: TIME-SERIES SAMPLING (the user has no shell, only the SD card)
+ *   The device has no SSH and no input console.  All data must be
+ *   written to /mnt/sdcard/diag_report.txt.
+ *   The 449 icube_replacement forks `diag all` and immediately execs
+ *   retroarch.  The diag child runs main() once; the 1-shot dump in
+ *   v2.0 captured only the "idle codec state at T=0" -- NOT the state
+ *   after retroarch has set its hw_params.
+ *
+ *   v3.0 solution: inside cmd_audio_distortion we self-fork a
+ *   grandchild.  The PARENT writes pass 1 immediately and returns,
+ *   letting icube exec retroarch without delay.  The GRANDCHILD
+ *   sleeps 15s, writes pass 2; sleeps another 30s (T=45s total),
+ *   writes pass 3; exits.  All three append to the same
+ *   /mnt/sdcard/diag_report.txt (g_out is that file, opened by main()).
+ *
+ *   At power-on boot, retroarch is loaded by user pressing a button.
+ *   The user is told: "press button, wait 60 seconds, then read the
+ *   SD card".  The 3 passes span T=0s, T=15s, T=45s after icube
+ *   fork -- which is roughly T=15s, T=30s, T=60s after button-press,
+ *   enough to be inside the game once the user has chosen a core
+ *   and content.
+ * =========================================================================== */
+static const char *inno_vwl_name(unsigned vwl) {
+    switch (vwl & 3) {
+        case 0: return "16bit";
+        case 1: return "20bit";
+        case 2: return "24bit";
+        case 3: return "32bit";
+        default: return "?";
+    }
+}
+static const char *inno_fwl_name(unsigned fwl) {
+    switch (fwl & 3) {
+        case 0: return "16bit";
+        case 1: return "20bit";
+        case 2: return "24bit";
+        case 3: return "32bit";
+        default: return "?";
+    }
+}
+static unsigned i2s_vdw_bits(uint32_t txcr) {
+    return ((txcr & 0x1f) / 8) == 0 ? 8u
+         : ((txcr & 0x1f) / 8) == 1 ? 16u
+         : ((txcr & 0x1f) / 8) == 2 ? 20u
+         : ((txcr & 0x1f) / 8) == 3 ? 24u : 0u;
+}
+
+/* One distortion-snapshot dump.  Called for pass 1, 2, 3. */
+static void dump_audio_distortion_pass(const char *pass_label) {
+    logf("\n=== audio_distortion %s ===\n", pass_label);
+
+    /* (A) acodec R00-R10 @ 0x20030000 */
+    logf("--- (A) acodec R00-R10 @ 0x20030000 (inno_rk3036.h register map) ---\n");
+    {
+        int fd = open("/dev/mem", O_RDWR);
+        if (fd < 0) { logf("  /dev/mem open: %s\n", strerror(errno)); }
+        else {
+            volatile uint32_t *m = mmap(NULL, 0xb0, PROT_READ, MAP_SHARED, fd, 0x20030000);
+            if (m == MAP_FAILED) { logf("  mmap 0x20030000: %s\n", strerror(errno)); close(fd); }
+            else {
+                uint32_t R[11] = {m[0x00/4],m[0x0c/4],m[0x10/4],m[0x14/4],m[0x88/4],m[0x8c/4],
+                                  m[0x90/4],m[0x94/4],m[0x98/4],m[0x9c/4],m[0xa0/4]};
+                munmap((void*)m, 0xb0); close(fd);
+
+                logf("  R00=0x%08x  CSR_WORK=%d CDCR_WORK=%d PRB_ENABLE=%d\n",
+                      R[0], (R[0]>>0)&1, (R[0]>>1)&1, (R[0]>>6)&1);
+                logf("  R01=0x%08x  I2SMODE=%s  PINDIR=%s\n", R[1],
+                      (R[1]>>4)&1 ? "MASTER" : "SLAVE",
+                      (R[1]>>5)&1 ? "OUT_MASTER" : "IN_SLAVE");
+                logf("  R02=0x%08x  DACM=%s  LRCP=%s  VWL=%s (R02[6:5]=%u)\n",
+                      R[2],
+                      ((R[2]>>3)&3)==3?"PCM":((R[2]>>3)&3)==2?"I2S":((R[2]>>3)&3)==1?"LJM":"RJM",
+                      (R[2]>>7)&1 ? "REVERSAL" : "NORMAL",
+                      inno_vwl_name((R[2]>>5)&3), (R[2]>>5)&3);
+                logf("  R03=0x%08x  BCP=%s  DACR=%s  FWL=%s (R03[3:2]=%u)\n",
+                      R[3],
+                      (R[3]>>0)&1 ? "REVERSAL" : "NORMAL",
+                      (R[3]>>1)&1 ? "WORK" : "RESET",
+                      inno_fwl_name((R[3]>>2)&3), (R[3]>>2)&3);
+                logf("  R04=0x%08x  DACL_SW=%d DACL_CLK=%d DACL_VREF=%d  DACR_SW=%d DACR_CLK=%d DACR_VREF=%d\n",
+                      R[4], (R[4]>>1)&1, (R[4]>>3)&1, (R[4]>>5)&1,
+                            (R[4]>>0)&1, (R[4]>>2)&1, (R[4]>>4)&1);
+                logf("  R05=0x%08x  HPL_EN=%d HPL_WORK=%d HPR_EN=%d HPR_WORK=%d\n",
+                      R[5], (R[5]>>1)&1, (R[5]>>3)&1, (R[5]>>0)&1, (R[5]>>2)&1);
+                logf("  R06=0x%08x  DAC_EN=%d  VOUTL_CZ=%d  VOUTR_CZ=%d  PRE/DIS=%d\n",
+                      R[6], (R[6]>>5)&1, (R[6]>>1)&1, (R[6]>>0)&1, (R[6]>>4)&1);
+                logf("  R07=0x%08x  HP_L_gain=0x%02x (%+.1fdB)  -- VOLUME (1.5dB/step; 0dB=0x1a=26)\n",
+                      R[7], R[7]&0x1f, (R[7]&0x1f)*1.5 - 39.0);
+                logf("  R08=0x%08x  HP_R_gain=0x%02x (%+.1fdB)\n",
+                      R[8], R[8]&0x1f, (R[8]&0x1f)*1.5 - 39.0);
+                logf("  R09=0x%08x  HPL_MUTE=%d HPR_MUTE=%d  DACL_SW=%d DACR_SW=%d\n",
+                      R[9], (R[9]>>5)&1, (R[9]>>4)&1, (R[9]>>7)&1, (R[9]>>6)&1);
+                logf("  R10=0x%08x  charge_current_mask\n", R[10]);
+
+                uint32_t vwl = (R[2]>>5)&3, fwl = (R[3]>>2)&3;
+                unsigned vwlc = vwl==0?16:(vwl==1?20:(vwl==2?24:32));
+                unsigned fwlc = fwl==0?16:(fwl==1?20:(fwl==2?24:32));
+                if (vwl==0 && fwl==0) {
+                    logf("  >>> (A) VWL=16 FWL=16 -- tightest quantization (cleanest)\n");
+                } else if (vwl==2 && fwl==3) {
+                    logf("  >>> (A) VWL=24 FWL=32 = '24 in 32' slot; high 8 bits are padding\n");
+                } else if (vwl==2 && fwl==2) {
+                    logf("  >>> (A) VWL=24 FWL=24 -- if app writes S16, high 8 are codec-side garbage\n");
+                } else if (vwlc != fwlc) {
+                    logf("  >>> (A) VWL=%ubit FWL=%ubit (MISMATCH) -- possible sample shift\n", vwlc, fwlc);
+                } else {
+                    logf("  >>> (A) VWL=%ubit FWL=%ubit (match)\n", vwlc, fwlc);
+                }
+            }
+        }
+    }
+
+    /* (B) I2S controller 0x10220000 */
+    logf("--- (B) I2S controller 0x10220000 (rockchip_i2s.c register map) ---\n");
+    {
+        int fd = open("/dev/mem", O_RDWR);
+        if (fd < 0) { logf("  /dev/mem open: %s\n", strerror(errno)); }
+        else {
+            volatile uint32_t *m = mmap(NULL, 0x80, PROT_READ, MAP_SHARED, fd, 0x10220000);
+            if (m == MAP_FAILED) { logf("  mmap 0x10220000: %s\n", strerror(errno)); close(fd); }
+            else {
+                uint32_t txcr = m[0x00/4], rxcr = m[0x04/4], ckr = m[0x08/4];
+                uint32_t txfer = m[0x10/4], dmacr = m[0x20/4];
+                munmap((void*)m, 0x80); close(fd);
+
+                unsigned vdw_tx = i2s_vdw_bits(txcr);
+                unsigned vdw_rx = i2s_vdw_bits(rxcr);
+                const char *vdw_n[] = {"8bit","?","16bit","?","20bit","?","24bit","?"};
+                logf("  TXCR=0x%08x  VDW[bit4:0]=%u (%s, reg val=%u)  IBM=%s  CSR=%d\n",
+                      txcr, vdw_tx, vdw_n[vdw_tx/8], txcr & 0x1f,
+                      (txcr>>5)&3 == 0 ? "NORMAL" : (txcr>>5)&3 == 1 ? "LSJM" : (txcr>>5)&3 == 2 ? "RSJM" : "?",
+                      (txcr>>6)&1);
+                logf("  RXCR=0x%08x  VDW[bit4:0]=%u (%s)\n", rxcr, vdw_rx, vdw_n[vdw_rx/8]);
+                logf("  CKR=0x%08x  TRCM=%s  MSS=%s\n", ckr,
+                      (ckr>>4)&3 == 0 ? "TXRX" : (ckr>>4)&3 == 1 ? "TXSHARE" : "?",
+                      (ckr>>0)&3 == 0 ? "?" : (ckr>>0)&3 == 1 ? "SLAVE" : (ckr>>0)&3 == 2 ? "MASTER" : "?");
+                logf("  TXFER=0x%08x  TXS_START=%d  RXS_START=%d\n",
+                      txfer, (txfer>>1)&1, (txfer>>0)&1);
+                logf("  DMACR=0x%08x  TDL[bit24:25]=%u  RDL[bit26:27]=%u\n",
+                      dmacr, (dmacr>>24)&3, (dmacr>>26)&3);
+                logf("  >>> (B) I2S TXCR.VDW=%u (slot width on wire)\n", vdw_tx);
+            }
+        }
+    }
+
+    /* (C) + (D) pcm status */
+    logf("--- (C/D) pcm playback status ---\n");
+    const char *pcm_paths[] = {
+        "/proc/asound/card0/pcm0p/sub0/status",
+        "/proc/asound/card0/pcm1p/sub0/status",
+    };
+    const char *pcm_labels[] = {
+        "i2s-hifi (HDMI endpoint 0,0)",
+        "rk3036-voice (speaker endpoint 0,1)"
+    };
+    for (unsigned i = 0; i < 2; i++) {
+        logf("  --- %s ---\n", pcm_labels[i]);
+        FILE *f = fopen(pcm_paths[i], "r");
+        if (!f) { logf("    (no %s)\n", pcm_paths[i]); continue; }
+        char l[256];
+        while (fgets(l, sizeof l, f)) {
+            if (strstr(l, "state:") || strstr(l, "owner_pid") || strstr(l, "xruns") ||
+                strstr(l, "avail") || strstr(l, "period_size") || strstr(l, "tick_time")) {
+                logf("    %s", l);
+            }
+        }
+        fclose(f);
+    }
+
+    /* (B) + (E) DTB topology + active stream */
+    logf("--- (E) /proc/device-tree/sound (depth<=3) ---\n");
+    cat_dir_tree("/proc/device-tree/sound", 3);
+    logf("--- (B) /proc/asound/card0/stream0 ---\n");
+    cat_file("/proc/asound/card0/stream0");
+    logf("--- pcm0p/info ---\n");
+    cat_file("/proc/asound/card0/pcm0p/info");
+    logf("--- pcm1p/info ---\n");
+    cat_file("/proc/asound/card0/pcm1p/info");
+}
+
+static void cmd_audio_distortion(void) {
+    g_fault_module = 6;
+    logf("\n=== audio_distortion (v3.0) ===\n");
+    logf("ROOT CAUSE SEARCH: 2 user-reported artifacts (rough-step + metallic-aliased)\n");
+    logf("  (1) quant-step '8-bit feel' -> R02.VWL != application sample format\n");
+    logf("  (2) metallic aliasing       -> I2S TXCR.VDW != R02.VWL slot width\n");
+    logf("v3.0: 3-pass time-series sampling (T=0s / 15s / 45s after icube fork)\n");
+    logf("  pass 1 / 3 = T=0s  (immediate, idle codec state)\n");
+    logf("  pass 2 / 3 = T=15s (after retroarch started, codec hw_params applied)\n");
+    logf("  pass 3 / 3 = T=45s (sustained playback)\n\n");
+    logf("SELF-FORK: PARENT writes pass 1 NOW and exits so icube can exec retroarch.\n");
+    logf("  GRANDCHILD: sleep(15), pass 2; sleep(30 more), pass 3; exit.\n");
+    logf("  All 3 passes append to /mnt/sdcard/diag_report.txt (g_out).\n\n");
+
+    /* PASS 1: in this process, immediately, so even if grandchild dies
+     * we have the T=0s baseline.  This is the v2.0 single-shot dump. */
+    logf("\n##### audio_distortion PASS 1/3 (T=0s, immediate, idle) #####\n");
+    dump_audio_distortion_pass("pass 1/3 (T=0s, idle codec state)");
+
+    /* Spawn grandchild for passes 2/3.  Parent exits; icube's waitpid
+     * (or exec immediately) is not blocked -- typical icube_replacement
+     * execs retroarch right after fork+return. */
+    pid_t gc = fork();
+    if (gc < 0) {
+        logf("  audio_distortion: fork grandchild FAILED: %s\n", strerror(errno));
+        logf("=== audio_distortion done (pass 1 only) ===\n");
+        return;
+    }
+    if (gc > 0) {
+        logf("  grandchild pid=%d will write passes 2/3 in background\n", (int)gc);
+        logf("=== audio_distortion pass 1 done; passes 2/3 in background ===\n");
+        return;
+    }
+    /* GRANDCHILD: detached from controlling terminal, run timed samples */
+    setsid();
+    logf("  [grandchild] running, T=15s until pass 2...\n");
+    fflush(stdout);
+    sleep(15);
+    logf("\n##### audio_distortion PASS 2/3 (T=15s, after game start) #####\n");
+    dump_audio_distortion_pass("pass 2/3 (T=15s, game running)");
+    fflush(stdout);
+    sleep(30);  /* cumulative T=45s */
+    logf("\n##### audio_distortion PASS 3/3 (T=45s, sustained) #####\n");
+    dump_audio_distortion_pass("pass 3/3 (T=45s, sustained playback)");
+    logf("=== audio_distortion grandchild finished all 3 passes ===\n");
+    fflush(stdout);
+    _exit(0);
+}
+
+
 /* ===========================================================================
  * cores -- dlopen + symbol check + retro_api_version for every core
  * ========================================================================== */
@@ -607,6 +882,7 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "keylog") == 0)                             cmd_keylog();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "display") == 0) cmd_display();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "audio_distortion") == 0) cmd_audio_distortion();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
     if (g_out) { logf("# diag finished OK\n"); fclose(g_out); }
     logf("REPORT -> %s\n", REPORT);
