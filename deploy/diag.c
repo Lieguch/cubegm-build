@@ -22,6 +22,7 @@
  *   diag input        # dump evdev capabilities + capture keys (interactive)
  *   diag display      # DRM modeset 1280x720 + color/pattern test
  *   diag audio        # ALSA 1 kHz tone, 2 s
+ *   diag audio_chain  # v4.0: step-through pre-negotiate link (VWL 24->16 proof)
  *   diag audio_distortion  # v3.0: 3-pass time-series sampling (read while game running)
  *   diag cores        # dlopen every core in cubegm/cores/
  *
@@ -559,6 +560,213 @@ static void cmd_audio(void) {
     dlclose(h);
 }
 
+/* VWL/FWL field decode helpers (moved here so cmd_audio_chain can use them) */
+static const char *inno_vwl_name(unsigned vwl) {
+    switch (vwl & 3) {
+        case 0: return "16bit";
+        case 1: return "20bit";
+        case 2: return "24bit";
+        case 3: return "32bit";
+        default: return "?";
+    }
+}
+static const char *inno_fwl_name(unsigned fwl) {
+    switch (fwl & 3) {
+        case 0: return "16bit";
+        case 1: return "20bit";
+        case 2: return "24bit";
+        case 3: return "32bit";
+        default: return "?";
+    }
+}
+
+/* ===========================================================================
+ * audio_chain -- v4.0 pre-negotiate LINK debug
+ * ==========================================================================
+ * DEBUG TARGET: the exact ALSA negotiation sequence the tinyalsa driver
+ * will run (dlopen libasound -> open hw:0,1 -> hw_params S16 -> close).
+ * Each step logs return code AND the resulting acodec VWL/FWL registers,
+ * so we can PROVE on-device that the negotiation flips VWL 24->16.
+ * Same symbols/dlopen style as cmd_audio (no compile-time ALSA dep).
+ * --------------------------------------------------------------------------
+ * PASS/FAIL verdict at end:
+ *   PASS = after hw_params, R02.VWL==16 (codec matches S16 data)
+ *   FAIL = VWL stuck at 24 -> pre-negotiate not effective, keep digging
+ * ========================================================================== */
+static void cmd_audio_chain(void) {
+    g_fault_module = 7;
+    logf("\n=== audio_chain (v4.0) ===\n");
+    logf("PURPOSE: step-through of the tinyalsa pre-negotiate link\n");
+    logf("  dlopen -> snd_pcm_open(hw:0,1) -> hw_params(S16,48k,stereo) -> close\n");
+    logf("  after EVERY step: read acodec R02.VWL / R03.FWL to catch the flip\n\n");
+
+    /* ---- shared /dev/mem mapping (acodec-ana @ 0x20030000) ---- */
+    int memfd = open("/dev/mem", O_RDWR | O_SYNC);
+    volatile uint32_t *regs = MAP_FAILED;
+    if (memfd >= 0) {
+        regs = mmap(NULL, 0xb0, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0x20030000);
+        if (regs == MAP_FAILED)
+            logf("  mmap acodec 0x20030000 FAILED: %s\n", strerror(errno));
+    } else {
+        logf("  /dev/mem open FAILED: %s\n", strerror(errno));
+    }
+    int can_read = (regs != MAP_FAILED);
+
+    /* helper: dump VWL/FWL + HP gain now */
+    void dump_regs(const char *tag) {
+        if (!can_read) { logf("  %s: (no reg access)\n", tag); return; }
+        uint32_t R02 = regs[0x10/4], R03 = regs[0x14/4];
+        uint32_t R07 = regs[0x94/4], R08 = regs[0x98/4];
+        logf("  %-42s R02=0x%08x VWL=%s(reg %u)  R03=0x%08x FWL=%s(reg %u)  HP_L=%u HP_R=%u\n",
+             tag, R02, inno_vwl_name((R02>>5)&3), (R02>>5)&3,
+             R03, inno_fwl_name((R03>>2)&3), (R03>>2)&3,
+             R07 & 0x1f, R08 & 0x1f);
+    }
+
+    dump_regs("T0. baseline (idle, before dlopen)");
+
+    /* ---- step 1: dlopen libasound.so.2 (must succeed; diag proves device has it) ---- */
+    void *h = dlopen("libasound.so.2", RTLD_LAZY);
+    if (!h) {
+        logf("  STEP dlopen libasound.so.2: FAILED %s\n", dlerror());
+        logf("  >>> VERDICT: FATAL -- device has no libasound; pre-negotiate impossible\n");
+        goto out;
+    }
+    logf("  STEP dlopen libasound.so.2: OK\n");
+
+    /* ---- step 2: resolve every symbol the pre-negotiate uses ---- */
+    typedef int (*p_open_fn)(void **, const char *, int, int);
+    typedef int (*p_hmalloc_fn)(void **);
+    typedef int (*p_any_fn)(void *, void *);
+    typedef int (*p_setacc_fn)(void *, void *, int);
+    typedef int (*p_setfmt_fn)(void *, void *, int);
+    typedef int (*p_setch_fn)(void *, void *, unsigned);
+    typedef int (*p_setrate_fn)(void *, void *, unsigned *, int);
+    typedef int (*p_hwparams_fn)(void *, void *);
+    typedef int (*p_hwfree_fn)(void *);
+    typedef int (*p_close_fn)(void *);
+    typedef int (*p_prepare_fn)(void *);
+    typedef int (*p_start_fn)(void *);
+
+    p_open_fn     p_open    = (p_open_fn)    dlsym(h, "snd_pcm_open");
+    p_hmalloc_fn  p_hmalloc = (p_hmalloc_fn) dlsym(h, "snd_pcm_hw_params_malloc");
+    p_any_fn      p_any     = (p_any_fn)     dlsym(h, "snd_pcm_hw_params_any");
+    p_setacc_fn   p_setacc  = (p_setacc_fn)  dlsym(h, "snd_pcm_hw_params_set_access");
+    p_setfmt_fn   p_setfmt  = (p_setfmt_fn)  dlsym(h, "snd_pcm_hw_params_set_format");
+    p_setch_fn    p_setch   = (p_setch_fn)   dlsym(h, "snd_pcm_hw_params_set_channels");
+    p_setrate_fn  p_setrate = (p_setrate_fn) dlsym(h, "snd_pcm_hw_params_set_rate_near");
+    p_hwparams_fn p_hw      = (p_hwparams_fn) dlsym(h, "snd_pcm_hw_params");
+    p_hwfree_fn   p_hwfree  = (p_hwfree_fn)  dlsym(h, "snd_pcm_hw_params_free");
+    p_close_fn    p_close   = (p_close_fn)   dlsym(h, "snd_pcm_close");
+    p_prepare_fn  p_prepare = (p_prepare_fn) dlsym(h, "snd_pcm_prepare");
+    p_start_fn    p_start   = (p_start_fn)   dlsym(h, "snd_pcm_start");
+
+    int missing = 0;
+    if (!p_open)    { logf("  STEP dlsym snd_pcm_open: MISSING\n"); missing++; }
+    if (!p_hmalloc) { logf("  STEP dlsym snd_pcm_hw_params_malloc: MISSING\n"); missing++; }
+    if (!p_any)     { logf("  STEP dlsym snd_pcm_hw_params_any: MISSING\n"); missing++; }
+    if (!p_setacc)  { logf("  STEP dlsym snd_pcm_hw_params_set_access: MISSING\n"); missing++; }
+    if (!p_setfmt)  { logf("  STEP dlsym snd_pcm_hw_params_set_format: MISSING\n"); missing++; }
+    if (!p_setch)   { logf("  STEP dlsym snd_pcm_hw_params_set_channels: MISSING\n"); missing++; }
+    if (!p_setrate) { logf("  STEP dlsym snd_pcm_hw_params_set_rate_near: MISSING\n"); missing++; }
+    if (!p_hw)      { logf("  STEP dlsym snd_pcm_hw_params: MISSING\n"); missing++; }
+    if (!p_hwfree)  { logf("  STEP dlsym snd_pcm_hw_params_free: MISSING\n"); missing++; }
+    if (!p_close)   { logf("  STEP dlsym snd_pcm_close: MISSING\n"); missing++; }
+    if (missing) {
+        logf("  >>> VERDICT: FATAL -- %d ALSA symbols missing, libasound unusable\n", missing);
+        goto out;
+    }
+    logf("  STEP dlsym all %d symbols: OK\n", 10 + (p_prepare?1:0) + (p_start?1:0));
+
+    /* ---- step 3: open the speaker endpoint hw:0,1 (acodec-ana DAI) ---- */
+    void *pcm = NULL;
+    int rc = p_open(&pcm, "hw:0,1", 2 /*SND_PCM_STREAM_PLAYBACK*/, 0);
+    logf("  STEP snd_pcm_open(hw:0,1, PLAYBACK, 0): rc=%d pcm=%p\n", rc, (void*)pcm);
+    if (rc < 0 || !pcm) {
+        logf("  >>> VERDICT: FAIL -- cannot open speaker endpoint (EIO? EBUSY?)\n");
+        goto out;
+    }
+    dump_regs("T1. after open(hw:0,1)");
+
+    /* ---- step 4: hw_params_any ---- */
+    void *params = NULL;
+    rc = p_hmalloc(&params);
+    logf("  STEP snd_pcm_hw_params_malloc: rc=%d params=%p\n", rc, (void*)params);
+    if (rc < 0 || !params) { logf("  >>> VERDICT: FAIL\n"); p_close(pcm); goto out; }
+
+    rc = p_any(pcm, params);
+    logf("  STEP snd_pcm_hw_params_any: rc=%d\n", rc);
+    if (rc < 0) { logf("  >>> VERDICT: FAIL\n"); p_hwfree(params); p_close(pcm); goto out; }
+    dump_regs("T2. after hw_params_any");
+
+    /* ---- step 5: set_access(RW_INTERLEAVED=3) ---- */
+    rc = p_setacc(pcm, params, 3 /*SND_PCM_ACCESS_RW_INTERLEAVED*/);
+    logf("  STEP snd_pcm_hw_params_set_access(RW_INTERLEAVED): rc=%d\n", rc);
+    if (rc < 0) { logf("  >>> VERDICT: FAIL\n"); p_hwfree(params); p_close(pcm); goto out; }
+
+    /* ---- step 6: set_format(S16_LE=2) -- THE critical call ---- */
+    rc = p_setfmt(pcm, params, 2 /*SND_PCM_FORMAT_S16_LE*/);
+    logf("  STEP snd_pcm_hw_params_set_format(S16_LE): rc=%d\n", rc);
+    if (rc < 0) { logf("  >>> VERDICT: FAIL\n"); p_hwfree(params); p_close(pcm); goto out; }
+    dump_regs("T3. after set_format(S16_LE)");
+
+    /* ---- step 7: set_channels(2) ---- */
+    rc = p_setch(pcm, params, 2);
+    logf("  STEP snd_pcm_hw_params_set_channels(2): rc=%d\n", rc);
+    if (rc < 0) { logf("  >>> VERDICT: FAIL\n"); p_hwfree(params); p_close(pcm); goto out; }
+
+    /* ---- step 8: set_rate_near(48000) ---- */
+    unsigned int rate = 48000;
+    rc = p_setrate(pcm, params, &rate, 0);
+    logf("  STEP snd_pcm_hw_params_set_rate_near(48000): rc=%d rate=%u\n", rc, rate);
+    if (rc < 0) { logf("  >>> VERDICT: FAIL\n"); p_hwfree(params); p_close(pcm); goto out; }
+    dump_regs("T4. after set_rate_near(48000)");
+
+    /* ---- step 9: snd_pcm_hw_params -- commits; codec VWL is set HERE ---- */
+    rc = p_hw(pcm, params);
+    logf("  STEP snd_pcm_hw_params (commit): rc=%d\n", rc);
+    if (rc < 0) { logf("  >>> VERDICT: FAIL\n"); p_hwfree(params); p_close(pcm); goto out; }
+    dump_regs("T5. after hw_params commit  <<< CRITICAL: VWL should be 16 now");
+
+    /* ---- step 10: (optional) prepare+start, then read again ---- */
+    if (p_prepare) {
+        rc = p_prepare(pcm);
+        logf("  STEP snd_pcm_prepare: rc=%d\n", rc);
+    }
+    if (p_start) {
+        rc = p_start(pcm);
+        logf("  STEP snd_pcm_start: rc=%d\n", rc);
+        dump_regs("T6. after prepare+start");
+    }
+
+    /* ---- step 11: close -- does VWL survive close? ---- */
+    p_hwfree(params);
+    rc = p_close(pcm);
+    logf("  STEP snd_pcm_close: rc=%d\n", rc);
+    dump_regs("T7. after close  <<< VWL should PERSIST (no resume/reset)");
+
+    /* ---- verdict ---- */
+    if (can_read) {
+        uint32_t R02 = regs[0x10/4];
+        unsigned vwl = (R02>>5)&3;
+        if (vwl == 0) {
+            logf("  >>> VERDICT: PASS -- VWL=16 after negotiation, matches S16 data\n");
+            logf("  >>>           quantization steps + aliasing should BOTH disappear\n");
+        } else {
+            logf("  >>> VERDICT: FAIL -- VWL=%u (16=0,20=1,24=2,32=3) after negotiation\n", vwl);
+            logf("  >>>           pre-negotiate not effective; investigate kernel DAI link\n");
+        }
+    } else {
+        logf("  >>> VERDICT: INCONCLUSIVE (no /dev/mem reg access)\n");
+    }
+    logf("=== audio_chain done ===\n");
+
+out:
+    if (can_read) { munmap((void*)regs, 0xb0); }
+    if (memfd >= 0) { close(memfd); }
+    if (h) { dlclose(h); }
+}
+
 /* Recursive read-only dir dumper for /proc/device-tree subtrees.
  * Avoids re-opening the same dir twice and limits depth so a
  * /proc/device-tree branch doesn't drown the report. */
@@ -625,24 +833,6 @@ static void cat_dir_tree(const char *base, int maxdepth) { cat_dir_tree_r(base, 
  *   enough to be inside the game once the user has chosen a core
  *   and content.
  * =========================================================================== */
-static const char *inno_vwl_name(unsigned vwl) {
-    switch (vwl & 3) {
-        case 0: return "16bit";
-        case 1: return "20bit";
-        case 2: return "24bit";
-        case 3: return "32bit";
-        default: return "?";
-    }
-}
-static const char *inno_fwl_name(unsigned fwl) {
-    switch (fwl & 3) {
-        case 0: return "16bit";
-        case 1: return "20bit";
-        case 2: return "24bit";
-        case 3: return "32bit";
-        default: return "?";
-    }
-}
 static unsigned i2s_vdw_bits(uint32_t txcr) {
     return ((txcr & 0x1f) / 8) == 0 ? 8u
          : ((txcr & 0x1f) / 8) == 1 ? 16u
@@ -882,6 +1072,7 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "keylog") == 0)                             cmd_keylog();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "display") == 0) cmd_display();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "audio_chain") == 0) cmd_audio_chain();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio_distortion") == 0) cmd_audio_distortion();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
     if (g_out) { logf("# diag finished OK\n"); fclose(g_out); }
