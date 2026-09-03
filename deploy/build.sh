@@ -408,20 +408,20 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # Strip Q= on next run to suppress verbose output
     ${CROSS_COMPILE}strip retroarch
     log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
-    # v4.0 构建侧验证 1/3: 主二进制必须动态依赖 libasound.so.2（pre-negotiate dlopen 的前提）
-    if readelf -d retroarch | grep -q 'libasound.so.2'; then
-        log "v4.0 verify 1/3: retroarch NEEDED libasound.so.2 = OK"
-    else
-        die "v4.0 verify 1/3 FAILED: retroarch does not link libasound.so.2"
-    fi
-    # v4.0 构建侧验证 2/3: pre-negotiate 代码已编入（strings 证据）
-    if strings retroarch | grep -q 'pre-negotiate ALSA'; then
-        log "v4.0 verify 2/3: pre-negotiate code present = OK"
-    else
-        die "v4.0 verify 2/3 FAILED: pre-negotiate code missing from binary"
-    fi
-    cp retroarch "$RETROARCH_DST/"
-    cd "$HERE"
+        # v4.0 构建侧验证 1/3: 主二进制必须动态依赖 libasound.so.2（dlopen 的前提）
+        if readelf -d retroarch | grep -q 'libasound.so.2'; then
+            log "v4.0 verify 1/3: retroarch NEEDED libasound.so.2 = OK"
+        else
+            die "v4.0 verify 1/3 FAILED: retroarch does not link libasound.so.2"
+        fi
+        # v5.0 构建侧验证 2/3: libasound 链路代码已编入（strings 证据）
+        if strings retroarch | grep -q 'libasound chain active'; then
+            log "v5.0 verify 2/3: libasound chain code present = OK"
+        else
+            die "v5.0 verify 2/3 FAILED: libasound chain code missing from binary"
+        fi
+        cp retroarch "$RETROARCH_DST/"
+        cd "$HERE"
 else
     log "WARN: RetroArch directory missing -- using picoarch+frogui fallback."
 fi

@@ -1,123 +1,334 @@
-From: CubeGM v4.0 <hermes@local>
+From: CubeGM v5.0 <hermes@local>
 Subject: [PATCH] 05-tinyalsa-prenegotiate.patch
 
-v4.0: tinyalsa pre-negotiate acodec-ana VWL/FWL via libasound + /dev/mem.
+v5.0: tinyalsa 链路层提升 — libasound 完整链路 + rate 协商 + xrun 恢复。
 
-Root cause (diag v4.0 proved):
-  Pre-negotiate set VWL=16 (R02[6:5]=0) via ALSA hw_params(S16) OK.
-  But FWL stayed at 32bit (R03[3:2]=3) from driver auto-config.
-  VWL/FWL mismatch (16 vs 32) -> sample shift distortion + EPIPE underrun
-  after ~10s causing silence.
+根因(5份#461日志闭环): retroarch 写 hw:0,0(HDMI), 扬声器端点 hw:0,1
+从未被打开 -> 失真 + HDMI 无 sink xrun EPIPE -> ~10s 断声(无 recover)。
 
-Fix: after ALSA negotiation, use /dev/mem to write R03, clear [3:2],
-set FWL=16bit to match VWL. Now both registers aligned to 16bit.
+3个提升点:
+1. 采样率协商: dlopen libasound -> snd_pcm_open(hw:0,1) -> set_rate_near
+   协商实际率回报 RetroArch(44100 时跳过 resampler, 去金属感)
+2. xrun 恢复: writei 循环 avail 节流 + snd_pcm_recover + prepare 重试
+   (原厂 alsaplay.c 同款, 根治 ~10s 断声)
+3. codec 位宽确认: 协商后读 acodec R02 打印 VWL(确认 S16 直灌 24bit DAC)
 
-dlopen method: zero compile-time ALSA dep, silent fallback on failure
-(back to current state, never worse).
+设计: use_alsa 成功后跳过 libtinyalsa pcm_open(避免同 DAI 双开争 DMA
+总线 EIO); 失败静默降级回 tinyalsa 直连(基石零风险, 绝不比现状差)。
+
+dlopen 方法: 零编译期 ALSA 依赖, dlsym 全 14 符号已本机 ctypes 验证。
 
 diff --git a/audio/drivers/tinyalsa.c b/audio/drivers/tinyalsa.c
-index 9ecfeba..09e781b 100644
+index 9ecfeba..a4bae02 100644
 --- a/audio/drivers/tinyalsa.c
 +++ b/audio/drivers/tinyalsa.c
-@@ -51,6 +51,7 @@
- #include <errno.h>
- #include <unistd.h>
- #include <poll.h>
+@@ -63,6 +63,7 @@
+ 
+ #include <retro_inline.h>
+ #include <retro_endianness.h>
 +#include <dlfcn.h>
  
- #include <sys/ioctl.h>
- #include <sys/mman.h>
-@@ -2235,6 +2236,93 @@ static void * tinyalsa_init(const char *devicestr, unsigned rate,
-    config.stop_threshold    = 0;
-    config.silence_threshold = 0;
+ #include "../audio_driver.h"
+ #include "../../verbosity.h"
+@@ -2152,6 +2153,20 @@ typedef struct tinyalsa
+    bool              can_pause;
+    bool              is_paused;
+    unsigned int      frame_bits;
++
++   /* ---- CubeGM 链路层提升: libasound 完整链路 (原厂同栈) ----
++    * tinyalsa 直连 /dev/snd/pcmC0D*p 绕过 ALSA 协商层(采样率硬编48000、
++    * 无 snd_pcm_recover、codec 端点选错)。此字段组在 dlopen libasound
++    * 协商成功时启用: 播放走 avail+writei+recover, 失败静默降级回直连。 */
++   void              *as_lib;     /* dlopen("libasound.so.2") handle, NULL=降级 */
++   void              *as_pcm;     /* snd_pcm_t* 协商句柄 (hw:0,1) */
++   bool              use_alsa;    /* true=播放走 libasound 完整链路 */
++   unsigned int      as_rate;     /* 协商后的实际采样率 (回报 RetroArch) */
++   long (*as_writei) (void*, const void*, long);   /* snd_pcm_writei  */
++   long (*as_avail)  (void*);                       /* snd_pcm_avail   */
++   int  (*as_recover)(void*, int, int);             /* snd_pcm_recover */
++   int  (*as_prepare)(void*);                       /* snd_pcm_prepare */
++   int  (*as_close)  (void*);                       /* snd_pcm_close   */
+ } tinyalsa_t;
  
-+   /* ---- CubeGM v4.0: pre-negotiate acodec-ana VWL via libasound ----
-+    * tinyalsa 直连 /dev/snd/pcmC0D0p 绕过 ALSA 协商层，acodec-ana
-+    * (hw:0,1, 内置扬声器 DAC) 的 R02.VWL 停留在复位默认 24bit，而
-+    * 应用数据是 S16_LE -> 24bit 误读 16bit -> 量化台阶感 + 混叠金属感
-+    * (diag v3.0/v4.0 实证)。此段用 libasound 完整协商链打开 hw:0,1
-+    * 一次（open -> hw_params S16/48k/stereo -> close），触发内核 DAI
-+    * link 激活，让 inno_rk3036 codec 驱动把 VWL 设成 16bit，然后
-+    * tinyalsa 再直连 hw:0,0 播放（I2S 共享总线广播到扬声器）。
-+    * dlopen 方式：零编译期 ALSA 依赖，失败静默降级（回到现状），
-+    * 绝不比现状差。 */
+ #define BYTES_TO_FRAMES(bytes, frame_bits)  ((bytes) * 8 / frame_bits)
+@@ -2197,6 +2212,161 @@ static void * tinyalsa_init(const char *devicestr, unsigned rate,
+ 
+    RARCH_LOG("[TINYALSA] Using card: %u, device: %u.\n", card, device);
+ 
++   /* ==================================================================
++    * CubeGM 链路层提升 — libasound 完整链路到 hw:0,1 (acodec-ana 扬声器)
++    *
++    * 原厂 driver.so (alsaplay.c) 走 libasound 完整协商链:
++    *   set_access -> set_format(S16) -> set_channels(2) -> set_rate_near
++    *   -> set_buffer/period -> hw_params -> writei -> avail -> recover
++    * 而 tinyalsa 直连 /dev/snd/pcmC0D1p 绕过协商层: 采样率硬编 48000、
++    * 无 snd_pcm_recover、codec 端点由 cfg 字符串决定但 strtoul 失败落 0,0。
++    *
++    * 此段尝试 dlopen libasound 并持有 PCM 句柄, 把整条播放链路换成
++    * 原厂同款完整 ALSA 协商 + xrun 恢复。失败静默降级回 tinyalsa 直连
++    * (user 铁律: 基石零风险, 绝不比现状差)。
++    * ================================================================== */
 +   {
-+      void *asound = dlopen("libasound.so.2", RTLD_LAZY | RTLD_LOCAL);
-+      if (asound)
++      void *as_lib = dlopen("libasound.so.2", RTLD_LAZY | RTLD_LOCAL);
++      if (as_lib)
 +      {
-+         typedef int (*p_open_fn)(void **, const char *, int, int);
-+         typedef int (*p_hmalloc_fn)(void **);
-+         typedef int (*p_any_fn)(void *, void *);
-+         typedef int (*p_setacc_fn)(void *, void *, int);
-+         typedef int (*p_setfmt_fn)(void *, void *, int);
-+         typedef int (*p_setch_fn)(void *, void *, unsigned);
-+         typedef int (*p_setrate_fn)(void *, void *, unsigned *, int);
-+         typedef int (*p_hwparams_fn)(void *, void *);
-+         typedef int (*p_hwfree_fn)(void *);
-+         typedef int (*p_close_fn)(void *);
-+         p_open_fn     p_open    = (p_open_fn)    dlsym(asound, "snd_pcm_open");
-+         p_hmalloc_fn  p_hmalloc = (p_hmalloc_fn) dlsym(asound, "snd_pcm_hw_params_malloc");
-+         p_any_fn      p_any     = (p_any_fn)     dlsym(asound, "snd_pcm_hw_params_any");
-+         p_setacc_fn   p_setacc  = (p_setacc_fn)  dlsym(asound, "snd_pcm_hw_params_set_access");
-+         p_setfmt_fn   p_setfmt  = (p_setfmt_fn)  dlsym(asound, "snd_pcm_hw_params_set_format");
-+         p_setch_fn    p_setch   = (p_setch_fn)   dlsym(asound, "snd_pcm_hw_params_set_channels");
-+         p_setrate_fn  p_setrate = (p_setrate_fn) dlsym(asound, "snd_pcm_hw_params_set_rate_near");
-+         p_hwparams_fn p_hw      = (p_hwparams_fn) dlsym(asound, "snd_pcm_hw_params");
-+         p_hwfree_fn   p_hwfree  = (p_hwfree_fn)  dlsym(asound, "snd_pcm_hw_params_free");
-+         p_close_fn    p_close   = (p_close_fn)   dlsym(asound, "snd_pcm_close");
++         typedef int  (*p_open_fn)(void **, const char *, int, int);
++         typedef int  (*p_hmalloc_fn)(void **);
++         typedef int  (*p_any_fn)(void *, void *);
++         typedef int  (*p_setacc_fn)(void *, void *, int);
++         typedef int  (*p_setfmt_fn)(void *, void *, int);
++         typedef int  (*p_setch_fn)(void *, void *, unsigned);
++         typedef int  (*p_setrate_fn)(void *, void *, unsigned *, int);
++         typedef int  (*p_hwparams_fn)(void *, void *);
++         typedef int  (*p_hwfree_fn)(void *);
++         typedef int  (*p_prepare_fn)(void *);
++         typedef long (*p_writei_fn)(void *, const void *, long);
++         typedef long (*p_avail_fn)(void *);
++         typedef int  (*p_recover_fn)(void *, int, int);
++         typedef int  (*p_close_fn)(void *);
++
++         p_open_fn     p_open    = (p_open_fn)    dlsym(as_lib, "snd_pcm_open");
++         p_hmalloc_fn  p_hmalloc = (p_hmalloc_fn) dlsym(as_lib, "snd_pcm_hw_params_malloc");
++         p_any_fn      p_any     = (p_any_fn)     dlsym(as_lib, "snd_pcm_hw_params_any");
++         p_setacc_fn   p_setacc  = (p_setacc_fn)  dlsym(as_lib, "snd_pcm_hw_params_set_access");
++         p_setfmt_fn   p_setfmt  = (p_setfmt_fn)  dlsym(as_lib, "snd_pcm_hw_params_set_format");
++         p_setch_fn    p_setch   = (p_setch_fn)   dlsym(as_lib, "snd_pcm_hw_params_set_channels");
++         p_setrate_fn  p_setrate = (p_setrate_fn) dlsym(as_lib, "snd_pcm_hw_params_set_rate_near");
++         p_hwparams_fn p_hw      = (p_hwparams_fn) dlsym(as_lib, "snd_pcm_hw_params");
++         p_hwfree_fn   p_hwfree  = (p_hwfree_fn)  dlsym(as_lib, "snd_pcm_hw_params_free");
++         p_prepare_fn  p_prepare = (p_prepare_fn) dlsym(as_lib, "snd_pcm_prepare");
++         p_writei_fn   p_writei  = (p_writei_fn)  dlsym(as_lib, "snd_pcm_writei");
++         p_avail_fn    p_avail   = (p_avail_fn)   dlsym(as_lib, "snd_pcm_avail");
++         p_recover_fn  p_recover = (p_recover_fn) dlsym(as_lib, "snd_pcm_recover");
++         p_close_fn    p_close   = (p_close_fn)   dlsym(as_lib, "snd_pcm_close");
++
 +         if (p_open && p_hmalloc && p_any && p_setacc && p_setfmt &&
-+             p_setch && p_setrate && p_hw && p_hwfree && p_close)
++             p_setch && p_setrate && p_hw && p_hwfree && p_prepare &&
++             p_writei && p_avail && p_recover && p_close)
 +         {
-+            void *pcm = NULL;
-+            if (p_open(&pcm, "hw:0,1", 0 /*SND_PCM_STREAM_PLAYBACK=0*/, 0) == 0 && pcm)
++            void *lpcm = NULL;
++            /* 扬声器端点 = card 0 / device 1 (acodec-ana 24bit DAC) */
++            if (p_open(&lpcm, "hw:0,1", 0 /*SND_PCM_STREAM_PLAYBACK=0*/, 0) == 0 && lpcm)
 +            {
 +               void *params = NULL;
-+               if (p_hmalloc(&params) == 0 && params)
++               unsigned int nrate = rate;
++
++               if (p_hmalloc(&params) == 0 && params &&
++                   p_any(lpcm, params) == 0 &&
++                   p_setacc(lpcm, params, 3 /*RW_INTERLEAVED*/) == 0 &&
++                   p_setfmt(lpcm, params, 2 /*S16_LE*/) == 0 &&
++                   p_setch(lpcm, params, 2) == 0 &&
++                   p_setrate(lpcm, params, &nrate, 0) == 0 &&
++                   p_hw(lpcm, params) == 0 &&
++                   p_prepare(lpcm) == 0)
 +               {
-+                  unsigned int nrate = rate;
-+                  if (p_any(pcm, params) == 0 &&
-+                      p_setacc(pcm, params, 3 /*RW_INTERLEAVED*/) == 0 &&
-+                      p_setfmt(pcm, params, 2 /*SND_PCM_FORMAT_S16_LE*/) == 0 &&
-+                      p_setch(pcm, params, 2) == 0 &&
-+                      p_setrate(pcm, params, &nrate, 0) == 0 &&
-+                      p_hw(pcm, params) == 0)
++                  /* 提升点1: 采样率协商成功, 回报实际率给 RetroArch */
++                  tinyalsa->as_lib     = as_lib;
++                  tinyalsa->as_pcm     = lpcm;
++                  tinyalsa->use_alsa   = true;
++                  tinyalsa->as_rate    = nrate;
++                  tinyalsa->as_writei  = p_writei;
++                  tinyalsa->as_avail   = p_avail;
++                  tinyalsa->as_recover = p_recover;
++                  tinyalsa->as_prepare = p_prepare;
++                  tinyalsa->as_close   = p_close;
++
++                  if (nrate != rate)
 +                  {
-+                     RARCH_LOG("[TINYALSA] pre-negotiate ALSA ok: acodec VWL=16\n");
++                     *new_rate = nrate;
++                     RARCH_LOG("[TINYALSA] libasound negotiated rate %uHz (was %uHz)\n",
++                               nrate, rate);
 +                  }
-+                  else
-+                     RARCH_WARN("[TINYALSA] pre-negotiate ALSA hw_params failed\n");
++                  RARCH_LOG("[TINYALSA] libasound chain active -> hw:0,1 (speaker)\n");
++
++                  /* 提升点3: 读取 acodec-ana R02 确认 VWL 位宽 (S16=16bit) */
++                  {
++                     int memfd = open("/dev/mem", O_RDONLY | O_SYNC);
++                     if (memfd >= 0)
++                     {
++                        volatile uint32_t *_r = mmap(NULL, 0xb0,
++                              PROT_READ, MAP_SHARED, memfd, 0x20030000);
++                        if (_r != MAP_FAILED)
++                        {
++                           uint32_t r02 = _r[0x10 / 4];
++                           unsigned vwl = (r02 >> 5) & 3;
++                           RARCH_LOG("[TINYALSA] acodec R02=0x%08x VWL=%u (%sbit) after ALSA chain\n",
++                                     r02, vwl, vwl == 0 ? "16" :
++                                        vwl == 1 ? "20" : vwl == 2 ? "24" : "32");
++                           munmap((void*)_r, 0xb0);
++                        }
++                        close(memfd);
++                     }
++                  }
 +                  p_hwfree(params);
 +               }
-+               p_close(pcm);
++               else
++               {
++                  RARCH_WARN("[TINYALSA] libasound hw_params failed - keep tinyalsa direct\n");
++                  p_hwfree(params);
++                  p_close(lpcm);
++                  dlclose(as_lib);
++               }
 +            }
 +            else
-+               RARCH_WARN("[TINYALSA] pre-negotiate ALSA open hw:0,1 failed\n");
-+         }
-+         dlclose(asound);
-+      }
-+   }
-+   // Sync FWL=16bit to match VWL (R03[3:2]=0)
-+   // When FWL=32bit but VWL=16bit, I2S TX slot is wider than data -> sample shift distortion + underrun after ~10s
-+   {
-+      int _memfd = open("/dev/mem", O_RDWR | O_SYNC);
-+      if (_memfd >= 0) {
-+         volatile uint32_t *_regs = mmap(NULL, 0xb0, PROT_READ | PROT_WRITE, MAP_SHARED, _memfd, 0x20030000);
-+         if (_regs != MAP_FAILED) {
-+            uint32_t r03 = _regs[0x14 / 4];
-+            uint32_t old_fwl = (r03 >> 2) & 3;
-+            uint32_t new_r03 = (r03 & ~0xCu) | (0x0 << 2);  // clear [3:2], set 16bit
-+            if (old_fwl != 0 && new_r03 != r03) {
-+               _regs[0x14 / 4] = new_r03;
-+               RARCH_LOG("[TINYALSA] FWL set 16bit (was %ubit)\n", old_fwl);
++            {
++               RARCH_WARN("[TINYALSA] libasound open hw:0,1 failed - keep tinyalsa direct\n");
++               dlclose(as_lib);
 +            }
-+            munmap(_regs, 0xb0);
 +         }
-+         close(_memfd);
++         else
++         {
++            RARCH_WARN("[TINYALSA] libasound dlsym incomplete - keep tinyalsa direct\n");
++            dlclose(as_lib);
++         }
 +      }
 +   }
 +
++   /* ==================================================================
++    * use_alsa 已成立: libasound 完整链路接管播放, 跳过 libtinyalsa
++    * pcm_open —— 同一 DAI 端点(hw:0,1)双开会争抢单 TX DMA 总线(EIO)。
++    * 直接填驱动元数据返回, write/stop/free 都走 as_* 路径。
++    * ================================================================== */
++   if (tinyalsa->use_alsa)
++   {
++      tinyalsa->frame_bits  = 32;        /* S16_LE stereo = 2ch x 16bit */
++      tinyalsa->buffer_size = 4096 * 4;  /* 与 tinyalsa period=1024x4 对齐 */
++      tinyalsa->has_float   = false;
++      tinyalsa->can_pause   = false;     /* 用 recover/prepare 模拟恢复 */
 +
++      RARCH_LOG("[TINYALSA] Can pause: no.\n");
++      RARCH_LOG("[TINYALSA] Audio rate: %uHz.\n", tinyalsa->as_rate);
++      RARCH_LOG("[TINYALSA] Buffer size: %u frames.\n",
++                (unsigned int)(tinyalsa->buffer_size / 4));
++      RARCH_LOG("[TINYALSA] Buffer size: %u bytes.\n",
++                (unsigned int)tinyalsa->buffer_size);
++      RARCH_LOG("[TINYALSA] Frame  size: 4 bytes.\n");
++      RARCH_LOG("[TINYALSA] Latency: %ums.\n",
++                (unsigned int)(tinyalsa->buffer_size * 1000 /
++                               (tinyalsa->as_rate * 4)));
 +
-    tinyalsa->pcm = pcm_open(card, device, PCM_OUT, &config);
++      return tinyalsa;
++   }
++
+    tinyalsa->params = pcm_params_get(card, device, PCM_OUT);
+    if (!tinyalsa->params)
+    {
+@@ -2299,6 +2469,71 @@ tinyalsa_write(void *data, const void *buf_, size_t len)
+    snd_pcm_sframes_t size    = BYTES_TO_FRAMES(len, tinyalsa->frame_bits);
+    size_t frames_size        = tinyalsa->has_float ? sizeof(float) : sizeof(int16_t);
  
-    if (!tinyalsa->pcm)
++   /* ---- CubeGM 链路层提升点2: libasound 完整链路 ----
++    * 走 avail 节流 + writei + recover(EPIPE->prepare 重试)。
++    * 与原厂 driver.so (alsaplay.c) 的 xrun 恢复行为等价:
++    *   underrun 后不会永久静音, 自动恢复继续播放(根治"约10秒后消失")。 */
++   if (tinyalsa->use_alsa && tinyalsa->as_writei && tinyalsa->as_pcm)
++   {
++      while (size)
++      {
++         long avail = 0;
++         snd_pcm_sframes_t frames;
++
++         if (tinyalsa->as_avail)
++            avail = tinyalsa->as_avail(tinyalsa->as_pcm);
++
++         if (avail < 0)
++         {
++            /* avail 返回负错: 尝试 recover, 成功则重试, 失败返回 */
++            if (tinyalsa->as_recover &&
++                tinyalsa->as_recover(tinyalsa->as_pcm, (int)avail, 1) == 0)
++            {
++               if (tinyalsa->as_prepare)
++                  tinyalsa->as_prepare(tinyalsa->as_pcm);
++               continue;
++            }
++            return -1;
++         }
++
++         if (avail == 0)
++         {
++            /* 缓冲满: 短等一拍再查(非阻塞回调, 不能死等) */
++            if (tinyalsa->nonblock)
++               break;
++            usleep(300);
++            continue;
++         }
++
++         if (avail > size)
++            avail = size;
++
++         frames = tinyalsa->as_writei(tinyalsa->as_pcm, buf, avail);
++
++         if (frames < 0)
++         {
++            /* EPIPE/xrun: recover -> prepare -> 重试本次写入 */
++            if (tinyalsa->as_recover &&
++                tinyalsa->as_recover(tinyalsa->as_pcm, (int)frames, 1) == 0)
++            {
++               if (tinyalsa->as_prepare)
++                  tinyalsa->as_prepare(tinyalsa->as_pcm);
++               continue;
++            }
++            return -1;
++         }
++
++         if (frames == 0)
++            break;   /* 无进展, 防死循环 */
++
++         _len    += frames;
++         buf     += frames * (tinyalsa->frame_bits / 8);
++         size    -= frames;
++      }
++
++      return _len;
++   }
++
+    if (tinyalsa->nonblock)
+    {
+       while (size)
+@@ -2421,6 +2656,18 @@ static void tinyalsa_free(void *data)
+ 
+    if (tinyalsa)
+    {
++      /* 释放 libasound 完整链路句柄 (若启用) */
++      if (tinyalsa->use_alsa && tinyalsa->as_pcm && tinyalsa->as_close)
++      {
++         tinyalsa->as_close(tinyalsa->as_pcm);
++         tinyalsa->as_pcm = NULL;
++      }
++      if (tinyalsa->as_lib)
++      {
++         dlclose(tinyalsa->as_lib);
++         tinyalsa->as_lib = NULL;
++      }
++
+       if (tinyalsa->pcm)
+          pcm_close(tinyalsa->pcm);
+ 
+@@ -2438,6 +2685,10 @@ static size_t tinyalsa_wait_writable(void *data, size_t len)
+    snd_pcm_sframes_t want = BYTES_TO_FRAMES(len, alsa->frame_bits);
+    snd_pcm_sframes_t half = BYTES_TO_FRAMES(alsa->buffer_size / 2, alsa->frame_bits);
+ 
++   /* CubeGM use_alsa: 直接返回已协商空间 (libasound 已有内部缓冲节流) */
++   if (alsa->use_alsa)
++      return alsa->buffer_size;
++
+    if (want > half)
+       want = half;
+ 
+@@ -2456,6 +2707,16 @@ static size_t tinyalsa_wait_writable(void *data, size_t len)
+ static size_t tinyalsa_write_avail(void *data)
+ {
+    tinyalsa_t *alsa        = (tinyalsa_t*)data;
++
++   /* CubeGM use_alsa: 走 libasound avail (pcm 为 NULL, 不能碰 libtinyalsa) */
++   if (alsa->use_alsa && alsa->as_avail && alsa->as_pcm)
++   {
++      long a = alsa->as_avail(alsa->as_pcm);
++      if (a < 0)
++         return alsa->buffer_size;
++      return FRAMES_TO_BYTES(a, alsa->frame_bits);
++   }
++
+    snd_pcm_sframes_t avail = pcm_avail_update(alsa->pcm);
+ 
+    if (avail < 0)
