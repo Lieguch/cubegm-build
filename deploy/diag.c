@@ -680,7 +680,7 @@ static void cmd_audio_chain(void) {
 
     /* ---- step 3: open the speaker endpoint hw:0,1 (acodec-ana DAI) ---- */
     void *pcm = NULL;
-    int rc = p_open(&pcm, "hw:0,1", 2 /*SND_PCM_STREAM_PLAYBACK*/, 0);
+    int rc = p_open(&pcm, "hw:0,1", 0 /*SND_PCM_STREAM_PLAYBACK=0*/, 0);
     logf("  STEP snd_pcm_open(hw:0,1, PLAYBACK, 0): rc=%d pcm=%p\n", rc, (void*)pcm);
     if (rc < 0 || !pcm) {
         logf("  >>> VERDICT: FAIL -- cannot open speaker endpoint (EIO? EBUSY?)\n");

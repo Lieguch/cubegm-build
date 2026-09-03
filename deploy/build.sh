@@ -323,12 +323,13 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # - alsa 家族: alsa/alsathread(S16 官方) + alsa-s24/alsa-s32/alsathread-s24/alsathread-s32
     # - tinyalsa 家族: tinyalsa(S16 官方基石) + s24_3le/s24/s32/s16-p256/s16-p512
     # - common: alsa_init_pcm_fmt(requested_format) 供 alsa 变体指定位深
-    # apply 顺序: 01(common) → 02(alsa新文件) → 03(tinyalsa新文件) → 04(注册+Makefile)
+    # apply 顺序: 01(common) → 02(alsa新文件) → 03(tinyalsa新文件) → 04(注册+Makefile) → 05(tinyalsa pre-negotiate VWL)
     for _ap in \
         "$HERE/patches/audio-variants/01-common-alsa-fmt.patch" \
         "$HERE/patches/audio-variants/02-alsa-variants.patch" \
         "$HERE/patches/audio-variants/03-tinyalsa-variants.patch" \
-        "$HERE/patches/audio-variants/04-register-and-build.patch"; do
+        "$HERE/patches/audio-variants/04-register-and-build.patch" \
+        "$HERE/patches/audio-variants/05-tinyalsa-prenegotiate.patch"; do
         if [ -f "$_ap" ]; then
             if ! git apply "$_ap"; then
                 if ! git apply --reverse --check "$_ap" 2>/dev/null; then
@@ -407,6 +408,18 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # Strip Q= on next run to suppress verbose output
     ${CROSS_COMPILE}strip retroarch
     log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
+    # v4.0 构建侧验证 1/3: 主二进制必须动态依赖 libasound.so.2（pre-negotiate dlopen 的前提）
+    if readelf -d retroarch | grep -q 'libasound.so.2'; then
+        log "v4.0 verify 1/3: retroarch NEEDED libasound.so.2 = OK"
+    else
+        die "v4.0 verify 1/3 FAILED: retroarch does not link libasound.so.2"
+    fi
+    # v4.0 构建侧验证 2/3: pre-negotiate 代码已编入（strings 证据）
+    if strings retroarch | grep -q 'pre-negotiate ALSA'; then
+        log "v4.0 verify 2/3: pre-negotiate code present = OK"
+    else
+        die "v4.0 verify 2/3 FAILED: pre-negotiate code missing from binary"
+    fi
     cp retroarch "$RETROARCH_DST/"
     cd "$HERE"
 else
