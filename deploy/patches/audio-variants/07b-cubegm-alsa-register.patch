@@ -1,15 +1,27 @@
 diff --git a/audio/audio_driver.c b/audio/audio_driver.c
-index c2f2ffb..70131ef 100644
+index c2f2ffb..1bb7cd7 100644
 --- a/audio/audio_driver.c
 +++ b/audio/audio_driver.c
-@@ -193,6 +193,10 @@ audio_driver_t audio_null = {
+@@ -191,9 +191,14 @@ audio_driver_t audio_null = {
+    NULL  /* write_raw */
+ };
  
++/* v7.4: extern decls for cubegm_alsa / cubegm_alsathread */
++extern audio_driver_t audio_cubegm_alsa;
++extern audio_driver_t audio_cubegm_alsathread;
++
  audio_driver_t *audio_drivers[] = {
  #ifdef HAVE_ALSA
-+   /* v7.4 (2026-09-04): cubegm_alsa / cubegm_alsathread registered first
-+    * (factory aligned: S16_LE locked + set_rate_near + pthread). */
-+   &audio_cubegm_alsa,
-+   &audio_cubegm_alsathread,
     &audio_alsa,
++   &audio_cubegm_alsa,  /* v7.4: factory aligned */
     /* v0.11 (2026-09-01): 矩阵注册项默认禁用 —— 回归 401/402 单 driver 基线。
      * 442 实机：11 driver autoprobe 导致 retroarch 启动后 15s 内遍历全部，
+     * 最终停在 alsa S32 持续 underrun 静默。OBJ 仍编译进二进制（用户可
+@@ -202,6 +207,7 @@ audio_driver_t *audio_drivers[] = {
+     * &audio_alsa_s32, */
+ #if !defined(__QNX__) && !defined(MIYOO) && defined(HAVE_THREADS)
+    &audio_alsathread,
++   &audio_cubegm_alsathread,  /* v7.4: factory threaded */
+    /* &audio_alsathread_s24,
+     * &audio_alsathread_s32, */
+ #endif
