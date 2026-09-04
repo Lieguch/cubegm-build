@@ -329,7 +329,8 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         "$HERE/patches/audio-variants/02-alsa-variants.patch" \
         "$HERE/patches/audio-variants/03-tinyalsa-variants.patch" \
         "$HERE/patches/audio-variants/04-register-and-build.patch" \
-        "$HERE/patches/audio-variants/05-tinyalsa-prenegotiate.patch"; do
+        "$HERE/patches/audio-variants/05-tinyalsa-prenegotiate.patch" \
+        "$HERE/patches/audio-variants/06-tinyalsa-strtoul-string.patch"; do
         if [ -f "$_ap" ]; then
             if ! git apply "$_ap"; then
                 if ! git apply --reverse --check "$_ap" 2>/dev/null; then

@@ -1,0 +1,68 @@
+diff --git a/audio/drivers/tinyalsa.c b/audio/drivers/tinyalsa.c
+index 9ecfeba..2b41170 100644
+--- a/audio/drivers/tinyalsa.c
++++ b/audio/drivers/tinyalsa.c
+@@ -2177,20 +2177,51 @@ static void * tinyalsa_init(const char *devicestr, unsigned rate,
+ 
+    if (devicestr)
+    {
+-      /* Parse "<card>,<device>" without sscanf. Matches the prior
+-       * behavior of best-effort parsing: card/device retain their
+-       * defaults (0) if the string is malformed. */
+-      char *endp;
+-      unsigned long v = strtoul(devicestr, &endp, 10);
+-      if (endp != devicestr)
++      /* v7.1 (2026-09-04): Recognize ALSA-standard strings.
++       * "default" / "sysdefault" -> 0,0 (HDMI broadcast, the upstream
++       * default and what most users have on their .asoundrc).
++       * "hw:C[,D]" / "plughw:C[,D]" -> explicit card/device selection.
++       * Without this, the strtoul below silently falls through to 0,0
++       * for any non-numeric input, which is upstream libretro issue
++       * #10078 ("TinyAlsa always selects pcmC0D0p that does not exist").
++       * The legacy "<card>,<device>" numeric syntax still works. */
++      if (strcmp(devicestr, "default") == 0
++            || strcmp(devicestr, "sysdefault") == 0)
+       {
+-         card = (unsigned int)v;
+-         if (*endp == ',')
++         card = 0;
++         device = 0;
++      }
++      else if (strncmp(devicestr, "hw:", 3) == 0
++            || strncmp(devicestr, "plughw:", 7) == 0)
++      {
++         const char *p = devicestr;
++         p += (strncmp(devicestr, "plughw:", 7) == 0) ? 7 : 3;
++         if (sscanf(p, "%u,%u", &card, &device) < 1)
++         {
++            if (sscanf(p, "%u", &card) < 1)
++            {
++               card = 0;
++               device = 0;
++            }
++         }
++      }
++      else
++      {
++         /* Legacy "<card>,<device>" numeric syntax. Matches the prior
++          * behavior of best-effort parsing: card/device retain their
++          * defaults (0) if the string is malformed. */
++         char *endp;
++         unsigned long v = strtoul(devicestr, &endp, 10);
++         if (endp != devicestr)
+          {
+-            const char *p = endp + 1;
+-            v = strtoul(p, &endp, 10);
+-            if (endp != p)
+-               device = (unsigned int)v;
++            card = (unsigned int)v;
++            if (*endp == ',')
++            {
++               const char *p = endp + 1;
++               v = strtoul(p, &endp, 10);
++               if (endp != p)
++                  device = (unsigned int)v;
++            }
+          }
+       }
+    }
