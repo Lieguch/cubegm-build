@@ -1,0 +1,15 @@
+diff --git a/audio/audio_driver.c b/audio/audio_driver.c
+index c2f2ffb..70131ef 100644
+--- a/audio/audio_driver.c
++++ b/audio/audio_driver.c
+@@ -193,6 +193,10 @@ audio_driver_t audio_null = {
+ 
+ audio_driver_t *audio_drivers[] = {
+ #ifdef HAVE_ALSA
++   /* v7.4 (2026-09-04): cubegm_alsa / cubegm_alsathread registered first
++    * (factory aligned: S16_LE locked + set_rate_near + pthread). */
++   &audio_cubegm_alsa,
++   &audio_cubegm_alsathread,
+    &audio_alsa,
+    /* v0.11 (2026-09-01): 矩阵注册项默认禁用 —— 回归 401/402 单 driver 基线。
+     * 442 实机：11 driver autoprobe 导致 retroarch 启动后 15s 内遍历全部，

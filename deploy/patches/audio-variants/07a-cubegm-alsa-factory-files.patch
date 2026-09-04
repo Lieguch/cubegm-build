@@ -1,0 +1,760 @@
+diff --git a/audio/drivers/cubegm_alsa.c b/audio/drivers/cubegm_alsa.c
+new file mode 100644
+index 0000000..ac257e6
+--- /dev/null
++++ b/audio/drivers/cubegm_alsa.c
+@@ -0,0 +1,385 @@
++/* ============================================================================
++ *  RetroArch - ALSA audio driver (C: factory driver.so architecture)
++ *  CubeGM v7.4 (2026-09-04) — full reimplementation aligned to RK3036
++ *  factory driver.so.  Backed by ARM disassembly of the stock driver at:
++ *    /opt/data/workspace/cubegm/解包归档/原厂SD卡/driver.so
++ *  Factory sequence (from disasm_out.txt):
++ *    snd_pcm_open("default", PLAYBACK, 0)         // mode=0 BLOCKING
++ *    snd_pcm_hw_params_set_access(RW_INTERLEAVED)
++ *    snd_pcm_hw_params_set_format(S16_LE)         // hard-locked 16-bit
++ *    snd_pcm_hw_params_set_channels(2)            // stereo
++ *    snd_pcm_hw_params_set_rate_near(&rate, 0)    // NEGOTIATED, not pinned
++ *    snd_pcm_hw_params_set_buffer_size_near(&buf)
++ *    snd_pcm_hw_params_set_period_size_near(&period)
++ *    snd_pcm_hw_params(pcm, params)               // install
++ *    snd_pcm_prepare(pcm)
++ *    snd_pcm_start(pcm)
++ *    ... pthread_create(worker, ...); cond_wait ...
++ *    snd_pcm_writei(pcm, buf, size)               // BLOCKING
++ *    snd_pcm_recover(pcm, -EPIPE, 1)
++ *
++ *  Key differences from upstream RA alsa.c (which factory beats on):
++ *    1. set_format SND_PCM_FORMAT_S16_LE ONLY (factory pin).
++ *       Upstream tries FLOAT first; on RK3036 i2s-hifi hw:0,0 that
++ *       path reports success then x-runs silently (449 evidence:
++ *       "[ALSA] Using FLOAT_LE ... Initialized" + zero audible output).
++ *    2. set_rate_near(&rate, 0) — factory passes 0 as dir; we follow.
++ *       Upstream does not pass dir.  dir=0 = no question of "is this
++ *       playback or capture clock" (playback only here).
++ *    3. NO set_buffer_time_near / set_periods_near — factory asks for
++ *       FRAMES explicitly.  Upstream uses time + periods (which on
++ *       RK3036 ends up with 4 periods × 1024 frames; the factory gets
++ *       4 periods × 4096 frames — 4× the underrun headroom).
++ *    4. NO HAVE_FILTERS_BUILTIN path.  Factory driver.so has no
++ *       audio_dsp_plugin code at all — plain S16 chain.
++ *
++ *  v7.4 changes (vs upstream alsa.c):
++ *    - Drop FLOAT/S24/S32 negotiation: only S16_LE.
++ *    - Drop set_buffer_time_near / set_periods_near: explicit frames.
++ *    - Expose period/buffer from snd_pcm_hw_params_get_* after
++ *      install (factory does the same at 0x5b84 / 0x5bc4).
++ *    - writei uses BLOCKING semantics: no snd_pcm_wait, no eagain
++ *      branch.  Worker thread owns the call; the only thing the
++ *      front-end sees is a fifo push.
++ * ============================================================================ */
++
++#include <stdlib.h>
++#include <string.h>
++#include <alsa/asoundlib.h>
++
++#include <retro_inline.h>
++#include <rthreads/rthreads.h>
++#include <queues/fifo_queue.h>
++
++#include "../audio_driver.h"
++#include "../../configuration.h"
++#include "../../verbosity.h"
++
++/* === local mirror of common/alsa.c alsa_stream_info =========================
++ * The upstream header is fine; we just avoid pulling it in twice by
++ * duplicating the typedef here for the synchronous driver. */
++typedef struct alsa_factory_stream_info
++{
++   size_t                 buffer_size;
++   size_t                 period_size;
++   snd_pcm_uframes_t      period_frames;
++   unsigned int           frame_bits;
++   unsigned int           rate;
++   bool                   has_float;
++   bool                   can_pause;
++} alsa_factory_stream_info_t;
++
++typedef struct alsa_factory
++{
++   snd_pcm_t                  *pcm;
++   alsa_factory_stream_info_t stream_info;
++   bool                        is_paused;
++} alsa_factory_t;
++
++/* === internal: format the pcm handle.  Aligned to factory. =============== */
++static bool alsa_factory_open_pcm(alsa_factory_t *alsa,
++      const char *device, unsigned rate, unsigned latency)
++{
++   snd_pcm_hw_params_t *params = NULL;
++   snd_pcm_uframes_t    buffer_size = 0;
++   snd_pcm_uframes_t    period_size = 0;
++   unsigned int         orig_rate = rate;
++   unsigned int         latency_usec = latency * 1000;
++   const char          *alsa_dev = device ? device : "default";
++   int                  err       = 0;
++
++   if ((err = snd_pcm_open(&alsa->pcm, alsa_dev, SND_PCM_STREAM_PLAYBACK,
++                  0 /* BLOCKING, per factory */)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] snd_pcm_open failed on %s: %s\n",
++            alsa_dev, snd_strerror(err));
++      return false;
++   }
++
++   if ((err = snd_pcm_hw_params_malloc(&params)) < 0
++         || (err = snd_pcm_hw_params_any(alsa->pcm, params)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] hw_params_malloc/any failed: %s\n", snd_strerror(err));
++      goto fail;
++   }
++
++   /* Factory: set_access(RW_INTERLEAVED) at 0x5a40. */
++   if ((err = snd_pcm_hw_params_set_access(alsa->pcm, params,
++                  SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] set_access failed: %s\n", snd_strerror(err));
++      goto fail;
++   }
++
++   /* Factory: set_format(S16_LE) at 0x5a6c.  No FLOAT branch. */
++   if ((err = snd_pcm_hw_params_set_format(alsa->pcm, params,
++                  SND_PCM_FORMAT_S16_LE)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] set_format S16_LE failed (will not try FLOAT): %s\n",
++            snd_strerror(err));
++      goto fail;
++   }
++   alsa->stream_info.has_float = false;
++   alsa->stream_info.frame_bits = 16 * 2;  /* S16 × 2 channels */
++
++   /* Factory: set_channels(2) at 0x5aac. */
++   if ((err = snd_pcm_hw_params_set_channels(alsa->pcm, params, 2)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] set_channels failed: %s\n", snd_strerror(err));
++      goto fail;
++   }
++
++   /* Factory: set_rate_near(&rate, 0) at 0x5ad8.  dir=0 = playback only.
++    * Negotiates with the codec/SoC for the closest supported rate to
++    * the core's native rate.  RK3036 inno_rk3036 codec (inno_rk3036.c
++    * .rates = RK3036_CODEC_RATES) supports 8000/16000/32000/44100/48000/96000;
++    * core 44100 Hz (genesis_plus_gx) negotiates to 44100 (no resample
++    * = no aliasing/imaging artifacts). */
++   if ((err = snd_pcm_hw_params_set_rate_near(alsa->pcm, params, &rate, 0)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] set_rate_near %uHz failed: %s\n",
++            orig_rate, snd_strerror(err));
++      goto fail;
++   }
++   alsa->stream_info.rate = rate;
++   if (rate != orig_rate)
++      RARCH_LOG("[CUBEGM] rate negotiated %uHz -> %uHz (factory set_rate_near)\n",
++            orig_rate, rate);
++
++   /* Factory: set_buffer_size_near(&buf) at 0x5b08.
++    * Upstream uses set_buffer_time_near(usec) which on RK3036 returns
++    * 12352 frames for 64ms; factory gets explicit frames.  The factory
++    * code calls snd_pcm_hw_params_get_buffer_size at 0x5b84 to confirm;
++    * we do the same after install. */
++   buffer_size = 16384;
++   if ((err = snd_pcm_hw_params_set_buffer_size_near(alsa->pcm, params,
++                  &buffer_size)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] set_buffer_size_near %lu failed: %s\n",
++            (unsigned long)buffer_size, snd_strerror(err));
++      goto fail;
++   }
++
++   /* Factory: set_period_size_near(&period) at 0x5b38. */
++   period_size = 4096;
++   if ((err = snd_pcm_hw_params_set_period_size_near(alsa->pcm, params,
++                  &period_size, 0)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] set_period_size_near %lu failed: %s\n",
++            (unsigned long)period_size, snd_strerror(err));
++      goto fail;
++   }
++
++   /* Install hardware parameters.  factory at 0x5c1c. */
++   if ((err = snd_pcm_hw_params(alsa->pcm, params)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] hw_params install failed: %s\n", snd_strerror(err));
++      goto fail;
++   }
++
++   /* factory at 0x5b84 / 0x5bc4: get refined buffer/period sizes. */
++   snd_pcm_hw_params_get_buffer_size(params, &alsa->stream_info.buffer_size);
++   snd_pcm_hw_params_get_period_size(params,
++         &alsa->stream_info.period_frames, NULL);
++   alsa->stream_info.period_size =
++         snd_pcm_frames_to_bytes(alsa->pcm, alsa->stream_info.period_frames);
++
++   /* factory at 0x5bc4: get_channels (re-confirm). */
++   unsigned int ch = 0;
++   snd_pcm_hw_params_get_channels(params, &ch);
++   RARCH_LOG("[CUBEGM] ALSA factory: rate=%uHz buf=%lu period=%lu ch=%u\n",
++         alsa->stream_info.rate,
++         (unsigned long)alsa->stream_info.buffer_size,
++         (unsigned long)alsa->stream_info.period_frames, ch);
++
++   /* factory at 0x5c44: prepare.  factory at 0x5c80: start. */
++   if ((err = snd_pcm_prepare(alsa->pcm)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] snd_pcm_prepare failed: %s\n", snd_strerror(err));
++      goto fail;
++   }
++   if ((err = snd_pcm_start(alsa->pcm)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] snd_pcm_start failed: %s\n", snd_strerror(err));
++      goto fail;
++   }
++
++   alsa->stream_info.can_pause = snd_pcm_hw_params_can_pause(params) == 1;
++   snd_pcm_hw_params_free(params);
++   return true;
++
++fail:
++   if (params)
++      snd_pcm_hw_params_free(params);
++   if (alsa->pcm)
++   {
++      snd_pcm_close(alsa->pcm);
++      alsa->pcm = NULL;
++   }
++   return false;
++}
++
++/* === driver init (factory equivalent of 0x58d8 sound_driver_init) ========= */
++static void *alsa_factory_init(const char *device, unsigned rate,
++      unsigned latency, unsigned block_frames, unsigned *new_rate)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)calloc(1, sizeof(*alsa));
++   if (!alsa)
++   {
++      RARCH_ERR("[CUBEGM] alsa_factory_init: OOM\n");
++      return NULL;
++   }
++
++   RARCH_LOG("[CUBEGM] ALSA version %s\n", snd_asoundlib_version());
++
++   if (!alsa_factory_open_pcm(alsa, device, rate, latency))
++   {
++      free(alsa);
++      return NULL;
++   }
++
++   if (new_rate)
++      *new_rate = alsa->stream_info.rate;
++   return alsa;
++}
++
++/* === factory equivalent of sound_driver_playframe ====================== */
++/* 0x5e98: snd_pcm_avail -> 0x5f00: snd_pcm_writei BLOCKING -> 0x5f2c:
++ * snd_pcm_recover on -EPIPE/-EINTR/-ESTRPIPE.  Synchronous driver path
++ * (we keep a write() callback in case the front-end has data, but in
++ * practice the threaded variant is the factory's actual path). */
++static ssize_t alsa_factory_write(void *data, const void *buf_, size_t len)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   const uint8_t   *buf   = (const uint8_t *)buf_;
++   size_t           frames_total = len / (alsa->stream_info.frame_bits / 8);
++   size_t           frames_written = 0;
++   snd_pcm_sframes_t frames;
++
++   if (!alsa || !alsa->pcm || !frames_total)
++      return len;
++
++   /* factory: looping snd_pcm_writei (not snd_pcm_wait; thread variant). */
++   while (frames_written < frames_total)
++   {
++      frames = snd_pcm_writei(alsa->pcm, buf,
++            frames_total - frames_written);
++      if (frames == -EPIPE || frames == -EINTR || frames == -ESTRPIPE)
++      {
++         /* factory: snd_pcm_recover(pcm, frames, 1) — strict=1 */
++         if (snd_pcm_recover(alsa->pcm, (int)frames, 1) < 0)
++            return -1;
++         continue;
++      }
++      if (frames < 0)
++         return -1;
++      frames_written += (size_t)frames;
++      buf += (size_t)frames * (alsa->stream_info.frame_bits / 8);
++   }
++   return len;
++}
++
++static bool alsa_factory_alive(void *data)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   return alsa && !alsa->is_paused;
++}
++
++static bool alsa_factory_stop(void *data)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   if (!alsa || alsa->is_paused)
++      return true;
++   if (alsa->stream_info.can_pause)
++   {
++      snd_pcm_pause(alsa->pcm, 1);
++      alsa->is_paused = true;
++   }
++   return true;
++}
++
++static bool alsa_factory_start(void *data, bool is_shutdown)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   if (!alsa)
++      return false;
++   if (alsa->is_paused)
++   {
++      if (alsa->stream_info.can_pause)
++         snd_pcm_pause(alsa->pcm, 0);
++      alsa->is_paused = false;
++   }
++   else if (is_shutdown)
++      snd_pcm_drop(alsa->pcm);   /* factory sndout_alsa_stop = snd_pcm_drop */
++   return true;
++}
++
++static void alsa_factory_free(void *data)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   if (alsa)
++   {
++      if (alsa->pcm)
++      {
++         snd_pcm_drop(alsa->pcm);
++         snd_pcm_close(alsa->pcm);
++      }
++      free(alsa);
++   }
++}
++
++static bool alsa_factory_use_float(void *data)
++{
++   /* factory pins S16.  has_float=false is the contract. */
++   (void)data;
++   return false;
++}
++
++static size_t alsa_factory_write_avail(void *data)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   if (!alsa || !alsa->pcm)
++      return 0;
++   snd_pcm_sframes_t avail = snd_pcm_avail(alsa->pcm);
++   return avail > 0 ? (size_t)avail * (alsa->stream_info.frame_bits / 8) : 0;
++}
++
++static size_t alsa_factory_buffer_size(void *data)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   return alsa ? alsa->stream_info.buffer_size : 0;
++}
++
++static size_t alsa_factory_latency(void *data, size_t len)
++{
++   alsa_factory_t *alsa = (alsa_factory_t*)data;
++   (void)len;
++   if (!alsa)
++      return 0;
++   snd_pcm_sframes_t delay = snd_pcm_delay(alsa->pcm);
++   return delay > 0 ? (size_t)delay * 1000 / alsa->stream_info.rate : 0;
++}
++
++static void alsa_factory_set_nonblock_state(void *data, bool state)
++{
++   (void)data; (void)state;
++   /* factory: BLOCKING throughout.  No nonblock path. */
++}
++
++audio_driver_t audio_alsa = {
++   alsa_factory_init,
++   alsa_factory_write,
++   alsa_factory_stop,
++   alsa_factory_start,
++   alsa_factory_alive,
++   alsa_factory_set_nonblock_state,
++   alsa_factory_free,
++   alsa_factory_use_float,
++   "alsa",
++   NULL,  /* device_list_new — alsa_device_list_new left to common */
++   NULL,  /* device_list_free */
++   alsa_factory_write_avail,
++   alsa_factory_buffer_size,
++   NULL,  /* write_raw — factory doesn't use it */
++   alsa_factory_latency
++};
+diff --git a/audio/drivers/cubegm_alsathread.c b/audio/drivers/cubegm_alsathread.c
+new file mode 100644
+index 0000000..806d8af
+--- /dev/null
++++ b/audio/drivers/cubegm_alsathread.c
+@@ -0,0 +1,363 @@
++/* ============================================================================
++ *  RetroArch - ALSA "alsathread" audio driver (C+D: factory pthread path)
++ *  CubeGM v7.4 (2026-09-04) — full reimplementation aligned to RK3036
++ *  factory driver.so.  ARM disassembly of stock driver shows the
++ *  factory architecture is:
++ *    pthread_create(worker, ...);          // 0x63cc
++ *    worker:
++ *        snd_pcm_avail(...)               // 0x5ebc (sndout_alsa_wait)
++ *        pthread_mutex_lock(&mutex);      // cond_wait gate
++ *        pthread_cond_wait(&cond, &mutex, timeout);
++ *        if (frames == -EPIPE/-EINTR/-ESTRPIPE)
++ *            snd_pcm_recover(pcm, frames, 1);  // 0x5f2c
++ *        snd_pcm_writei(pcm, buf, size);  // BLOCKING 0x5f00
++ *        pthread_mutex_unlock(&mutex);
++ *    producer (front-end write):
++ *        pthread_mutex_lock(&mutex);
++ *        fifo_write(ring, src, len);
++ *        pthread_cond_signal(&cond);
++ *        pthread_mutex_unlock(&mutex);
++ *
++ *  v7.4 (D component): this file replaces the upstream alsathread.c
++ *  with the exact factory topology.  Two changes vs upstream:
++ *    1. set_format S16_LE ONLY (no FLOAT branch — factory).
++ *    2. Buffer/period in frames, not time (factory).
++ *  All else mirrors the upstream audio/common/alsa.c + this driver's
++ *  worker thread, with the lock/cond/signal protocol written out fully
++ *  (no reliance on upstream-internal rthreads quirks).
++ * ============================================================================ */
++
++#include <stdlib.h>
++#include <string.h>
++#include <alsa/asoundlib.h>
++
++#include <boolean.h>
++#include <rthreads/rthreads.h>
++#include <queues/fifo_queue.h>
++
++#include "../audio_driver.h"
++#include "../../configuration.h"
++#include "../../verbosity.h"
++
++typedef struct alsathread_factory_stream_info
++{
++   size_t              buffer_size;
++   size_t              period_size;
++   snd_pcm_uframes_t   period_frames;
++   unsigned int        frame_bits;
++   unsigned int        rate;
++   bool                has_float;
++   bool                can_pause;
++} alsathread_factory_stream_info_t;
++
++typedef struct alsathread_factory
++{
++   snd_pcm_t                            *pcm;
++   fifo_buffer_t                        *fifo;
++   slock_t                              *fifo_lock;
++   scond_t                              *fifo_cond;
++   sthread_t                            *worker;
++   volatile bool                         thread_dead;
++   volatile bool                         worker_waiting;
++   alsathread_factory_stream_info_t      stream_info;
++} alsathread_factory_t;
++
++/* === pcm open: same S16-LOCKED factory sequence as the sync driver ===== */
++static bool alsathread_factory_open_pcm(alsathread_factory_t *alsa,
++      const char *device, unsigned rate, unsigned latency)
++{
++   snd_pcm_hw_params_t *params = NULL;
++   snd_pcm_uframes_t    buffer_size = 0;
++   snd_pcm_uframes_t    period_size = 0;
++   const char          *alsa_dev = device ? device : "default";
++   int                  err       = 0;
++
++   if ((err = snd_pcm_open(&alsa->pcm, alsa_dev, SND_PCM_STREAM_PLAYBACK, 0)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] alsathread snd_pcm_open failed: %s\n", snd_strerror(err));
++      return false;
++   }
++
++   if ((err = snd_pcm_hw_params_malloc(&params)) < 0
++         || (err = snd_pcm_hw_params_any(alsa->pcm, params)) < 0)
++      goto fail;
++
++   if ((err = snd_pcm_hw_params_set_access(alsa->pcm, params,
++                  SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) goto fail;
++   if ((err = snd_pcm_hw_params_set_format(alsa->pcm, params,
++                  SND_PCM_FORMAT_S16_LE)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] alsathread set_format S16_LE failed: %s\n",
++            snd_strerror(err));
++      goto fail;
++   }
++   alsa->stream_info.has_float = false;
++   alsa->stream_info.frame_bits = 16 * 2;
++
++   if ((err = snd_pcm_hw_params_set_channels(alsa->pcm, params, 2)) < 0) goto fail;
++   if ((err = snd_pcm_hw_params_set_rate_near(alsa->pcm, params, &rate, 0)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] alsathread set_rate_near failed: %s\n",
++            snd_strerror(err));
++      goto fail;
++   }
++   alsa->stream_info.rate = rate;
++
++   buffer_size = 16384;
++   if ((err = snd_pcm_hw_params_set_buffer_size_near(alsa->pcm, params,
++                  &buffer_size)) < 0) goto fail;
++   period_size = 4096;
++   if ((err = snd_pcm_hw_params_set_period_size_near(alsa->pcm, params,
++                  &period_size, 0)) < 0) goto fail;
++
++   if ((err = snd_pcm_hw_params(alsa->pcm, params)) < 0) goto fail;
++   snd_pcm_hw_params_get_buffer_size(params, &alsa->stream_info.buffer_size);
++   snd_pcm_hw_params_get_period_size(params,
++         &alsa->stream_info.period_frames, NULL);
++   alsa->stream_info.period_size =
++         snd_pcm_frames_to_bytes(alsa->pcm, alsa->stream_info.period_frames);
++   alsa->stream_info.can_pause =
++         snd_pcm_hw_params_can_pause(params) == 1;
++   snd_pcm_hw_params_free(params);
++
++   if ((err = snd_pcm_prepare(alsa->pcm)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] alsathread snd_pcm_prepare failed: %s\n",
++            snd_strerror(err));
++      snd_pcm_close(alsa->pcm);
++      alsa->pcm = NULL;
++      return false;
++   }
++   if ((err = snd_pcm_start(alsa->pcm)) < 0)
++   {
++      RARCH_ERR("[CUBEGM] alsathread snd_pcm_start failed: %s\n",
++            snd_strerror(err));
++      snd_pcm_close(alsa->pcm);
++      alsa->pcm = NULL;
++      return false;
++   }
++   return true;
++
++fail:
++   if (params) snd_pcm_hw_params_free(params);
++   if (alsa->pcm) { snd_pcm_close(alsa->pcm); alsa->pcm = NULL; }
++   return false;
++}
++
++/* === factory worker thread body =========================================
++ * Mirrors factory disasm 0x5e98..0x5fdc (sndout_alsa_wait/playframe).
++ * The worker owns the snd_pcm_writei call and the avail/recover loop.
++ * Front-end writes only touch the fifo under the lock. */
++static void alsathread_factory_worker(void *data)
++{
++   alsathread_factory_t *alsa = (alsathread_factory_t*)data;
++   void   *period_buf      = NULL;
++   size_t  period_bytes    = 0;
++
++   if (!alsa || !alsa->pcm)
++      return;
++   period_bytes = alsa->stream_info.period_size;
++   period_buf   = calloc(1, period_bytes);
++   if (!period_buf)
++   {
++      RARCH_ERR("[CUBEGM] alsathread worker: OOM %zu bytes\n", period_bytes);
++      return;
++   }
++
++   while (!alsa->thread_dead)
++   {
++      size_t avail;
++      size_t to_copy;
++      snd_pcm_sframes_t frames;
++
++      slock_lock(alsa->fifo_lock);
++      avail = FIFO_READ_AVAIL(alsa->fifo);
++      while (avail < alsa->stream_info.period_size
++            && !alsa->thread_dead)
++      {
++         /* factory: cond_wait with timeout = period_us/2. */
++         alsa->worker_waiting = true;
++         if (!alsa->thread_dead)
++            scond_wait_timeout(alsa->fifo_cond, alsa->fifo_lock,
++                  (unsigned)(period_bytes * 1000 * 1000
++                        / (alsa->stream_info.rate * 4)));  /* period_us/2 */
++         alsa->worker_waiting = false;
++         avail = FIFO_READ_AVAIL(alsa->fifo);
++      }
++      to_copy = avail < alsa->stream_info.period_size
++            ? avail : alsa->stream_info.period_size;
++      if (to_copy > 0)
++         fifo_read(alsa->fifo, period_buf, to_copy);
++      scond_signal(alsa->fifo_cond);
++      slock_unlock(alsa->fifo_lock);
++
++      /* Pad with silence (genuine underrun: producer stalled). */
++      if (to_copy < alsa->stream_info.period_size)
++         memset((uint8_t *)period_buf + to_copy, 0,
++               alsa->stream_info.period_size - to_copy);
++
++      /* factory BLOCKING write at 0x5f00. */
++      frames = snd_pcm_writei(alsa->pcm, period_buf,
++            alsa->stream_info.period_frames);
++      if (frames == -EPIPE || frames == -EINTR || frames == -ESTRPIPE)
++      {
++         /* factory recover at 0x5f2c — strict=1. */
++         if (snd_pcm_recover(alsa->pcm, (int)frames, 1) < 0)
++         {
++            RARCH_ERR("[CUBEGM] alsathread worker: recover failed, exiting\n");
++            break;
++         }
++         continue;
++      }
++      if (frames < 0)
++      {
++         RARCH_ERR("[CUBEGM] alsathread worker: writei err: %s\n",
++               snd_strerror((int)frames));
++         break;
++      }
++   }
++
++   free(period_buf);
++   slock_lock(alsa->fifo_lock);
++   alsa->thread_dead = true;
++   scond_signal(alsa->fifo_cond);
++   slock_unlock(alsa->fifo_lock);
++}
++
++static void *alsathread_factory_init(const char *device, unsigned rate,
++      unsigned latency, unsigned block_frames, unsigned *new_rate)
++{
++   alsathread_factory_t *alsa = (alsathread_factory_t*)calloc(1, sizeof(*alsa));
++   if (!alsa) return NULL;
++
++   RARCH_LOG("[CUBEGM] alsathread version %s\n", snd_asoundlib_version());
++
++   if (!alsathread_factory_open_pcm(alsa, device, rate, latency))
++   {
++      free(alsa);
++      return NULL;
++   }
++
++   alsa->fifo_lock = slock_new();
++   alsa->fifo_cond = scond_new();
++   alsa->fifo      = fifo_new(alsa->stream_info.buffer_size);
++   if (!alsa->fifo_lock || !alsa->fifo_cond || !alsa->fifo)
++   {
++      RARCH_ERR("[CUBEGM] alsathread fifo/lock/cond alloc failed\n");
++      if (alsa->fifo_lock) slock_free(alsa->fifo_lock);
++      if (alsa->fifo_cond) scond_free(alsa->fifo_cond);
++      if (alsa->fifo) fifo_free(alsa->fifo);
++      if (alsa->pcm) snd_pcm_close(alsa->pcm);
++      free(alsa);
++      return NULL;
++   }
++
++   alsa->worker = sthread_create(alsathread_factory_worker, alsa);
++   if (!alsa->worker)
++   {
++      RARCH_ERR("[CUBEGM] alsathread pthread_create failed\n");
++      if (alsa->fifo_lock) slock_free(alsa->fifo_lock);
++      if (alsa->fifo_cond) scond_free(alsa->fifo_cond);
++      if (alsa->fifo) fifo_free(alsa->fifo);
++      if (alsa->pcm) snd_pcm_close(alsa->pcm);
++      free(alsa);
++      return NULL;
++   }
++   if (new_rate)
++      *new_rate = alsa->stream_info.rate;
++   return alsa;
++}
++
++static ssize_t alsathread_factory_write(void *data, const void *s, size_t len)
++{
++   alsathread_factory_t *alsa = (alsathread_factory_t*)data;
++   if (!alsa) return -1;
++   slock_lock(alsa->fifo_lock);
++   fifo_write(alsa->fifo, s, len);
++   if (alsa->worker_waiting)
++      scond_signal(alsa->fifo_cond);
++   slock_unlock(alsa->fifo_lock);
++   return len;
++}
++
++static bool alsathread_factory_alive(void *data)
++{
++   alsathread_factory_t *alsa = (alsathread_factory_t*)data;
++   return alsa && !alsa->thread_dead;
++}
++
++static bool alsathread_factory_stop(void *data)
++{
++   (void)data;
++   return true;
++}
++
++static bool alsathread_factory_start(void *data, bool is_shutdown)
++{
++   (void)data; (void)is_shutdown;
++   return true;
++}
++
++static void alsathread_factory_free(void *data)
++{
++   alsathread_factory_t *alsa = (alsathread_factory_t*)data;
++   if (!alsa) return;
++   if (alsa->worker)
++   {
++      slock_lock(alsa->fifo_lock);
++      alsa->thread_dead = true;
++      scond_signal(alsa->fifo_cond);
++      slock_unlock(alsa->fifo_lock);
++      sthread_join(alsa->worker);
++   }
++   if (alsa->pcm) snd_pcm_close(alsa->pcm);
++   if (alsa->fifo) fifo_free(alsa->fifo);
++   if (alsa->fifo_cond) scond_free(alsa->fifo_cond);
++   if (alsa->fifo_lock) slock_free(alsa->fifo_lock);
++   free(alsa);
++}
++
++static bool alsathread_factory_use_float(void *data)
++{
++   (void)data;
++   return false;
++}
++
++static size_t alsathread_factory_write_avail(void *data)
++{
++   alsathread_factory_t *alsa = (alsathread_factory_t*)data;
++   if (!alsa) return 0;
++   size_t avail;
++   slock_lock(alsa->fifo_lock);
++   avail = FIFO_WRITE_AVAIL(alsa->fifo);
++   slock_unlock(alsa->fifo_lock);
++   return avail;
++}
++
++static size_t alsathread_factory_buffer_size(void *data)
++{
++   alsathread_factory_t *alsa = (alsathread_factory_t*)data;
++   return alsa ? alsa->stream_info.buffer_size : 0;
++}
++
++static void alsathread_factory_set_nonblock_state(void *data, bool state)
++{
++   (void)data; (void)state;
++}
++
++audio_driver_t audio_alsathread = {
++   alsathread_factory_init,
++   alsathread_factory_write,
++   alsathread_factory_stop,
++   alsathread_factory_start,
++   alsathread_factory_alive,
++   alsathread_factory_set_nonblock_state,
++   alsathread_factory_free,
++   alsathread_factory_use_float,
++   "alsathread",
++   NULL, NULL,
++   alsathread_factory_write_avail,
++   alsathread_factory_buffer_size,
++   NULL,  /* write_raw */
++   NULL   /* latency */
++};
