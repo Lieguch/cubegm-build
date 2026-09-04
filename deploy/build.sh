@@ -415,12 +415,12 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         else
             die "v4.0 verify 1/3 FAILED: retroarch does not link libasound.so.2"
         fi
-        # v5.0 构建侧验证 2/3: libasound 链路代码已编入（strings 证据）
-        if strings retroarch | grep -q 'libasound chain active'; then
-            log "v5.0 verify 2/3: libasound chain code present = OK"
-        else
-            die "v5.0 verify 2/3 FAILED: libasound chain code missing from binary"
-        fi
+        # v7.2 (2026-09-04, #465 实机证伪): 删除 v5.0 verify 2/3 门禁。
+        # 该门禁强制 'libasound chain active' 字符串必须存在于 binary，
+        # 等于强制 use_alsa dlopen 链编入 —— 而该链已在 #463/#464/#465
+        # 三次实机证伪（hw:0,1 纯 DAC 端点阻塞 → 整机 3-6s 冻结）。
+        # v6.1 移除 use_alsa 后此门禁会 die，必须同步删除。
+        # 保留 v4.0 verify 1/3（libasound 链接）即可：alsa 驱动本身需要它。
         cp retroarch "$RETROARCH_DST/"
         cd "$HERE"
 else
