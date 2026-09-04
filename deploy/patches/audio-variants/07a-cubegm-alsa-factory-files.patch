@@ -758,3 +758,16 @@ index 0000000..806d8af
 +   NULL,  /* write_raw */
 +   NULL   /* latency */
 +};
+diff --git a/griffin/griffin.c b/griffin/griffin.c
+index d247d73..165a9cf 100644
+--- a/griffin/griffin.c
++++ b/griffin/griffin.c
+@@ -1015,6 +1015,8 @@ AUDIO
+ #include "../audio/drivers/alsa_qsa.c"
+ #else
+ #include "../audio/drivers/alsa.c"
++#include "../audio/drivers/cubegm_alsa.c"
++#include "../audio/drivers/cubegm_alsathread.c"
+ #include "../audio/common/alsa.c"
+ #endif
+ #endif
