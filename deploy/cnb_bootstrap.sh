@@ -17,9 +17,9 @@ echo "== CNB bootstrap wrapper (cnb_bootstrap.sh) =="
 echo "runner: $(uname -a)"
 
 # ---- 1. network diagnostics (never fatal; only informational) --------------
-echo "== network diagnostics =="
+echo "== network diagnostics (pre-cert; https may 000 without ca-cert) =="
 if command -v getent >/dev/null 2>&1; then
-  for h in archive.ubuntu.com security.ubuntu.com github.com objects.githubusercontent.com mirrors.cloud.tencent.com; do
+  for h in archive.ubuntu.com security.ubuntu.com github.com mirrors.cloud.tencent.com; do
     if getent hosts "$h" >/dev/null 2>&1; then echo "  DNS OK: $h"; else echo "  DNS FAIL: $h"; fi
   done
 fi
@@ -42,7 +42,15 @@ for i in 1 2 3; do
   echo "WARN: apt-get update attempt $i failed -- retry $((i+1)) in $((i*5))s"
   sleep "$((i*5))"
 done
-apt-get install -y -qq --no-install-recommends sudo ca-certificates >/dev/null 2>&1 || true
+apt-get install -y -qq --no-install-recommends \
+    sudo ca-certificates git make curl wget >/dev/null 2>&1 || true
+
+# ---- 1b. post-cert network check -------------------------------------------------
+echo "== network diagnostics (post-cert) =="
+for u in https://archive.ubuntu.com/ https://github.com/ https://mirrors.cloud.tencent.com/; do
+  code="$(curl -m 10 -s -o /dev/null -w '%{http_code}' "$u" 2>/dev/null || echo 000)"
+  echo "  curl $u -> $code"
+done
 
 # ---- 3. defend CRLF (scripts authored on Windows) ---------------------------
 echo "== strip CRLF =="
