@@ -9,21 +9,13 @@
 #  构建逻辑封装在 deploy/cnb_bootstrap.sh（避免 YAML 内嵌复杂脚本）。
 #  注意：timeout 默认单位是 ms（毫秒），必须带单位 s/m/h。
 # =====================================================================
+# 事件说明:
+#   - main.push: 推送到 main 自动全量构建 (生产环境)
+#   - $.api_trigger: Agent StartBuild API 显式触发全量构建 (监控/重跑)
+#   - $.web_trigger_dev: 仓库页点「云原生开发」按钮 -> 启动云端开发机
+#     (全工具链环境, 不跑构建, 用户点这个按钮进 vscode/WebIDE)
+# =====================================================================
 $:
-  vscode:
-    - runner:
-        cpus: 8
-      services:
-        - vscode
-      docker:
-        image: ubuntu:22.04
-        volumes:
-          - /opt/cubegm-toolchain:copy-on-write
-      stages:
-        - name: "setup dev env"
-          timeout: 10m
-          script: |
-            bash deploy/cnb_bootstrap.sh --dev
   api_trigger:
     - runner:
         cpus: 8
@@ -48,6 +40,20 @@ $:
             echo "=========== device payload ==========="
             du -sh deploy/cubegm 2>/dev/null || echo "no payload dir"
             ls -la deploy/cubegm 2>/dev/null | head -20
+  web_trigger_dev:
+    - runner:
+        cpus: 8
+      services:
+        - vscode
+      docker:
+        image: ubuntu:22.04
+        volumes:
+          - /opt/cubegm-toolchain:copy-on-write
+      stages:
+        - name: "setup dev env"
+          timeout: 10m
+          script: |
+            bash deploy/cnb_bootstrap.sh --dev
 main:
   push:
     - runner:
