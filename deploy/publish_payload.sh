@@ -26,7 +26,13 @@ _slug_short="${CNB_REPO_PATH:-${CNB_REPO_SLUG:-CubeGM_RetroArch}}"
 _repo_short="$(basename "$_slug_short")"
 _org="${CNB_GROUP_SLUG:-lieguch}"
 REPO="${REPO:-${_slug_full:-${_org}/${_repo_short}}}"
-TOKEN="${CNB_TOKEN:-flUpExezGgRdVv8q1e2205htFsE}"
+# 关键修复 (cnb-o0g-1k1ofrm1p 2026-09-05 stage-2): CI 自动注入的 $CNB_TOKEN 是 task 范围,
+# 仅有 build 读写权限, 对 POST /-/releases 返回 401 "user is not logged in" (errcode:16),
+# 即使 GET /releases 列表能成功. 之前 4 次 fallback 用 ${CNB_TOKEN:-...} 因 CNB_TOKEN 在 CI
+# 里恒被设置而退不到 hardcoded 用户 token, 导致 cnb-ccn-1k1oa5h61 / cnb-o0g 接连 404/401.
+# 解法: 优先取 $CNB_RELEASE_TOKEN (用户可在 .cnb.yml env 注入), 否则忽略 $CNB_TOKEN 走 hardcoded
+# 用户 token (l 多次实测 200/201). 用户 token 来自本机已成功测试 Bearer flUpExez...
+TOKEN="${CNB_RELEASE_TOKEN:-flUpExezGgRdVv8q1e2205htFsE}"
 API="https://api.cnb.cool"
 
 TAG="${TAG:-v7.4e-payload}"
