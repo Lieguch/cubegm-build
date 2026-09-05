@@ -49,10 +49,22 @@ for i in 1 2 3; do
 done
 apt-get install -y -qq --no-install-recommends \
     sudo ca-certificates git make curl wget libncurses-dev libncursesw5-dev >/dev/null 2>&1 || true
-# crosstool-NG configure 需要 curses; 纯净容器缺 libncurses-dev
-if ! apt-get install -y -qq libncurses-dev libncursesw5-dev >/dev/null 2>&1; then
-  echo "WARN: libncurses-dev install failed (crosstool configure may fail)"
-fi
+# crosstool-NG 1.26.0 configure.ac:320 硬性要求 curses (AX_WITH_CURSES + AC_MSG_ERROR),
+# 缺则 STAGE 1 ct-ng configure 直接 'curses library not found' 退出。
+# 前两版 fix (4795db0 / a91c334) 用 `> /dev/null 2>&1 || true` 静默吞错,导致运行期
+# libncurses-dev 实际未装时无人察觉。本版改为显式校验 dpkg 状态 + 最多 2 次重试,
+# 仍失败则 die(让构建直接红,而不是走到 ct-ng 才挂 — 节省 90s bootstrap + 1m ct-ng clone)。
+for _nc_try in 1 2; do
+  if dpkg -s libncurses-dev >/dev/null 2>&1 && pkg-config --exists ncurses 2>/dev/null; then
+    echo "  libncurses-dev OK (dpkg + pkg-config ncurses 命中)"
+    break
+  fi
+  echo "  libncurses-dev missing/broken (try $_nc_try) -- 显式重装并打印错误"
+  apt-get install -y -qq --no-install-recommends libncurses-dev libncursesw5-dev 2>&1 | tail -5 || true
+  if [ "$_nc_try" = "2" ]; then
+    dpkg -s libncurses-dev >/dev/null 2>&1 || { echo "FATAL: libncurses-dev 仍未安装"; exit 1; }
+  fi
+done
 
 # ---- 1b. post-cert network check -------------------------------------------------
 echo "== network diagnostics (post-cert) =="
