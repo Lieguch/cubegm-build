@@ -5,7 +5,8 @@
 #    apt deps -> crosstool glibc-2.29 sysroot -> SDL/libpng/alsa
 #    -> clone RetroArch 282a12d + 8 个 audio-variant patch (01..07c)
 #    -> build + ABI gate -> stage deploy/cubegm/ 设备烧录包
-#  报告输出：stage 3 cat BUILD_REPORT.txt（Agent 自动诊断）。
+#  报告输出：stage 2 cat BUILD_REPORT.txt（Agent 自动诊断）。
+#  构建逻辑封装在 deploy/cnb_bootstrap.sh（避免 YAML 内嵌复杂脚本）。
 # =====================================================================
 $:
   api_trigger:
@@ -16,20 +17,10 @@ $:
         volumes:
           - /root/.cache:copy-on-write
       stages:
-        - name: "1/4 apt + bootstrap full build"
+        - name: "1/4 apt mirror + bootstrap full build"
           timeout: 21600
           script: |
-            set -e
-            export DEBIAN_FRONTEND=noninteractive
-            apt-get update -qq
-            apt-get install -y -qq --no-install-recommends sudo >/dev/null 2>&1 || true
-            which sudo || apt-get install -y --no-install-recommends sudo
-            cd deploy
-            sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
-            sed -i 's/\r$//' ../build/toolchain/build_sysroot_ctng.sh ../build/toolchain/verify_target_abi.sh
-            chmod +x bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
-            chmod +x ../build/toolchain/*.sh
-            PREFIX=/opt/cubegm-toolchain ./bootstrap_linux.sh
+            bash deploy/cnb_bootstrap.sh
         - name: "2/4 build report"
           timeout: 300
           script: |
@@ -51,22 +42,10 @@ main:
         volumes:
           - /root/.cache:copy-on-write
       stages:
-        - name: "1/4 apt + bootstrap full build"
+        - name: "1/4 apt mirror + bootstrap full build"
           timeout: 21600
           script: |
-            set -e
-            export DEBIAN_FRONTEND=noninteractive
-            # ensure sudo exists inside container
-            apt-get update -qq
-            apt-get install -y -qq --no-install-recommends sudo >/dev/null 2>&1 || true
-            which sudo || apt-get install -y --no-install-recommends sudo
-            # defend CRLF (files authored on Windows)
-            cd deploy
-            sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
-            sed -i 's/\r$//' ../build/toolchain/build_sysroot_ctng.sh ../build/toolchain/verify_target_abi.sh
-            chmod +x bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
-            chmod +x ../build/toolchain/*.sh
-            PREFIX=/opt/cubegm-toolchain ./bootstrap_linux.sh
+            bash deploy/cnb_bootstrap.sh
         - name: "2/4 build report"
           timeout: 300
           script: |
