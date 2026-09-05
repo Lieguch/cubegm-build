@@ -1,0 +1,51 @@
+diff --git a/frogui_libretro.c b/frogui_libretro.c
+index 263d1f1..14242ed 100644
+--- a/frogui_libretro.c
++++ b/frogui_libretro.c
+@@ -143,6 +143,31 @@ static const char* get_core_for_folder(const char *folder) {
+     return NULL;
+ }
+ 
++/* RK3036G/CubeGM: fall back on file extension when a ROM sits in a folder
++ * that is not in console_mappings (e.g. .bin/.md dumped straight into the
++ * /roms root -> folder == "roms" matches nothing, so nothing happened). */
++static const char* get_core_for_file(const char *path) {
++    const char *ext = strrchr(path, '.');
++    if (!ext) return NULL;
++    if (strcasecmp(ext, ".bin") == 0 || strcasecmp(ext, ".md") == 0 ||
++        strcasecmp(ext, ".smd") == 0 || strcasecmp(ext, ".gen") == 0)
++        return CORES_PATH "/picodrive_libretro.so";
++    if (strcasecmp(ext, ".cue") == 0 || strcasecmp(ext, ".iso") == 0 ||
++        strcasecmp(ext, ".chd") == 0)
++        return CORES_PATH "/pcsx_rearmed_libretro.so";
++    if (strcasecmp(ext, ".zip") == 0)
++        return CORES_PATH "/fbalpha2012_libretro.so";
++    if (strcasecmp(ext, ".nes") == 0 || strcasecmp(ext, ".fds") == 0)
++        return CORES_PATH "/fceumm_libretro.so";
++    if (strcasecmp(ext, ".sfc") == 0 || strcasecmp(ext, ".smc") == 0)
++        return CORES_PATH "/snes9x2005_plus_libretro.so";
++    if (strcasecmp(ext, ".gba") == 0) return CORES_PATH "/mgba_libretro.so";
++    if (strcasecmp(ext, ".gb") == 0 || strcasecmp(ext, ".gbc") == 0)
++        return CORES_PATH "/tgbdual_libretro.so";
++    if (strcasecmp(ext, ".a26") == 0) return CORES_PATH "/stella2014_libretro.so";
++    return NULL;
++}
++
+ /* Libretro callbacks */
+ static retro_video_refresh_t     video_cb     = NULL;
+ static retro_environment_t       environ_cb   = NULL;
+@@ -391,10 +416,11 @@ static void handle_input(void) {
+                 settings_menu_idx = 0;
+             } else {
+                 const char *folder = get_basename(current_path);
+-                const char *core   = get_core_for_folder(folder);
++                char rom_path[MAX_PATH_LEN];
++                snprintf(rom_path, sizeof(rom_path), "%s/%s", current_path, entries[selected_index].name);
++                const char *core = get_core_for_folder(folder);
++                if (!core) core = get_core_for_file(rom_path);
+                 if (core) {
+-                    char rom_path[MAX_PATH_LEN];
+-                    snprintf(rom_path, sizeof(rom_path), "%s/%s", current_path, entries[selected_index].name);
+                     request_game_launch(core, rom_path);
+                 }
+             }

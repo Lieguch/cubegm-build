@@ -1,0 +1,951 @@
+diff --git a/hwdisp.c b/hwdisp.c
+index 5367b21..f892025 100644
+--- a/hwdisp.c
++++ b/hwdisp.c
+@@ -22,9 +22,30 @@
+ #include <sys/mman.h>
+ #include <sys/ioctl.h>
+ #include <linux/fb.h>
++#include <errno.h>
++/* DRM/KMS UAPI (Linux 4.4, MIT-licensed; bundled in deploy/drm_headers/).
++ * RK3036G HDMI output needs a DRM modeset: fb0 is NOT the HDMI source
++ * (payload-238 device logs: HDMI-A-1 connected+enabled, fb0 name empty). */
++#include <drm/drm.h>
++#include <drm/drm_mode.h>
++#include <drm/drm_fourcc.h>
+ extern void dbg_log(const char *fmt, ...);
+ #define DBG(...) dbg_log(__VA_ARGS__)
+ 
++/* RK3036G observability: fsync'd file log to /mnt/sdcard/picoarch_init.log so
++ * the black-screen case leaves evidence on the SD card even though stderr goes
++ * nowhere visible on the device (no console). Same file/append style as the
++ * SF3000 init log in plat_sdl.c. */
++static void hwdisp_fslog(const char *fmt, ...) {
++    int fd = open("/mnt/sdcard/picoarch_init.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
++    if (fd < 0) return;
++    char buf[512]; va_list ap; va_start(ap, fmt);
++    int n = vsnprintf(buf, sizeof buf, fmt, ap); va_end(ap);
++    if (n > 0) (void)!write(fd, buf, (size_t)n);
++    (void)!dprintf(fd, "\n");
++    fsync(fd); close(fd);
++}
++
+ #ifndef HW_NATIVE_W
+ #define HW_NATIVE_W 1280
+ #endif
+@@ -39,6 +60,10 @@ extern void dbg_log(const char *fmt, ...);
+ static void   *g_handle = NULL;
+ static int     g_active = 0;
+ 
++/* RK3036G (and any device without a working driver.so / /dev/dis): present
++ * straight to /dev/fb0 via hwdisp_fb_present(), bypassing driver.so disp_frame. */
++static int     g_fb_only = 0;
++
+ typedef int  (*fn_init_t)(void);
+ typedef void (*fn_deinit_t)(void);
+ typedef int  (*fn_disp_t)(void *src, int w, int h, int pitch);
+@@ -94,32 +119,64 @@ static int g_filter_sharp   = 0;   /* sharp variant: integer prescale + HW resid
+  * video_driver_disp_frame (which hard-hangs on the engine sync on this driver). */
+ static int       g_fbfd    = -1;
+ static uint16_t *g_fbmem   = NULL;
++static uint32_t *g_fbmem32 = NULL;   /* set when fb0 is 32-bit */
+ static int       g_fbw     = 0;   /* fb visible width  (px) */
+ static int       g_fbh     = 0;   /* fb visible height (px) */
+ static int       g_fbstride= 0;   /* fb row stride     (px) */
++static int       g_fbbpp   = 0;   /* fb0 pixel depth (16=RGB565, 32=ARGB...) */
+ static long      g_fbsize  = 0;   /* mmap length (bytes) */
+ 
++/* ---- RK3036G DRM/KMS path (HDMI modeset; fb0 is not the HDMI source) ---- */
++static int       g_drm_mode = 0;  /* present via dumb-buffer plane instead of fb0 */
++static int       g_drm_fd   = -1;
++static uint32_t  g_drm_fb_id = 0, g_drm_crtc_id = 0, g_drm_conn_id = 0;
++static int       g_drm_w = 0, g_drm_h = 0, g_drm_pitch = 0;
++static uint8_t  *g_drm_map = NULL;
++static size_t    g_drm_size = 0;
++
++/* hwdisp_fb_present() (below) calls hwdisp_drm_present() — declare it here so
++ * the call is NOT an implicit (non-static) declaration. */
++static void hwdisp_drm_present(const void *src, int w, int h, int pitch_bytes);
++
+ static void hwdisp_fb_open(void) {
+     struct fb_var_screeninfo vi;
+     struct fb_fix_screeninfo fi;
+     g_fbfd = open("/dev/fb0", O_RDWR);
++    hwdisp_fslog("hwdisp_fb_open: open /dev/fb0 -> fd=%d errno=%d", g_fbfd, errno);
+     if (g_fbfd < 0) { DBG("DBG fbwrite: open fb0 failed\n"); return; }
+     if (ioctl(g_fbfd, FBIOGET_VSCREENINFO, &vi) < 0 ||
+         ioctl(g_fbfd, FBIOGET_FSCREENINFO, &fi) < 0) {
++        hwdisp_fslog("hwdisp_fb_open: ioctl GET info FAILED errno=%d", errno);
+         DBG("DBG fbwrite: ioctl GET info failed\n");
+         close(g_fbfd); g_fbfd = -1; return;
+     }
++    hwdisp_fslog("hwdisp_fb_open: vinfo %dx%d(v%dx%d) bpp=%d rotate=%d | fixed line_length=%d smem_len=%ld",
++                 vi.xres, vi.yres, vi.xres_virtual, vi.yres_virtual,
++                 vi.bits_per_pixel, vi.rotate, fi.line_length, fi.smem_len);
+     g_fbw      = vi.xres;
+     g_fbh      = vi.yres;
+-    g_fbstride = fi.line_length / 2;       /* bytes → px (RGB565) */
++    g_fbbpp    = vi.bits_per_pixel;
++    int bpp_bytes = (g_fbbpp >= 8) ? (g_fbbpp / 8) : 2;
++    g_fbstride = fi.line_length / bpp_bytes;   /* bytes → px */
+     g_fbsize   = fi.smem_len;
+     g_fbmem = (uint16_t *)mmap(NULL, g_fbsize, PROT_READ|PROT_WRITE, MAP_SHARED, g_fbfd, 0);
+     if (g_fbmem == MAP_FAILED) {
++        hwdisp_fslog("hwdisp_fb_open: mmap FAILED errno=%d size=%ld", errno, g_fbsize);
+         DBG("DBG fbwrite: mmap failed\n");
+         g_fbmem = NULL; close(g_fbfd); g_fbfd = -1; return;
+     }
+-    DBG("DBG fbwrite: fb0 %dx%d stride=%dpx bpp=%d size=%ld OK\n",
+-        g_fbw, g_fbh, g_fbstride, vi.bits_per_pixel, g_fbsize);
++    g_fbmem32  = (g_fbbpp == 32) ? (uint32_t *)g_fbmem : NULL;
++    /* RK3036G: we killed rkgame which normally drives blank/unblank — make
++     * sure the panel is unblanked so our writes are visible. Harmless on
++     * devices that don't need it. */
++    ioctl(g_fbfd, FBIOBLANK, 1);
++    ioctl(g_fbfd, FBIOBLANK, 0);
++    /* DRM/KMS probe: if fb0 is only a legacy emulation and HDMI lives on
++     * /dev/dri/card0, we may need a modeset there instead. Log what exists. */
++    hwdisp_fslog("hwdisp_fb_open: /dev/dri/card0 access=%d | /dev/fb0 access=%d",
++                 access("/dev/dri/card0", R_OK) == 0, access("/dev/fb0", R_OK) == 0);
++    hwdisp_fslog("hwdisp_fb_open: OK fb0=%dx%d stride=%dpx bpp=%d size=%ld mmap=%p",
++                 g_fbw, g_fbh, g_fbstride, g_fbbpp, g_fbsize, (void*)g_fbmem);
+ }
+ 
+ /* Write src(w×h RGB565) directly to fb0, nearest-scaled to fill it.
+@@ -127,14 +184,34 @@ static void hwdisp_fb_open(void) {
+  *   SF3000: panel is 480x854 portrait-mounted; the driver's disp_frame normally
+  *           rotates 90°, but we bypass it, so rotate the frame 90° CW here.
+  * Returns 1 if drawn. */
++/* RGB565 → ARGB8888 (for fb0 configured as 32-bit). Alpha fixed opaque. */
++static inline uint32_t hwdisp_cvt565(uint16_t c) {
++    return 0xFF000000u |
++           (((c & 0xF800) << 8) | ((c & 0xE000) << 3)) |
++           (((c & 0x07E0) << 5) | ((c & 0x0600) >> 1)) |
++           (((c & 0x001F) << 3) | ((c & 0x001C) >> 2));
++}
++
++/* Write one RGB565 pixel into fb0 at (dx,dy), honoring the fb0 pixel depth. */
++static inline void hwdisp_fb_put(int dx, int dy, uint16_t px) {
++    size_t off = (size_t)dy * g_fbstride + dx;
++    if (g_fbbpp == 32 && g_fbmem32) g_fbmem32[off] = hwdisp_cvt565(px);
++    else                            g_fbmem[off]   = px;
++}
++
+ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
++    static int s_n = 0; int lg = (s_n < 3); s_n++;
++    if (lg) hwdisp_fslog("hwdisp_fb_present#%d: src=%dx%d pitch=%d -> fb0=%dx%d stride=%d bpp=%d drm=%d",
++                         s_n, w, h, pitch_bytes, g_fbw, g_fbh, g_fbstride, g_fbbpp, g_drm_mode);
++    if (g_drm_mode) { hwdisp_drm_present(src, w, h, pitch_bytes); return 1; }
+     if (!g_fbmem || g_fbw <= 0 || g_fbh <= 0 || w <= 0 || h <= 0) return 0;
+     extern int sf3000_is_r36sx(void);
++    extern int sf3000_is_rk3036(void);
+     const int sp = pitch_bytes / 2;
+     const uint16_t *s = (const uint16_t *)src;
+     int draw_w = g_fbw < 2048 ? g_fbw : 2048;
+ 
+-    if (!sf3000_is_r36sx()) {
++    if (!(sf3000_is_r36sx() || sf3000_is_rk3036())) {
+         /* SF3000: 90° CW rotate. fb row → src x; fb col(reversed) → src y. */
+         static int symap[2048];
+         static int last_h = -1, last_fbw = -1;
+@@ -144,14 +221,13 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+         }
+         for (int dy = 0; dy < g_fbh; dy++) {
+             int sx = dy * w / g_fbh;
+-            uint16_t *drow = g_fbmem + (size_t)dy * g_fbstride;
+             for (int dx = 0; dx < draw_w; dx++)
+-                drow[dx] = s[(size_t)symap[dx] * sp + sx];
++                hwdisp_fb_put(dx, dy, s[(size_t)symap[dx] * sp + sx]);
+         }
+         return 1;
+     }
+ 
+-    /* R36SX: straight scale. */
++    /* R36SX / RK3036G: landscape fb, rotate:0 → straight scale. */
+     static int xmap[2048];
+     static int last_w = -1, last_fbw = -1;
+     if (w != last_w || g_fbw != last_fbw) {
+@@ -161,16 +237,274 @@ static int hwdisp_fb_present(const void *src, int w, int h, int pitch_bytes) {
+     for (int dy = 0; dy < g_fbh; dy++) {
+         int sy = dy * h / g_fbh;
+         const uint16_t *srow = s + sy * sp;
+-        uint16_t *drow = g_fbmem + (size_t)dy * g_fbstride;
+         for (int dx = 0; dx < draw_w; dx++)
+-            drow[dx] = srow[xmap[dx]];
++            hwdisp_fb_put(dx, dy, srow[xmap[dx]]);
+     }
+     return 1;
+ }
+ 
++/* ---- RK3036G DRM/KMS modeset (standard DRM UAPI via ioctl, no libdrm) ----
++ * Sets the HDMI-A connector to a mode, creates a 1280x720 XRGB8888 dumb
++ * buffer, mmaps it, ADDFB2 + SETCRTC -> HDMI shows the dumb buffer. */
++/* Linux-4.4 UAPI lacks the DRM_MODE_CONNECTED enum constant (added later). */
++#define DRM_MODE_CONNECTED 1
++static int hwdisp_drm_init(void) {
++    uint32_t *fbs = NULL, *crtcs = NULL, *encs = NULL, *conns = NULL;
++    g_drm_fd = open("/dev/dri/card0", O_RDWR);
++    if (g_drm_fd < 0) {
++        hwdisp_fslog("hwdisp_drm: open /dev/dri/card0 FAILED errno=%d", errno);
++        return -1;
++    }
++    struct drm_mode_card_res res;
++    memset(&res, 0, sizeof res);
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
++        hwdisp_fslog("hwdisp_drm: GETRESOURCES(1) failed errno=%d", errno); goto fail;
++    }
++    /* Official two-pass protocol (kernel drm_mode_getresources): pass 1 returns
++     * counts; pass 2 copies IDs into the arrays. ALL FOUR pointers must be
++     * valid — the kernel put_user()s into every one whose count is >= actual
++     * (a NULL fb_id_ptr/encoder_id_ptr with non-zero count_fbs/count_encoders
++     * is EFAULT, seen as GETRESOURCES(2) failed errno=14 on the device). */
++    fbs   = calloc(res.count_fbs ? res.count_fbs : 1, sizeof(uint32_t));
++    crtcs = calloc(res.count_crtcs ? res.count_crtcs : 1, sizeof(uint32_t));
++    encs  = calloc(res.count_encoders ? res.count_encoders : 1, sizeof(uint32_t));
++    conns = calloc(res.count_connectors ? res.count_connectors : 1, sizeof(uint32_t));
++    if (!fbs || !crtcs || !encs || !conns) { hwdisp_fslog("hwdisp_drm: calloc failed"); goto fail; }
++    res.fb_id_ptr = (uintptr_t)fbs;
++    res.crtc_id_ptr = (uintptr_t)crtcs;
++    res.encoder_id_ptr = (uintptr_t)encs;
++    res.connector_id_ptr = (uintptr_t)conns;
++    /* counts stay as returned by pass 1 (kernel copies when count >= actual) */
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETRESOURCES, &res) < 0) {
++        hwdisp_fslog("hwdisp_drm: GETRESOURCES(2) failed errno=%d", errno); goto fail;
++    }
++    hwdisp_fslog("hwdisp_drm: card0 conn=%u crtc=%u enc=%u fb=%u",
++                 res.count_connectors, res.count_crtcs, res.count_encoders, res.count_fbs);
++
++    struct drm_mode_modeinfo chosen;
++    memset(&chosen, 0, sizeof chosen);
++    int chosen_found = 0;
++    for (uint32_t i = 0; i < res.count_connectors; i++) {
++        struct drm_mode_get_connector conn;
++        memset(&conn, 0, sizeof conn);
++        conn.connector_id = conns[i];
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn) < 0) continue;
++        int nmodes = (int)conn.count_modes, nprops = (int)conn.count_props, nencs = (int)conn.count_encoders;
++        if (nmodes == 0) continue;
++        /* pass 2 (libdrm protocol): fresh struct, restore counts, set ALL FOUR
++         * pointers — the kernel copies props/encoders too (NULL ptr -> EFAULT). */
++        struct drm_mode_modeinfo *mode_buf  = calloc((size_t)nmodes, sizeof(struct drm_mode_modeinfo));
++        uint32_t *prop_ids   = calloc((size_t)(nprops ? nprops : 1), sizeof(uint32_t));
++        uint64_t *prop_vals  = calloc((size_t)(nprops ? nprops : 1), sizeof(uint64_t));
++        uint32_t *enc_ids    = calloc((size_t)(nencs ? nencs : 1), sizeof(uint32_t));
++        if (!mode_buf || !prop_ids || !prop_vals || !enc_ids) {
++            free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
++            continue;
++        }
++        memset(&conn, 0, sizeof conn);
++        conn.connector_id = conns[i];
++        conn.count_modes = nmodes;
++        conn.count_props = nprops;
++        conn.count_encoders = nencs;
++        conn.modes_ptr = (uintptr_t)mode_buf;
++        conn.props_ptr = (uintptr_t)prop_ids;
++        conn.prop_values_ptr = (uintptr_t)prop_vals;
++        conn.encoders_ptr = (uintptr_t)enc_ids;
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn) < 0) {
++            free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
++            continue;
++        }
++        hwdisp_fslog("hwdisp_drm: conn %u type=%d connected=%d modes=%u enc=%u",
++                     conns[i], conn.connector_type, conn.connection,
++                     conn.count_modes, conn.encoder_id);
++        if (conn.connection == DRM_MODE_CONNECTED && conn.count_modes > 0) {
++            int sel = 0;
++            for (int m = 0; m < (int)conn.count_modes; m++) {
++                struct drm_mode_modeinfo *mm = &mode_buf[m];
++                if (mm->hdisplay == 1280 && mm->vdisplay == 720 && mm->vrefresh == 60) { sel = m; break; }
++            }
++            chosen = mode_buf[sel];
++            chosen_found = 1;
++            g_drm_conn_id = conns[i];
++            hwdisp_fslog("hwdisp_drm: SELECT mode %dx%d@%d name='%s'",
++                         chosen.hdisplay, chosen.vdisplay, chosen.vrefresh, chosen.name);
++            free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
++            break;
++        }
++        free(mode_buf); free(prop_ids); free(prop_vals); free(enc_ids);
++    }
++    if (!chosen_found) { hwdisp_fslog("hwdisp_drm: NO connected HDMI connector/mode"); goto fail; }
++
++    /* CRTC: via connector's encoder, else first CRTC. */
++    uint32_t crtc_id = 0;
++    struct drm_mode_get_connector cq;
++    memset(&cq, 0, sizeof cq);
++    cq.connector_id = g_drm_conn_id;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETCONNECTOR, &cq) == 0 && cq.encoder_id) {
++        struct drm_mode_get_encoder enc;
++        memset(&enc, 0, sizeof enc);
++        enc.encoder_id = cq.encoder_id;
++        if (ioctl(g_drm_fd, DRM_IOCTL_MODE_GETENCODER, &enc) == 0)
++            crtc_id = enc.crtc_id;
++    }
++    if (!crtc_id && res.count_crtcs > 0) crtc_id = crtcs[0];
++    if (!crtc_id) { hwdisp_fslog("hwdisp_drm: no CRTC found"); goto fail; }
++    g_drm_crtc_id = crtc_id;
++    hwdisp_fslog("hwdisp_drm: crtc=%u", crtc_id);
++
++    struct drm_mode_create_dumb cd;
++    memset(&cd, 0, sizeof cd);
++    cd.width = 1280; cd.height = 720; cd.bpp = 32;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &cd) < 0) {
++        hwdisp_fslog("hwdisp_drm: CREATE_DUMB failed errno=%d", errno); goto fail;
++    }
++    g_drm_w = 1280; g_drm_h = 720; g_drm_pitch = (int)cd.pitch; g_drm_size = cd.size;
++    hwdisp_fslog("hwdisp_drm: dumb %ux%u pitch=%u size=%llu",
++                 cd.width, cd.height, cd.pitch, (unsigned long long)cd.size);
++
++    struct drm_mode_map_dumb md;
++    memset(&md, 0, sizeof md);
++    md.handle = cd.handle;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &md) < 0) {
++        hwdisp_fslog("hwdisp_drm: MAP_DUMB failed errno=%d", errno); goto fail;
++    }
++    g_drm_map = mmap(NULL, g_drm_size, PROT_READ|PROT_WRITE, MAP_SHARED, g_drm_fd, md.offset);
++    if (g_drm_map == MAP_FAILED) {
++        g_drm_map = NULL;
++        hwdisp_fslog("hwdisp_drm: mmap failed errno=%d", errno); goto fail;
++    }
++
++    struct drm_mode_fb_cmd2 fb;
++    memset(&fb, 0, sizeof fb);
++    fb.width = 1280; fb.height = 720;
++    fb.pixel_format = DRM_FORMAT_XRGB8888;
++    fb.handles[0] = cd.handle;
++    fb.pitches[0] = cd.pitch;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_ADDFB2, &fb) < 0) {
++        hwdisp_fslog("hwdisp_drm: ADDFB2 failed errno=%d", errno); goto fail;
++    }
++    g_drm_fb_id = fb.fb_id;
++
++    struct drm_mode_crtc cc;
++    memset(&cc, 0, sizeof cc);
++    cc.crtc_id = g_drm_crtc_id;
++    cc.fb_id = g_drm_fb_id;
++    cc.x = 0; cc.y = 0;
++    cc.mode_valid = 1;
++    cc.mode = chosen;
++    cc.set_connectors_ptr = (uintptr_t)&g_drm_conn_id;  /* Linux-4.4 field name */
++    cc.count_connectors = 1;
++    if (ioctl(g_drm_fd, DRM_IOCTL_MODE_SETCRTC, &cc) < 0) {
++        hwdisp_fslog("hwdisp_drm: SETCRTC failed errno=%d", errno); goto fail;
++    }
++    /* White test frame: if HDMI lights up white, the modeset path is live. */
++    memset(g_drm_map, 0xFF, g_drm_size);
++    hwdisp_fslog("hwdisp_drm: SETCRTC ok fb_id=%u -> HDMI %dx%d (white frame written)",
++                 g_drm_fb_id, 1280, 720);
++    free(fbs); free(crtcs); free(encs); free(conns);
++    return 0;
++fail:
++    hwdisp_fslog("hwdisp_drm: INIT FAILED");
++    if (g_drm_map) { munmap(g_drm_map, g_drm_size); g_drm_map = NULL; }
++    if (g_drm_fd >= 0) { close(g_drm_fd); g_drm_fd = -1; }
++    if (fbs) free(fbs);
++    if (crtcs) free(crtcs);
++    if (encs) free(encs);
++    if (conns) free(conns);
++    return -1;
++}
++
++/* RGB565 src (w x h, pitch_bytes) -> XRGB8888 dumb buffer (nearest scale). */
++static void hwdisp_drm_present(const void *src, int w, int h, int pitch_bytes) {
++    if (!g_drm_map || g_drm_w <= 0 || g_drm_h <= 0 || !src) return;
++    const uint16_t *s = (const uint16_t *)src;
++    const int sp = pitch_bytes / 2;
++
++    /* 1:1 fast path (FrogUI menu frames): straight store, no scale lookups. */
++    if (w == g_drm_w && h == g_drm_h) {
++        for (int y = 0; y < g_drm_h; y++) {
++            uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
++            const uint16_t *srow = s + (size_t)y * sp;
++            for (int x = 0; x < g_drm_w; x++)
++                drow[x] = hwdisp_cvt565(srow[x]);
++        }
++        return;
++    }
++
++    /* Scaled path (game frames): convert each SOURCE row to ARGB once into a
++     * scratch row, then nearest-copy — cvt565 runs w*h times instead of
++     * w_out*h_out (256x240 game: ~61k vs ~921k conversions per frame). */
++    static uint32_t rowbuf[2048];
++    if (w > (int)(sizeof(rowbuf) / sizeof(rowbuf[0]))) w = (int)(sizeof(rowbuf) / sizeof(rowbuf[0]));
++    /* Portrait source (arcade games, w < h): rotate 90 deg to landscape.
++     * dst(y,x) <- src(col= y*h/dst_h, row=(dst_w-1-x)*w/dst_w). */
++    if (w < h) {
++        for (int y = 0; y < g_drm_h; y++) {
++            int sx = (y * h / g_drm_h); if (sx >= w) sx = w - 1;
++            const uint16_t *scol = s + (size_t)sx;
++            uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
++            for (int x = 0; x < g_drm_w; x++) {
++                int sy = ((g_drm_w - 1 - x) * h / g_drm_w); if (sy >= h) sy = h - 1;
++                drow[x] = hwdisp_cvt565(scol[(size_t)sy * sp]);
++            }
++        }
++        return;
++    }
++    /* x lookup table: nearest-neighbor src x per dst x, rebuilt only when the
++     * src width changes — removes w*dst_w divisions from every frame. */
++    static int xmap[2048];
++    static int xmap_w = -1;
++    if (xmap_w != w) {
++        for (int x = 0; x < g_drm_w; x++)
++            xmap[x] = (w > 1) ? (x * w / g_drm_w) : 0;
++        xmap_w = w;
++    }
++    for (int y = 0; y < g_drm_h; y++) {
++        int sy = (h > 1) ? (y * h / g_drm_h) : 0;
++        const uint16_t *srow = s + (size_t)sy * sp;
++        for (int sx = 0; sx < w; sx++)
++            rowbuf[sx] = hwdisp_cvt565(srow[sx]);
++        uint32_t *drow = (uint32_t *)(g_drm_map + (size_t)y * g_drm_pitch);
++        for (int x = 0; x < g_drm_w; x++)
++            drow[x] = rowbuf[xmap[x]];
++    }
++}
++
+ int hwdisp_init(void) {
+     extern void sf3000_dump_fb_state(const char *);
+     if (g_active) return 0;
++
++    /* RK3036G: no working driver.so / /dev/dis — HDMI needs a DRM modeset
++     * (fb0 is NOT the HDMI source; device log: HDMI-A-1 connected+enabled). */
++    extern int sf3000_is_rk3036(void);
++    if (sf3000_is_rk3036()) {
++        hwdisp_fslog("hwdisp_init: RK3036G branch (DT compatible), trying DRM modeset first");
++        if (hwdisp_drm_init() == 0) {
++            g_active = 1;
++            g_fb_only = 1;
++            g_drm_mode = 1;
++            hwdisp_fslog("hwdisp_init: DRM modeset ACTIVE %dx%d (dumb-buffer present)",
++                         g_drm_w, g_drm_h);
++            fprintf(stderr, "hwdisp: RK3036G DRM modeset active %dx%d\n", g_drm_w, g_drm_h);
++            return 0;
++        }
++        hwdisp_fslog("hwdisp_init: DRM modeset failed, falling back to fb0-direct");
++        hwdisp_fb_open();
++        if (g_fbmem && g_fbw > 0 && g_fbh > 0) {
++            g_active = 1;
++            g_fb_only = 1;
++            hwdisp_fslog("hwdisp_init: g_fb_only=1 fb0-direct ACTIVE %dx%d bpp=%d stride=%d",
++                         g_fbw, g_fbh, g_fbbpp, g_fbstride);
++            fprintf(stderr, "hwdisp: RK3036G fb0-direct active %dx%d bpp=%d\n",
++                    g_fbw, g_fbh, g_fbbpp);
++            return 0;
++        }
++        hwdisp_fslog("hwdisp_init: RK3036G fb0 open FAILED (fbmem=%p fbw=%d fbh=%d) errno=%d",
++                     (void*)g_fbmem, g_fbw, g_fbh, errno);
++        fprintf(stderr, "hwdisp: RK3036G fb0 open failed\n");
++        return -1;
++    }
++
+     sf3000_dump_fb_state("hwdisp_init/pre");
+ 
+     /* Device-specific driver: each device ships its own driver.so build (panel
+@@ -546,7 +880,10 @@ int hwdisp_present_direct(const void *src, int w, int h, int pitch_bytes) {
+     static int s_n = 0;
+     int lg = (s_n < 8);
+     s_n++;
+-    if (!g_active || !src || !p_disp) return 0;
++    if (!g_active || !src) return 0;
++    /* RK3036G: no driver.so — present straight to fb0. */
++    if (g_fb_only) { hwdisp_fb_present(src, w, h, pitch_bytes); return 1; }
++    if (!p_disp) return 0;
+     /* disp_frame HW-scales src→panel; the driver's fullscreen flag
+      * (fbdev_video_aspect_ratio, like stock) picks fill vs aspect-fit. So:
+      *   full   → flag=fill, pass src straight → GE distort-fills in HW (fast).
+@@ -621,6 +958,7 @@ void hwdisp_present(const void *src, int w, int h, int pitch_bytes) {
+                 s_n, src, w, h, pitch_bytes, g_active, (void*)p_disp,
+                 g_filter_nearest, g_aspect_num, g_aspect_den, HW_W, HW_H);
+     if (!g_active || !src) { if (lg) DBG("DBG present#%d: EARLY-RET\n", s_n); return; }
++    if (g_fb_only) { hwdisp_fb_present(src, w, h, pitch_bytes); return; }
+     if (!p_disp) { if (lg) DBG("DBG present#%d: no p_disp\n", s_n); return; }
+     int rv;
+     /* Nearest filter: SW upscale to 1280×720, driver does no further scale. */
+@@ -785,6 +1123,8 @@ void hwdisp_deinit(void) {
+     sf3000_dump_fb_state("hwdisp_deinit/post-p_deinit");
+     if (g_fbmem) { munmap(g_fbmem, g_fbsize); g_fbmem = NULL; }
+     if (g_fbfd >= 0) { close(g_fbfd); g_fbfd = -1; }
++    if (g_drm_map) { munmap(g_drm_map, g_drm_size); g_drm_map = NULL; g_drm_mode = 0; }
++    if (g_drm_fd >= 0) { close(g_drm_fd); g_drm_fd = -1; }
+     if (g_pad_buf) { free(g_pad_buf); g_pad_buf = NULL; g_pad_cap = 0; g_pad_w = 0; g_pad_h = 0; }
+     if (g_near_buf) { free(g_near_buf); g_near_buf = NULL; }
+     if (g_panel_buf) { free(g_panel_buf); g_panel_buf = NULL; }
+diff --git a/plat.h b/plat.h
+index 1e955f4..cf646e0 100644
+--- a/plat.h
++++ b/plat.h
+@@ -6,10 +6,20 @@
+ // Define sample rate for audio after SDL1.2 conversion
+ #define SAMPLE_RATE 48000
+ // Define Screen Width and Height and Bits Per Pixel
+-// Using 320x240 for SDL 1.2 fbcon compatibility
++// Using 320x240 for SDL 1.2 fbcon compatibility.
++// #ifndef guards: cross-build CFLAGS pass -DSCREEN_WIDTH=1280 -DSCREEN_HEIGHT=720
++// (-DSCREEN_BPP=2) for the RK3036G HDMI panel; without the guards the plain
++// #define below silently overrides them (C: later definition wins) and the SDL
++// surface collapses to 320x240 while FrogUI renders 1280x720 -> SIG=11.
++#ifndef SCREEN_WIDTH
+ #define SCREEN_WIDTH 320
++#endif
++#ifndef SCREEN_HEIGHT
+ #define SCREEN_HEIGHT 240
++#endif
++#ifndef SCREEN_BPP
+ #define SCREEN_BPP 16
++#endif
+ #define SCREEN_PITCH (SCREEN_WIDTH * (SCREEN_BPP / 8))
+ 
+ struct audio_frame {
+diff --git a/plat_sdl.c b/plat_sdl.c
+index fe4f9d8..30f757b 100644
+--- a/plat_sdl.c
++++ b/plat_sdl.c
+@@ -21,6 +21,7 @@ static SDL_Surface* screen;
+ #ifdef PLATFORM_SF3000
+ #include <fcntl.h>
+ #include <errno.h>
++#include <stdarg.h>
+ #include <sys/mman.h>
+ #include <sys/ioctl.h>
+ #include <linux/fb.h>
+@@ -162,6 +163,8 @@ static size_t sf3000_fb_size = 0;
+ 
+ // Forward declarations
+ int sf3000_fb_init(void);
++int sf3000_is_rk3036(void);
++int sf3000_is_sf3500(void);
+ void sf3000_fb_blit(const void *src, int width, int height, int pitch);
+ void sf3000_fb_finish(void);
+ static void sf3000_text_native(int px, int py, const char *text, uint32_t color, int page_y_offset);
+@@ -837,6 +840,10 @@ void* plat_clean_screen(void) {
+ 	return scale_clean(framebuffer, clean_screen->pixels) ? clean_screen : NULL;
+ }
+ 
++/* bytes per pixel for fb pitches; SCREEN_BPP can be 2 (RK3036G CFLAGS) where
++ * SCREEN_BPP/8 == 0 -> SIGFPE on any OSD message. Treat <8 as 2 bytes. */
++#define PLAT_BPP_BYTES ((SCREEN_BPP >= 8) ? (SCREEN_BPP / 8) : 2)
++
+ void plat_video_process(const void *data, unsigned width, unsigned height, size_t pitch) {
+ 	if (!data) return;
+ 	framebuffer = data;
+@@ -845,7 +852,7 @@ void plat_video_process(const void *data, unsigned width, unsigned height, size_
+ 	SDL_LockSurface(screen);
+ 
+ 	if (had_msg) {
+-		video_clear_msg(screen->pixels, screen->h, screen->pitch / (SCREEN_BPP / 8));
++		video_clear_msg(screen->pixels, screen->h, screen->pitch / PLAT_BPP_BYTES);
+ 		had_msg = 0;
+ 	}
+ 
+@@ -911,7 +918,7 @@ void plat_video_process(const void *data, unsigned width, unsigned height, size_
+ 	}
+ 
+ 	if (msg[0]) {
+-		video_print_msg(screen->pixels, screen->h, screen->pitch / (SCREEN_BPP / 8), msg);
++		video_print_msg(screen->pixels, screen->h, screen->pitch / PLAT_BPP_BYTES, msg);
+ 		had_msg = 1;
+ 	}
+ 
+@@ -1104,32 +1111,146 @@ static void *sf3000_audio_thread_fn(void *unused)
+ }
+ #endif
+ 
++static void plat_sound_finish_alsa(void);
++
+ static void plat_sound_finish(void)
+ {
+ #ifdef PLATFORM_SF3000
+-	if (sf3000_audio_running) {
+-		sf3000_audio_running = 0;
+-		pthread_join(sf3000_audio_thread, NULL);  /* thread deinits the DAC itself */
++	/* RK3036G has no stock driver.so audio -> SDL/ALSA path below. */
++	extern int sf3000_is_rk3036(void);
++	if (!sf3000_is_rk3036()) {
++		if (sf3000_audio_running) {
++			sf3000_audio_running = 0;
++			pthread_join(sf3000_audio_thread, NULL);  /* thread deinits the DAC itself */
++		}
++		if (sf3000_sound_handle) {
++			dlclose(sf3000_sound_handle);
++			sf3000_sound_handle = NULL;
++		}
++		return;
+ 	}
+-	if (sf3000_sound_handle) {
+-		dlclose(sf3000_sound_handle);
+-		sf3000_sound_handle = NULL;
++	/* RK3036G: close the ALSA pcm if it was opened (SDL audio never opened). */
++	extern int sf3000_is_rk3036(void);
++	if (sf3000_is_rk3036()) {
++		plat_sound_finish_alsa();
++		SDL_PauseAudio(1);
++		SDL_CloseAudio();
++		if (audio.buf) { free(audio.buf); audio.buf = NULL; }
++		return;
+ 	}
+-#else
++#endif
+ 	SDL_PauseAudio(1);
+ 	SDL_CloseAudio();
+ 	if (audio.buf) {
+ 		free(audio.buf);
+ 		audio.buf = NULL;
+ 	}
+-#endif
+ }
+ 
+ const char *sf3000_driver_path(void);
+ 
++void plat_sound_resize_buffer(void);
++
++/* RK3036G audio backend: SDL/ALSA (device has no stock driver.so audio — the
++ * only sound card is rockchiphdmi, and SDL 1.2's ALSA output drives it).
++ * Kept as a plain function instead of a #else-label + cross-#ifdef goto: the
++ * preprocessor deletes the label when PLATFORM_SF3000 is defined, which made
++ * run #247 fail with "label used but not defined". */
++/* ---- RK3036G: direct ALSA via dlopen. The device ships libasound.so.2 and a
++ * full /proc/asound (rockchiphdmi card) but this SDL build has no ALSA backend
++ * and there is no /dev/dsp, so SDL_OpenAudio fails ("No available audio
++ * device") -> cores run silent and audio starves (observed 1-2 s/frame).
++ * Opening the PCM with the simplified set_params API fixes both. dlopen keeps
++ * zero build-time dependency on alsa headers (sysroot has none). */
++#include <dlfcn.h>
++static void *g_alsa_handle = NULL;
++static void *g_alsa_pcm    = NULL;
++static int   g_alsa_ok     = 0;
++typedef int  (*alsa_open_fn)(void **, const char *, int, int);
++typedef int  (*alsa_setparams_fn)(void *, unsigned int, int, int, int, int, unsigned int);
++typedef long (*alsa_writei_fn)(void *, const void *, unsigned long);
++typedef int  (*alsa_close_fn)(void *);
++static alsa_open_fn       p_snd_pcm_open;
++static alsa_setparams_fn  p_snd_pcm_set_params;
++static alsa_writei_fn     p_snd_pcm_writei;
++static alsa_close_fn      p_snd_pcm_close;
++
++static int plat_sound_init_alsa(void) {
++    if (g_alsa_ok) return 0;
++    g_alsa_handle = dlopen("libasound.so.2", RTLD_LAZY);
++    if (!g_alsa_handle) return -1;
++    p_snd_pcm_open       = (alsa_open_fn)dlsym(g_alsa_handle, "snd_pcm_open");
++    p_snd_pcm_set_params = (alsa_setparams_fn)dlsym(g_alsa_handle, "snd_pcm_set_params");
++    p_snd_pcm_writei     = (alsa_writei_fn)dlsym(g_alsa_handle, "snd_pcm_writei");
++    p_snd_pcm_close      = (alsa_close_fn)dlsym(g_alsa_handle, "snd_pcm_close");
++    if (!p_snd_pcm_open || !p_snd_pcm_set_params || !p_snd_pcm_writei || !p_snd_pcm_close) {
++        dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++    }
++    void *pcm = NULL;
++    /* stream 0 = SND_PCM_STREAM_PLAYBACK. (2 was wrong -> device log
++     * "snd_pcm_hw_open invalid stream 2"; playback is what cores need.) */
++    if (p_snd_pcm_open(&pcm, "default", 0 /*SND_PCM_STREAM_PLAYBACK*/, 0) < 0 || !pcm) {
++        if (pcm) p_snd_pcm_close(pcm);
++        dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++    }
++    /* set_params(pcm, S16_LE=2, RW_INTERLEAVED=3, 2ch, 44100, soft_resample=1, 50ms) */
++    if (p_snd_pcm_set_params(pcm, 2, 3, 2, 44100, 1, 50000) < 0) {
++        p_snd_pcm_close(pcm); dlclose(g_alsa_handle); g_alsa_handle = NULL; return -1;
++    }
++    g_alsa_pcm = pcm; g_alsa_ok = 1;
++    PA_INFO("RK3036G: ALSA audio via dlopen OK (default pcm, 44100 stereo)\n");
++    return 0;
++}
++static void plat_sound_write_alsa(const struct audio_frame *data, int frames) {
++    if (!g_alsa_ok || !g_alsa_pcm || !p_snd_pcm_writei) return;
++    p_snd_pcm_writei(g_alsa_pcm, data, (unsigned long)frames);
++}
++static void plat_sound_finish_alsa(void) {
++    if (g_alsa_pcm && p_snd_pcm_close) p_snd_pcm_close(g_alsa_pcm);
++    g_alsa_pcm = NULL; g_alsa_ok = 0;
++    if (g_alsa_handle) { dlclose(g_alsa_handle); g_alsa_handle = NULL; }
++}
++
++static int plat_sound_init_sdl(void)
++{
++	if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
++		return -1;
++	}
++
++	SDL_AudioSpec spec, received;
++
++	spec.freq = SAMPLE_RATE;
++	spec.format = AUDIO_S16;
++	spec.channels = 2;
++	spec.samples = 512;
++	spec.callback = plat_sound_callback;
++
++	if (SDL_OpenAudio(&spec, &received) < 0) {
++		plat_sound_finish();
++		return -1;
++	}
++
++	audio.in_sample_rate = sample_rate;
++	audio.out_sample_rate = received.freq;
++	plat_sound_resize_buffer();
++
++	SDL_PauseAudio(0);
++	return 0;
++}
++
+ static int plat_sound_init(void)
+ {
+ #ifdef PLATFORM_SF3000
++	/* RK3036G: no stock driver.so audio (HDMI via SDL/ALSA) — route to the
++	 * SDL backend below. This also stops the "sound_driver_init failed"
++	 * audio-thread error and the core teardown it triggered. */
++	extern int sf3000_is_rk3036(void);
++	if (sf3000_is_rk3036()) {
++		if (plat_sound_init_alsa() == 0)
++			return 0;
++		PA_INFO("RK3036G: ALSA init failed, falling back to SDL audio\n");
++		return plat_sound_init_sdl();
++	}
+ 	/* NOTE: sound_driver_init() is NOT called here — it runs on the audio thread
+ 	 * (the SF3500-class driver's handle is thread-local; see sf3000_audio_thread_fn).
+ 	 * Here we only dlopen/dlsym, set rates, and start that thread. */
+@@ -1175,29 +1296,7 @@ static int plat_sound_init(void)
+ 	PA_INFO("SF3000: Proprietary audio driver initialized at %d Hz\n", SAMPLE_RATE);
+ 	return 0;
+ #else
+-	if (SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+-		return -1;
+-	}
+-
+-	SDL_AudioSpec spec, received;
+-
+-	spec.freq = SAMPLE_RATE;
+-	spec.format = AUDIO_S16;
+-	spec.channels = 2;
+-	spec.samples = 512;
+-	spec.callback = plat_sound_callback;
+-
+-	if (SDL_OpenAudio(&spec, &received) < 0) {
+-		plat_sound_finish();
+-		return -1;
+-	}
+-
+-	audio.in_sample_rate = sample_rate;
+-	audio.out_sample_rate = received.freq;
+-	plat_sound_resize_buffer();
+-
+-	SDL_PauseAudio(0);
+-	return 0;
++	return plat_sound_init_sdl();
+ #endif
+ }
+ 
+@@ -1221,9 +1320,17 @@ float plat_sound_capacity(void)
+ }
+ 
+ #define BATCH_SIZE 100
++static void plat_sound_write_sdl(const struct audio_frame *data, int frames);
+ void plat_sound_write(const struct audio_frame *data, int frames)
+ {
+ #ifdef PLATFORM_SF3000
++	/* RK3036G -> SDL/ALSA backend */
++	extern int sf3000_is_rk3036(void);
++	if (sf3000_is_rk3036()) {
++		if (g_alsa_ok) { plat_sound_write_alsa(data, frames); return; }
++		plat_sound_write_sdl(data, frames);
++		return;
++	}
+ 	/* Non-blocking enqueue: hand frames to the consumer thread and return
+ 	 * immediately. On overrun we drop the excess rather than block the emu.
+ 	 * The DAC is fixed at SAMPLE_RATE (48kHz); cores emitting any other rate
+@@ -1263,6 +1370,14 @@ ring_full:
+ 		pthread_mutex_unlock(&sf3000_aring_mtx);
+ 	}
+ #else
++	plat_sound_write_sdl(data, frames);
++#endif
++}
++
++/* RK3036G audio: SDL/ALSA backend (same rationale as plat_sound_init_sdl —
++ * no cross-#ifdef goto, run #247 "label used but not defined"). */
++static void plat_sound_write_sdl(const struct audio_frame *data, int frames)
++{
+ 	int consumed = 0;
+ 	if (audio.buf_len == 0)
+ 		return;
+@@ -1292,7 +1407,6 @@ ring_full:
+ 		}
+ 	}
+ 	SDL_UnlockAudio();
+-#endif
+ }
+ 
+ void plat_sound_resize_buffer(void) {
+@@ -1578,6 +1692,28 @@ int sf3000_fb_init(void) {
+         }
+         fprintf(stderr, "sf3000_fb_init: SF3500 hwdisp_init failed, falling back\n");
+     }
++    /* RK3036G: standard Linux /dev/fb0 (1280x720), no /dev/dis, no driver.so.
++     * Skip the SF3000 portrait FBIOPUT entirely — drive fb0 directly. */
++    if (sf3000_is_rk3036()) {
++        extern int hwdisp_init(void);
++        int il = open("/mnt/sdcard/picoarch_init.log",
++                      O_WRONLY|O_CREAT|O_APPEND, 0644);
++        if (il >= 0) {
++            dprintf(il, "sf3000_fb_init: RK3036G branch, calling hwdisp_init()\n");
++            fsync(il);
++        }
++        int hd = hwdisp_init();
++        if (il >= 0) {
++            dprintf(il, "sf3000_fb_init: hwdisp_init ret=%d (0=fb0-direct, -1=failed)\n", hd);
++            fsync(il); close(il);
++        }
++        if (hd == 0) {
++            sf3000_use_hwdisp = 1;
++            fprintf(stderr, "sf3000_fb_init: RK3036G fb0-direct active\n");
++            return 0;
++        }
++        fprintf(stderr, "sf3000_fb_init: RK3036G hwdisp_init failed, SW fallback\n");
++    }
+     /* Write per-process init log to dedicated file with fsync, so it
+      * survives even when stderr buffer is lost on power-cycle. */
+     int initlog = open("/mnt/sdcard/picoarch_init.log",
+@@ -1822,9 +1958,11 @@ void sf3000_frame_limit(void) {
+  * "present = fb-write" (R36SX only) is the single behavioural split downstream;
+  * SF3500 follows SF3000 in every code path, differing only by driver file. */
+ extern void dbg_log(const char *fmt, ...);
+-enum { TF_DEV_SF3000 = 0, TF_DEV_R36SX = 1, TF_DEV_SF3500 = 2, TF_DEV_GB350 = 3 };
++enum { TF_DEV_SF3000 = 0, TF_DEV_R36SX = 1, TF_DEV_SF3500 = 2, TF_DEV_GB350 = 3,
++       TF_DEV_RK3036 = 4 };
+ static int g_dev_id = -1;       /* -1 = undetected */
+ static int g_dev_r36sx = -1;    /* derived: 1 if R36SX (the fb-write device) */
++static int g_dev_rk3036 = -1;   /* derived: 1 if RK3036G (fb0-direct device) */
+ static int g_dev_w = 854, g_dev_h = 480, g_dev_scale = 150;
+ 
+ /* Recursively scan /proc/device-tree for the R36SX panel node (r63311), without
+@@ -1880,12 +2018,59 @@ static int tf_read_env_file(int *w, int *h, int *scale) {
+     return id;
+ }
+ 
++/* RK3036G has no SF3000-class panel/DT nodes — detect via the SoC compatible
++ * string the kernel exposes. Returns 1 if /proc/device-tree/compatible lists
++ * an rk3036 OR rk3032 SoC. DEVICE EVIDENCE (K:/picoarch_init.log payload-236):
++ * this RK3036G unit's stock kernel DT compatible is 'rockchip,rk3032-dongle'
++ * (uname says rk3036; stock firmware reuses the rk3032 board DT), so BOTH
++ * strings must classify as RK3036G. */
++/* fsync'd file log (black-screen evidence; stderr is invisible on device). */
++static void sf3000_fslog(const char *fmt, ...) {
++    int il = open("/mnt/sdcard/picoarch_init.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
++    if (il < 0) return;
++    char buf[512]; va_list ap; va_start(ap, fmt);
++    int n = vsnprintf(buf, sizeof buf, fmt, ap); va_end(ap);
++    if (n > 0) (void)!write(il, buf, (size_t)n);
++    (void)!dprintf(il, "\n");
++    fsync(il); close(il);
++}
++
++static int tf_device_is_rk3036(void) {
++    FILE *f = fopen("/proc/device-tree/compatible", "r");
++    if (!f) { sf3000_fslog("tf_device_is_rk3036: fopen /proc/device-tree/compatible FAILED errno=%d", errno); return 0; }
++    char buf[256]; int n = fread(buf, 1, sizeof buf - 1, f); fclose(f);
++    if (n <= 0) { sf3000_fslog("tf_device_is_rk3036: fread EMPTY (n=%d)", n); return 0; }
++    buf[n] = 0;
++    /* rk3036 OR rk3032 (device evidence: DT says 'rockchip,rk3032-dongle'). */
++    int match = (strstr(buf, "rk3036") != NULL) || (strstr(buf, "rk3032") != NULL);
++    sf3000_fslog("tf_device_is_rk3036: n=%d match=%d content='%s'", n, match, buf);
++    return match;
++}
++
+ void sf3000_detect_device(void) {
+     if (g_dev_id != -1) return;
+ 
++    sf3000_fslog("sf3000_detect_device: START (TF_DEVICE env='%s')",
++                 getenv("TF_DEVICE") ? getenv("TF_DEVICE") : "(null)");
+     int w = 854, h = 480, scale = 150;        /* defaults (SF3000/SF3500) */
++    /* RK3036G is a SoC fact (DT compatible) -- must win over boot-env
++     * TF_DEVICE=SF3000 (stock firmware leaves it; it short-circuits detection
++     * and forces the SF3000 FBIOPUT path -> picoarch_init.log errno=22 black). */
++    if (tf_device_is_rk3036()) {
++        g_dev_id = TF_DEV_RK3036; g_dev_r36sx = 0; g_dev_rk3036 = 1;
++        g_dev_w = 1280; g_dev_h = 720; g_dev_scale = scale;
++        char s[16];
++        snprintf(s, sizeof s, "%d", g_dev_w);     setenv("TF_PANEL_W", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_h);     setenv("TF_PANEL_H", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_scale); setenv("TF_UI_SCALE", s, 1);
++        sf3000_fslog("sf3000_detect_device: RESULT=TF_DEV_RK3036 %dx%d (DT compatible matched)");
++        DBG("sf3000_detect_device: RK3036G via DT compatible\n");
++        return;
++    }
+     int id = tf_read_env_file(&w, &h, &scale); /* primary: boot env file */
++    sf3000_fslog("sf3000_detect_device: tf_read_env_file -> id=%d w=%d h=%d scale=%d", id, w, h, scale);
+     if (id < 0) id = tf_id_from_name(getenv("TF_DEVICE")); /* inherited env */
++    sf3000_fslog("sf3000_detect_device: tf_id_from_name(env) -> id=%d", id);
+     if (id < 0) {                              /* fallback: scan live DT */
+         int r63311 = 0;
+         dt_scan_r63311("/proc/device-tree", 0, &r63311);
+@@ -1901,8 +2086,12 @@ void sf3000_detect_device(void) {
+                 id = TF_DEV_SF3500;
+             else
+                 id = TF_DEV_GB350;
++        } else if (tf_device_is_rk3036()) {
++            id = TF_DEV_RK3036; w = 1280; h = 720;
+         } else
+             id = TF_DEV_SF3000;
++        sf3000_fslog("sf3000_detect_device: fallback DT scan -> id=%d (r63311=%d panel=%d)",
++                     id, r63311, access("/proc/device-tree/panel", F_OK) == 0);
+     }
+ 
+     /* Panel geometry by device (env-file overrides above already applied to
+@@ -1910,6 +2099,7 @@ void sf3000_detect_device(void) {
+     if (id == TF_DEV_R36SX || id == TF_DEV_GB350) { if (w == 854) w = 640; }  /* landscape 640x480, 4:3 */
+     g_dev_id    = id;
+     g_dev_r36sx = (id == TF_DEV_R36SX);
++    g_dev_rk3036 = (id == TF_DEV_RK3036);
+     g_dev_w = w; g_dev_h = h; g_dev_scale = scale;
+ 
+     char s[16];
+@@ -1920,6 +2110,7 @@ void sf3000_detect_device(void) {
+             id == TF_DEV_R36SX ? "R36SX" : id == TF_DEV_SF3500 ? "SF3500" :
+             id == TF_DEV_GB350 ? "GB350" : "SF3000",
+             g_dev_w, g_dev_h, g_dev_scale);
++    sf3000_fslog("sf3000_detect_device: FINAL id=%d rk3036=%d panel=%dx%d", id, g_dev_rk3036, g_dev_w, g_dev_h);
+ }
+ 
+ int sf3000_panel_w(void)  { sf3000_detect_device(); return g_dev_w; }
+@@ -1927,6 +2118,7 @@ int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
+ int sf3000_is_r36sx(void) { sf3000_detect_device(); return g_dev_r36sx > 0; }
+ int sf3000_is_sf3500(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_SF3500; }
+ int sf3000_is_gb350(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_GB350; }
++int sf3000_is_rk3036(void) { sf3000_detect_device(); return g_dev_rk3036 > 0; }
+ /* 4:3 panels (R36SX, GB350 = 640x480) vs 16:9 (SF3000/SF3500 = 854x480). */
+ int sf3000_aspect_is_43(void) { sf3000_detect_device(); return g_dev_r36sx > 0 || g_dev_id == TF_DEV_GB350; }
+ 
+@@ -2140,7 +2332,7 @@ void sf3000_fb_blit(const void *src, int width, int height, int pitch) {
+      * panel-size frames (only small game frames work), so SF3000 FrogUI falls
+      * through to the SW transpose path below (bilinear-blended, its proven cold
+      * renderer). */
+-    if (sf3000_is_r36sx() && src != screen->pixels &&
++    if ((sf3000_is_r36sx() || sf3000_is_rk3036()) && src != screen->pixels &&
+         width == PANEL_W && height == PANEL_H) {
+         if (!sf3000_use_hwdisp && hwdisp_init() == 0) {
+             sf3000_use_hwdisp = 1;
+@@ -2207,7 +2399,7 @@ if (sf3000_use_hwdisp) {
+                 hwdisp_set_sharpen(sf3000_sharpness);
+                 hwdisp_set_target_aspect(0, 0);            /* already panel-final */
+                 hwdisp_set_filter(SCALE_FILTER_BILINEAR);  /* 1:1 present, no re-upscale */
+-                if (!(sf3000_is_r36sx() && hwdisp_present_direct(panb, PW, PH, PW * 2)))
++                if (!((sf3000_is_r36sx() || sf3000_is_rk3036()) && hwdisp_present_direct(panb, PW, PH, PW * 2)))
+                     hwdisp_present(panb, PW, PH, PW * 2);
+                 return;
+             }
+@@ -2307,7 +2499,7 @@ if (sf3000_use_hwdisp) {
+                 }
+                 if (ff_skip) return;    /* FF: drop this present to keep display 60fps */
+                 /* R36SX: disp_frame hangs → direct fb0 write. SF3000: disp_frame. */
+-                if (!(sf3000_is_r36sx() && hwdisp_present_direct(compose_buf, width, height, width * 2)))
++                if (!((sf3000_is_r36sx() || sf3000_is_rk3036()) && hwdisp_present_direct(compose_buf, width, height, width * 2)))
+                     hwdisp_present(compose_buf, width, height, width * 2);
+                 return;
+             }
+@@ -2336,7 +2528,7 @@ if (sf3000_use_hwdisp) {
+                 src = dst; width = PANEL_W; height = PANEL_H; pitch = PANEL_W * 2;
+             }
+         }
+-        if (!(sf3000_is_r36sx() && hwdisp_present_direct(src, width, height, pitch)))
++        if (!((sf3000_is_r36sx() || sf3000_is_rk3036()) && hwdisp_present_direct(src, width, height, pitch)))
+             hwdisp_present(src, width, height, pitch);
+         return;
+     }

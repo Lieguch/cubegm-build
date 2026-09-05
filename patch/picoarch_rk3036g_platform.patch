@@ -1,0 +1,596 @@
+diff --git a/Makefile b/Makefile
+index 599031e..ab190cf 100644
+--- a/Makefile
++++ b/Makefile
+@@ -81,6 +81,15 @@ else ifeq ($(platform), sf3000)
+ 	CFLAGS  := $(filter-out -flto,$(CFLAGS))
+ 	LDFLAGS := $(filter-out -flto,$(LDFLAGS))
+ 
++else ifeq ($(platform), rk3036g)
++	OBJS += plat_rk3036g.o hwdisp.o
++	CFLAGS += -marm -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -fPIC -DCONTENT_DIR='"/mnt/sdcard/Roms"' -DPLATFORM_RK3036G -DUSE_C_SCALER
++	LDFLAGS += -fPIC -lpthread
++	# Disable LTO — ARM toolchain LTO plugin can't resolve the hwdisp.o +
++	# plat_rk3036g.o split reliably at -Ofast.
++	CFLAGS  := $(filter-out -flto,$(CFLAGS))
++	LDFLAGS := $(filter-out -flto,$(LDFLAGS))
++
+ else ifeq ($(platform), unix)
+ 	OBJS += plat_linux.o
+ 	LDFLAGS += -fPIE
+@@ -136,6 +145,7 @@ plat_miyoomini.o: plat_sdl.c
+ plat_trimui.o: plat_sdl.c
+ plat_linux.o: plat_sdl.c
+ plat_sf3000.o: plat_sdl.c
++plat_rk3036g.o: plat_sdl.c
+ 
+ hwdisp.o: hwdisp.c hwdisp.h
+ 	$(CC) $(CFLAGS) -c -o $@ $<
+diff --git a/main.c b/main.c
+index 1536200..9d25116 100644
+--- a/main.c
++++ b/main.c
+@@ -772,7 +772,6 @@ static void get_tag_name(const char* in_path, char* out_tag) {
+ 	}
+ }
+ 
+-#ifdef PLATFORM_SF3000
+ /* ---- Rewind: per-frame serialized-state ring. Hold SELECT+B to rewind. ----
+  * Each normal frame we serialize the core state into a ring. While rewinding we
+  * drop the newest slot and unserialize the now-newest, then retro_run() renders
+@@ -833,13 +832,19 @@ static int rewind_back(void) {
+ }
+ 
+ static int rewind_held(void) {
++#ifdef PLATFORM_SF3000
+ 	extern volatile uint32_t *sf3000_keys_ptr;
+ 	extern volatile uint32_t sf3000_keys_filtered;
+ 	if (!sf3000_keys_ptr) return 0;
+ 	uint32_t r = sf3000_keys_filtered;  /* race-filtered */
+ 	return (r & ((1u << 0) | (1u << 14))) == ((1u << 0) | (1u << 14)); /* SELECT+B */
+-}
++#else
++	int acts[IN_BINDTYPE_COUNT] = { 0, };
++	in_update(acts);
++	int mask = (1 << RETRO_DEVICE_ID_JOYPAD_SELECT) | (1 << RETRO_DEVICE_ID_JOYPAD_B);
++	return (acts[IN_BINDTYPE_PLAYER12] & mask) == mask;
+ #endif
++}
+ 
+ int main(int argc, char **argv) {
+ 	setvbuf(stdout, NULL, _IONBF, 0);
+@@ -1012,9 +1017,7 @@ int main(int argc, char **argv) {
+ #endif
+ 	show_startup_message();
+ 	state_resume();
+-#ifdef PLATFORM_SF3000
+ 	rewind_init();
+-#endif
+ 
+ 	long play_start = playtime_mono();   /* for local play-time stats */
+ 
+@@ -1022,7 +1025,6 @@ int main(int argc, char **argv) {
+ 		count_fps();
+ 		adjust_audio();
+ 		core_frame_time_tick();
+-#ifdef PLATFORM_SF3000
+ 		if (g_rw_buf && rewind_held() && rewind_back()) {
+ 			current_core.retro_run();          /* render restored frame */
+ 		} else {
+@@ -1033,9 +1035,6 @@ int main(int argc, char **argv) {
+ 			if (g_rw_buf && (++rw_fc % REWIND_INTERVAL) == 0)
+ 				rewind_capture();
+ 		}
+-#else
+-		current_core.retro_run();
+-#endif
+ 		if (!should_quit)
+ 			plat_video_flip();
+ #ifdef PLATFORM_SF3000
+diff --git a/plat_rk3036g.c b/plat_rk3036g.c
+new file mode 100644
+index 0000000..aaf890c
+--- /dev/null
++++ b/plat_rk3036g.c
+@@ -0,0 +1,158 @@
++/*
++ * plat_rk3036g.c -- RK3036G (ARM Cortex-A7, HDMI-only) platform layer.
++ *
++ * Direction-A port (charter §0.4): clean self-contained platform backend
++ * for the RK3036G CubeGM handheld, replacing the SF2000 transitional
++ * patches (cubevol shm input / /dev/dis display / driver.so audio).
++ *
++ * Structure mirrors the upstream plat_sf3000.c (which `#include "plat_sdl.c"`
++ * at the end): define the SDL keyboard binds + the evdev gamepad binds, then
++ * pull in the shared SDL implementation. SDL drives the keyboard/panel; evdev
++ * auto-supports any standard HID USB gamepad via BTN_* / ABS_* codes.
++ *
++ * Hardware facts (payload-305/307 device diag_report.txt + cubevol_bridge.c
++ * stock profile 0810_0001_0110):
++ *   - SoC: RK3036 dual Cortex-A7 @ ~1.0 GHz, ARMv7-A NEON, 244 MB RAM
++ *   - Display: DRM/KMS only (card0-HDMI-A-1), 1280x720p60. /dev/fb0 is a
++ *     legacy emulation that does NOT drive HDMI (payload-305 black screen
++ *     root cause). Rendering via hwdisp.c DRM dumb buffer + SETCRTC
++ *     (verified 48 FPS on payload-307).
++ *   - Audio: ALSA "rockchip,hdmi" card, i2s-hifi PCM (default).
++ *   - Input: "Twin USB Gamepad" (VID:0810 PID:0001) reports BTN_TRIGGER..
++ *     BTN_BASE4 (0x120..0x129 = codes 288-297), dpad on ABS_HAT0X/Y +
++ *     ABS_X/ABS_Y; "key" gpio-keys device (EV_KEY only).
++ */
++#include <SDL/SDL.h>
++#include <linux/input.h>
++#include "libretro.h"
++#include "libpicofe/plat.h"
++#include "libpicofe/input.h"
++#include "libpicofe/in_sdl.h"
++#include "main.h"
++#include "util.h"
++#include "scale.h"
++#include "scaler_neon.h"
++#include "libpicofe/linux/in_evdev.h"   /* in_evdev_init() -- generic gamepad backend */
++#include "plat.h"
++
++// Video system
++static SDL_Surface* screen;
++static SDL_Surface* clean_screen;
++
++// Buffer structure
++static struct GFX_Buffer buffer;
++
++/* --------------------------------------------------------------------- */
++/* SDL keyboard binds (SDL fallback; also what in_sdl_init() needs).      */
++/* --------------------------------------------------------------------- */
++static const struct in_default_bind in_sdl_defbinds[] = {
++    { SDLK_UP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP },
++    { SDLK_DOWN,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN },
++    { SDLK_LEFT,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT },
++    { SDLK_RIGHT,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
++    { SDLK_LCTRL,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B },
++    { SDLK_SPACE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A },
++    { SDLK_LSHIFT,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X },
++    { SDLK_LALT,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y },
++    { SDLK_RETURN,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START },
++    { SDLK_RCTRL,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
++    { SDLK_TAB,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L },
++    { SDLK_BACKSPACE, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R },
++    { SDLK_q,         IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2 },
++    { SDLK_BACKSLASH, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2 },
++    { SDLK_ESCAPE,    IN_BINDTYPE_EMU, EACTION_MENU },
++    { 0, 0, 0 }
++};
++
++const struct menu_keymap in_sdl_key_map[] =
++{
++    { SDLK_UP,        PBTN_UP },
++    { SDLK_DOWN,      PBTN_DOWN },
++    { SDLK_LEFT,      PBTN_LEFT },
++    { SDLK_RIGHT,     PBTN_RIGHT },
++    { SDLK_SPACE,     PBTN_MOK },
++    { SDLK_LCTRL,     PBTN_MBACK },
++    { SDLK_LALT,      PBTN_MA2 },
++    { SDLK_LSHIFT,    PBTN_MA3 },
++    { SDLK_TAB,       PBTN_L },
++    { SDLK_BACKSPACE, PBTN_R },
++    { SDLK_ESCAPE,    PBTN_MENU },
++};
++
++const struct menu_keymap in_sdl_joy_map[] =
++{
++    { SDLK_UP,    PBTN_UP },
++    { SDLK_DOWN,  PBTN_DOWN },
++    { SDLK_LEFT,  PBTN_LEFT },
++    { SDLK_RIGHT, PBTN_RIGHT },
++    { SDLK_WORLD_0, PBTN_MOK },
++    { SDLK_WORLD_1, PBTN_MBACK },
++    { SDLK_WORLD_2, PBTN_MA2 },
++    { SDLK_WORLD_3, PBTN_MA3 },
++};
++
++static const struct in_pdata in_sdl_platform_data = {
++    .defbinds  = in_sdl_defbinds,
++    .key_map   = in_sdl_key_map,
++    .kmap_size = array_size(in_sdl_key_map),
++    .joy_map   = in_sdl_joy_map,
++    .jmap_size = array_size(in_sdl_joy_map),
++};
++
++/* --------------------------------------------------------------------- */
++/* evdev gamepad binds. Twin USB Gamepad (0810:0001) authoritative mapping */
++/* from stock profile 0810_0001_0110 (cubevol_bridge.c header, verified    */
++/* against payload-307 device keycodes): btn0=Y btn1=B btn2=A btn3=X        */
++/* btn4=L1 btn5=R1 btn6=L2 btn7=R2 btn8=SEL btn9=START (0x120..0x129).     */
++/* dpad = ABS_HAT0X/Y via in_evdev abs->digital.                           */
++/* --------------------------------------------------------------------- */
++static const struct in_default_bind in_evdev_defbinds[] = {
++    /* d-pad hat fallback (primary d-pad is ABS_HAT0X/Y via abs->digital) */
++    { BTN_DPAD_UP,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_UP    },
++    { BTN_DPAD_DOWN,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_DOWN  },
++    { BTN_DPAD_LEFT,  IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_LEFT  },
++    { BTN_DPAD_RIGHT, IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_RIGHT },
++
++    /* face buttons (btn0..btn3 -> Y B A X per stock profile) */
++    { BTN_TRIGGER,    IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_Y      },
++    { BTN_THUMB,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_B      },
++    { BTN_THUMB2,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_A      },
++    { BTN_TOP,        IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_X      },
++
++    /* shoulders (btn4..btn7 -> L1 R1 L2 R2) */
++    { BTN_TOP2,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L      },
++    { BTN_PINKIE,     IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R      },
++    { BTN_BASE,       IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_L2     },
++    { BTN_BASE2,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_R2     },
++
++    /* btn8/btn9 -> SELECT/START */
++    { BTN_BASE3,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_SELECT },
++    { BTN_BASE4,      IN_BINDTYPE_PLAYER12, RETRO_DEVICE_ID_JOYPAD_START  },
++    { 0, 0, 0 }
++};
++
++/* Menu navigation (evdev keycodes -> unified PBTN_*). */
++const struct menu_keymap in_evdev_key_map[] = {
++    { BTN_DPAD_UP,    PBTN_UP    },
++    { BTN_DPAD_DOWN,  PBTN_DOWN  },
++    { BTN_DPAD_LEFT,  PBTN_LEFT  },
++    { BTN_DPAD_RIGHT, PBTN_RIGHT },
++    { BTN_THUMB2,     PBTN_MOK   },   /* A = confirm */
++    { BTN_THUMB,      PBTN_MBACK },   /* B = back */
++    { BTN_BASE4,      PBTN_MENU  },   /* START = menu */
++    /* keyboard-arrow fallback (dpad hats mapped to these by in_evdev) */
++    { KEY_UP,         PBTN_UP    },
++    { KEY_DOWN,       PBTN_DOWN  },
++    { KEY_LEFT,       PBTN_LEFT  },
++    { KEY_RIGHT,      PBTN_RIGHT },
++};
++
++static const struct in_pdata in_evdev_platform_data = {
++    .defbinds  = in_evdev_defbinds,
++    .key_map   = in_evdev_key_map,
++    .kmap_size = array_size(in_evdev_key_map),
++    .joy_map   = NULL,
++    .jmap_size = 0,
++};
++
++#include "plat_sdl.c"
+\ No newline at end of file
+diff --git a/plat_sdl.c b/plat_sdl.c
+index b0c98e6..faf7876 100644
+--- a/plat_sdl.c
++++ b/plat_sdl.c
+@@ -172,7 +172,7 @@ static void sf3000_text_native(int px, int py, const char *text, uint32_t color,
+ #endif
+ 
+ // begin miyoo hardware scaling support
+-#ifndef PLATFORM_SF3000
++#if !defined(PLATFORM_SF3000) && !defined(PLATFORM_RK3036G)
+ // loosely based on eggs' picogpsp gfx.c
+ #include <mi_sys.h>
+ #include <mi_gfx.h>
+@@ -1119,13 +1119,20 @@ static void plat_sound_finish_alsa(void);
+  * fails EBUSY ("ALSA init failed, falling back to SDL audio" -> no sound). */
+ void plat_sound_finish(void)
+ {
++#ifdef PLATFORM_RK3036G
++	plat_sound_finish_alsa();
++	SDL_PauseAudio(1);
++	SDL_CloseAudio();
++	if (audio.buf) { free(audio.buf); audio.buf = NULL; }
++	return;
++#endif
+ #ifdef PLATFORM_SF3000
+-	/* RK3036G has no stock driver.so audio -> SDL/ALSA path below. */
++	/* SF3000 proprietary driver shutdown path */
+ 	extern int sf3000_is_rk3036(void);
+ 	if (!sf3000_is_rk3036()) {
+ 		if (sf3000_audio_running) {
+ 			sf3000_audio_running = 0;
+-			pthread_join(sf3000_audio_thread, NULL);  /* thread deinits the DAC itself */
++			pthread_join(sf3000_audio_thread, NULL);
+ 		}
+ 		if (sf3000_sound_handle) {
+ 			dlclose(sf3000_sound_handle);
+@@ -1133,22 +1140,13 @@ void plat_sound_finish(void)
+ 		}
+ 		return;
+ 	}
+-	/* RK3036G: close the ALSA pcm if it was opened (SDL audio never opened). */
+-	extern int sf3000_is_rk3036(void);
+-	if (sf3000_is_rk3036()) {
+-		plat_sound_finish_alsa();
+-		SDL_PauseAudio(1);
+-		SDL_CloseAudio();
+-		if (audio.buf) { free(audio.buf); audio.buf = NULL; }
+-		return;
+-	}
+-#endif
+ 	SDL_PauseAudio(1);
+ 	SDL_CloseAudio();
+ 	if (audio.buf) {
+ 		free(audio.buf);
+ 		audio.buf = NULL;
+ 	}
++#endif
+ }
+ 
+ const char *sf3000_driver_path(void);
+@@ -1264,17 +1262,15 @@ static int plat_sound_init_sdl(void)
+ 
+ static int plat_sound_init(void)
+ {
++#ifdef PLATFORM_RK3036G
++	/* RK3036G: no stock driver.so audio — use SDL/ALSA directly. */
++	if (plat_sound_init_alsa() == 0)
++		return 0;
++	PA_INFO("RK3036G: ALSA init failed, falling back to SDL audio\n");
++	return plat_sound_init_sdl();
++#endif
+ #ifdef PLATFORM_SF3000
+-	/* RK3036G: no stock driver.so audio (HDMI via SDL/ALSA) — route to the
+-	 * SDL backend below. This also stops the "sound_driver_init failed"
+-	 * audio-thread error and the core teardown it triggered. */
+-	extern int sf3000_is_rk3036(void);
+-	if (sf3000_is_rk3036()) {
+-		if (plat_sound_init_alsa() == 0)
+-			return 0;
+-		PA_INFO("RK3036G: ALSA init failed, falling back to SDL audio\n");
+-		return plat_sound_init_sdl();
+-	}
++	/* SF3000 proprietary driver path */
+ 	/* NOTE: sound_driver_init() is NOT called here — it runs on the audio thread
+ 	 * (the SF3500-class driver's handle is thread-local; see sf3000_audio_thread_fn).
+ 	 * Here we only dlopen/dlsym, set rates, and start that thread. */
+@@ -1534,10 +1530,10 @@ int plat_init(void)
+             return -1;
+         }
+     }
+-#ifdef PLATFORM_SF3000
+-    /* Generic evdev gamepad backend (see plat_sf3000.c). evdev auto-supports
+-     * any standard HID USB gamepad via BTN_* / ABS_* codes -- no per-device
+-     * profile required. */
++#if defined(PLATFORM_SF3000) || defined(PLATFORM_RK3036G)
++    /* Generic evdev gamepad backend (see plat_sf3000.c / plat_rk3036g.c).
++     * evdev auto-supports any standard HID USB gamepad via BTN_* / ABS_*
++     * codes -- no per-device profile required. */
+     in_evdev_init(&in_evdev_platform_data);
+ #endif
+     in_probe();
+@@ -1610,8 +1606,8 @@ dbg_log("DBG M3: sound init done\n");
+ 		PA_ERROR("SDL input failed to init: %s\n", SDL_GetError());
+ 		return -1;
+ 	}
+-#ifdef PLATFORM_SF3000
+-	/* Generic evdev gamepad backend (see plat_sf3000.c). */
++#if defined(PLATFORM_SF3000) || defined(PLATFORM_RK3036G)
++	/* Generic evdev gamepad backend (see plat_sf3000.c / plat_rk3036g.c). */
+ 	in_evdev_init(&in_evdev_platform_data);
+ #endif
+ 	in_probe();
+@@ -1666,6 +1662,229 @@ void plat_finish(void)
+ #endif
+ }
+ 
++#ifdef PLATFORM_RK3036G
++/* ---- RK3036G device detection + query (Direction-A) ----
++ * Full copy of the SF3000 device-info layer, deliberately OUTSIDE the
++ * #ifdef PLATFORM_SF3000 block above so hwdisp.c (compiled for every
++ * platform) can link sf3000_is_r36sx/is_rk3036/dump_fb_state/driver_path.
++ * RK3036G always detects as rk3036 via /proc/device-tree compatible.
++ * Kept under #ifdef PLATFORM_RK3036G so the two platforms never define
++ * the same symbols in one translation unit. */
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <strings.h>
++#include <fcntl.h>
++#include <errno.h>
++#include <stdarg.h>
++#include <sys/ioctl.h>
++#include <linux/fb.h>
++void sf3000_dump_fb_state(const char *tag) {
++    const int devs[] = {0, 6, 22};
++    for (size_t i = 0; i < sizeof(devs)/sizeof(devs[0]); i++) {
++        char path[32];
++        snprintf(path, sizeof(path), "/dev/fb%d", devs[i]);
++        int fd = open(path, O_RDONLY);
++        if (fd < 0) {
++            DBG("DBG dump[%s] %s: open failed (errno=%d)\n", tag, path, errno);
++            continue;
++        }
++        struct fb_var_screeninfo v;
++        struct fb_fix_screeninfo f;
++        if (ioctl(fd, FBIOGET_VSCREENINFO, &v) == 0 &&
++            ioctl(fd, FBIOGET_FSCREENINFO, &f) == 0) {
++            DBG("DBG dump[%s] %s: %ux%u(v%ux%u) bpp=%u off=%u,%u rot=%u "
++                            "line=%u smem_start=0x%lx smem_len=%u type=%u visual=%u\n",
++                    tag, path,
++                    v.xres, v.yres, v.xres_virtual, v.yres_virtual,
++                    v.bits_per_pixel, v.xoffset, v.yoffset, v.rotate,
++                    f.line_length, (unsigned long)f.smem_start, f.smem_len,
++                    f.type, f.visual);
++        } else {
++            DBG("DBG dump[%s] %s: ioctl failed (errno=%d)\n", tag, path, errno);
++        }
++        close(fd);
++    }
++}
++enum { TF_DEV_SF3000 = 0, TF_DEV_R36SX = 1, TF_DEV_SF3500 = 2, TF_DEV_GB350 = 3,
++       TF_DEV_RK3036 = 4 };
++static int g_dev_id = -1;       /* -1 = undetected */
++static int g_dev_r36sx = -1;    /* derived: 1 if R36SX (the fb-write device) */
++static int g_dev_rk3036 = -1;   /* derived: 1 if RK3036G (fb0-direct device) */
++static int g_dev_w = 854, g_dev_h = 480, g_dev_scale = 150;
++
++/* Recursively scan /proc/device-tree for the R36SX panel node (r63311), without
++ * forking — popen/fork inside the emulator process can disturb later dynarec
++ * memory mappings (gpsp). Bounded depth. Sets *found if seen. */
++static void dt_scan_r63311(const char *dir, int depth, int *found) {
++    if (*found || depth > 5) return;
++    DIR *d = opendir(dir);
++    if (!d) return;
++    struct dirent *e;
++    char path[512];
++    while ((e = readdir(d))) {
++        if (e->d_name[0] == '.') continue;
++        if (strstr(e->d_name, "r63311")) { *found = 1; break; }
++        snprintf(path, sizeof path, "%s/%s", dir, e->d_name);
++        /* recurse into subdirs only */
++        DIR *sub = opendir(path);
++        if (sub) { closedir(sub); dt_scan_r63311(path, depth + 1, found); if (*found) break; }
++    }
++    closedir(d);
++}
++
++/* Map a device name (from env file or DT scan) to the id enum. Unknown → -1. */
++static int tf_id_from_name(const char *n) {
++    if (!n) return -1;
++    if (!strcasecmp(n, "R36SX"))  return TF_DEV_R36SX;
++    if (!strcasecmp(n, "SF3500")) return TF_DEV_SF3500;
++    if (!strcasecmp(n, "SF3000")) return TF_DEV_SF3000;
++    if (!strcasecmp(n, "GB350"))  return TF_DEV_GB350;
++    return -1;
++}
++
++/* Read TF_DEVICE / TF_PANEL_W / TF_PANEL_H / TF_UI_SCALE from the boot env file.
++ * Returns the device id (or -1 if the file is missing / has no usable TF_DEVICE).
++ * Geometry lines are optional overrides applied to the w/h/scale outputs. */
++static int tf_read_env_file(int *w, int *h, int *scale) {
++    FILE *f = fopen("/tmp/tfdevice.env", "r");
++    if (!f) return -1;
++    int id = -1;
++    char line[128];
++    while (fgets(line, sizeof line, f)) {
++        char *eq = strchr(line, '=');
++        if (!eq) continue;
++        *eq = 0;
++        char *key = line, *val = eq + 1;
++        char *nl = strpbrk(val, "\r\n"); if (nl) *nl = 0;
++        if      (!strcmp(key, "TF_DEVICE"))   id = tf_id_from_name(val);
++        else if (!strcmp(key, "TF_PANEL_W"))  { int v = atoi(val); if (v > 0) *w = v; }
++        else if (!strcmp(key, "TF_PANEL_H"))  { int v = atoi(val); if (v > 0) *h = v; }
++        else if (!strcmp(key, "TF_UI_SCALE")) { int v = atoi(val); if (v > 0) *scale = v; }
++    }
++    fclose(f);
++    return id;
++}
++
++/* RK3036G has no SF3000-class panel/DT nodes — detect via the SoC compatible
++ * string the kernel exposes. Returns 1 if /proc/device-tree/compatible lists
++ * an rk3036 OR rk3032 SoC. DEVICE EVIDENCE (K:/picoarch_init.log payload-236):
++ * this RK3036G unit's stock kernel DT compatible is 'rockchip,rk3032-dongle'
++ * (uname says rk3036; stock firmware reuses the rk3032 board DT), so BOTH
++ * strings must classify as RK3036G. */
++/* fsync'd file log (black-screen evidence; stderr is invisible on device). */
++static void sf3000_fslog(const char *fmt, ...) {
++    int il = open("/mnt/sdcard/picoarch_init.log", O_WRONLY|O_CREAT|O_APPEND, 0644);
++    if (il < 0) return;
++    char buf[512]; va_list ap; va_start(ap, fmt);
++    int n = vsnprintf(buf, sizeof buf, fmt, ap); va_end(ap);
++    if (n > 0) (void)!write(il, buf, (size_t)n);
++    (void)!dprintf(il, "\n");
++    fsync(il); close(il);
++}
++
++static int tf_device_is_rk3036(void) {
++    FILE *f = fopen("/proc/device-tree/compatible", "r");
++    if (!f) { sf3000_fslog("tf_device_is_rk3036: fopen /proc/device-tree/compatible FAILED errno=%d", errno); return 0; }
++    char buf[256]; int n = fread(buf, 1, sizeof buf - 1, f); fclose(f);
++    if (n <= 0) { sf3000_fslog("tf_device_is_rk3036: fread EMPTY (n=%d)", n); return 0; }
++    buf[n] = 0;
++    /* rk3036 OR rk3032 (device evidence: DT says 'rockchip,rk3032-dongle'). */
++    int match = (strstr(buf, "rk3036") != NULL) || (strstr(buf, "rk3032") != NULL);
++    sf3000_fslog("tf_device_is_rk3036: n=%d match=%d content='%s'", n, match, buf);
++    return match;
++}
++
++void sf3000_detect_device(void) {
++    if (g_dev_id != -1) return;
++
++    sf3000_fslog("sf3000_detect_device: START (TF_DEVICE env='%s')",
++                 getenv("TF_DEVICE") ? getenv("TF_DEVICE") : "(null)");
++    int w = 854, h = 480, scale = 150;        /* defaults (SF3000/SF3500) */
++    /* RK3036G is a SoC fact (DT compatible) -- must win over boot-env
++     * TF_DEVICE=SF3000 (stock firmware leaves it; it short-circuits detection
++     * and forces the SF3000 FBIOPUT path -> picoarch_init.log errno=22 black). */
++    if (tf_device_is_rk3036()) {
++        g_dev_id = TF_DEV_RK3036; g_dev_r36sx = 0; g_dev_rk3036 = 1;
++        g_dev_w = 1280; g_dev_h = 720; g_dev_scale = scale;
++        char s[16];
++        snprintf(s, sizeof s, "%d", g_dev_w);     setenv("TF_PANEL_W", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_h);     setenv("TF_PANEL_H", s, 1);
++        snprintf(s, sizeof s, "%d", g_dev_scale); setenv("TF_UI_SCALE", s, 1);
++        sf3000_fslog("sf3000_detect_device: RESULT=TF_DEV_RK3036 %dx%d (DT compatible matched)");
++        DBG("sf3000_detect_device: RK3036G via DT compatible\n");
++        return;
++    }
++    int id = tf_read_env_file(&w, &h, &scale); /* primary: boot env file */
++    sf3000_fslog("sf3000_detect_device: tf_read_env_file -> id=%d w=%d h=%d scale=%d", id, w, h, scale);
++    if (id < 0) id = tf_id_from_name(getenv("TF_DEVICE")); /* inherited env */
++    sf3000_fslog("sf3000_detect_device: tf_id_from_name(env) -> id=%d", id);
++    if (id < 0) {                              /* fallback: scan live DT */
++        int r63311 = 0;
++        dt_scan_r63311("/proc/device-tree", 0, &r63311);
++        if (r63311)
++            id = TF_DEV_R36SX;
++        else if (access("/proc/device-tree/panel", F_OK) == 0) {
++            /* /panel devices are 854x480 SF3500-class — EXCEPT GB350, which is
++             * 640x480 and is the only /panel device lacking BOTH hcrtos/
++             * multiple_init (present on SF3000HD) and hcrtos/uart@1 (present on
++             * SF3500/SF3100). */
++            if (access("/proc/device-tree/hcrtos/multiple_init", F_OK) == 0 ||
++                access("/proc/device-tree/hcrtos/uart@1", F_OK) == 0)
++                id = TF_DEV_SF3500;
++            else
++                id = TF_DEV_GB350;
++        } else if (tf_device_is_rk3036()) {
++            id = TF_DEV_RK3036; w = 1280; h = 720;
++        } else
++            id = TF_DEV_SF3000;
++        sf3000_fslog("sf3000_detect_device: fallback DT scan -> id=%d (r63311=%d panel=%d)",
++                     id, r63311, access("/proc/device-tree/panel", F_OK) == 0);
++    }
++
++    /* Panel geometry by device (env-file overrides above already applied to
++     * w/h when present; otherwise set the known per-device defaults). */
++    if (id == TF_DEV_R36SX || id == TF_DEV_GB350) { if (w == 854) w = 640; }  /* landscape 640x480, 4:3 */
++    g_dev_id    = id;
++    g_dev_r36sx = (id == TF_DEV_R36SX);
++    g_dev_rk3036 = (id == TF_DEV_RK3036);
++    g_dev_w = w; g_dev_h = h; g_dev_scale = scale;
++
++    char s[16];
++    snprintf(s, sizeof s, "%d", g_dev_w);     setenv("TF_PANEL_W", s, 1);
++    snprintf(s, sizeof s, "%d", g_dev_h);     setenv("TF_PANEL_H", s, 1);
++    snprintf(s, sizeof s, "%d", g_dev_scale); setenv("TF_UI_SCALE", s, 1);
++    dbg_log("DBG device: %s panel=%dx%d ui_scale=%d\n",
++            id == TF_DEV_R36SX ? "R36SX" : id == TF_DEV_SF3500 ? "SF3500" :
++            id == TF_DEV_GB350 ? "GB350" : "SF3000",
++            g_dev_w, g_dev_h, g_dev_scale);
++    sf3000_fslog("sf3000_detect_device: FINAL id=%d rk3036=%d panel=%dx%d", id, g_dev_rk3036, g_dev_w, g_dev_h);
++}
++
++int sf3000_panel_w(void)  { sf3000_detect_device(); return g_dev_w; }
++int sf3000_panel_h(void)  { sf3000_detect_device(); return g_dev_h; }
++int sf3000_is_r36sx(void) { sf3000_detect_device(); return g_dev_r36sx > 0; }
++int sf3000_is_sf3500(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_SF3500; }
++int sf3000_is_gb350(void) { sf3000_detect_device(); return g_dev_id == TF_DEV_GB350; }
++int sf3000_is_rk3036(void) { sf3000_detect_device(); return g_dev_rk3036 > 0; }
++/* 4:3 panels (R36SX, GB350 = 640x480) vs 16:9 (SF3000/SF3500 = 854x480). */
++int sf3000_aspect_is_43(void) { sf3000_detect_device(); return g_dev_r36sx > 0 || g_dev_id == TF_DEV_GB350; }
++
++/* Device-correct driver.so path. NOTE: SF3500's STOCK driver.so is ENCRYPTED
++ * (firmware decrypts it to /tmp/cubegm/driver.so at boot). We grab that plaintext
++ * at runtime (zhijack) and ship it AS driver_sf3500.so — a real ELF picoarch can
++ * dlopen for HW video + audio. */
++const char *sf3000_driver_path(void) {
++    sf3000_detect_device();
++    switch (g_dev_id) {
++    case TF_DEV_R36SX:  return "/mnt/sdcard/cubegm/driver_r36sx.so";
++    case TF_DEV_SF3500: return "/mnt/sdcard/cubegm/driver_sf3500.so"; /* decrypted, real driver */
++    case TF_DEV_GB350:  return "/mnt/sdcard/cubegm/driver_gb350.so";  /* plain ELF, 640x480 */
++    default:            return "/mnt/sdcard/cubegm/driver_sf3000.so";
++    }
++}
++#endif // PLATFORM_RK3036G
++
+ // SF3000 framebuffer implementation
+ #ifdef PLATFORM_SF3000
+ 

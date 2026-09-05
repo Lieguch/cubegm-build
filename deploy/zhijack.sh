@@ -1,0 +1,56 @@
+#!/bin/sh
+# CubeGM autorun hijack — open-source frontend launcher (picoarch + FrogUI)
+#
+# Invoked by the stock launcher via setting.xml:
+#   <autorun file="cubegm/zhijack.sh" driver="" />
+#
+# SAFETY (per architecture.md §四 / cubegm_replacement_feasibility.md §五.5):
+#   This script does NOT replace or modify any stock binary (rkgame/icube/
+#   driver.so). It only launches our own binaries that live alongside them,
+#   so the device boot checksum is never tripped ("sdcard is damaged").
+#
+# Boot chain (verified from analysis docs):
+#   stock rkgame -> autorun -> cubegm/zhijack.sh
+#       -> picoarch ./cores/frogui_libretro.so   (FrogUI menu core)
+#           -> user picks ROM -> fork() runs the selected libretro core
+
+set -e
+
+# SDL 1.2 fbcon mouse: the RK3036G has no PS/2 mouse device (/dev/input/mice,
+# /dev/usbmouse, /dev/psaux all absent). FB_OpenMouse() then fails and without
+# SDL_NOMOUSE SDL_InitVideo returns -1 ("Unable to open mouse") which kills
+# picoarch -> FrogUI restart loop -> black screen (zhijack-2.log iter 1..42).
+# The device is operated by the USB gamepad via evdev, so disable the SDL
+# mouse probe. This is SDL's own documented switch (src/video/fbcon/
+# SDL_fbvideo.c: if (FB_OpenMouse(this) < 0) { ... if (!SDL_getenv("SDL_NOMOUSE"))
+#   -> fail }); it only affects the init-time probe, NOT the evdev gamepad.
+export SDL_NOMOUSE=1
+
+# Resolve our own directory so relative paths (cores/, Roms/) resolve on the SD card.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$SCRIPT_DIR" || exit 1
+
+# Device diagnostics: runs before picoarch, writes report to /mnt/sdcard/
+# diag_report.txt. Covers ALSA cards, PCM devices, acodec/I2S/HDMI registers,
+# DRM modeset, input evdev capture, libretro core scan, and 1 kHz audio test.
+# The report is read back from the SD card -- no SSH/serial needed.
+echo "cubegm/zhijack.sh: running diag (diagnostics)..." >&2
+if [ -x ./diag ]; then
+    ./diag all 2>/dev/null || true
+else
+    echo "cubegm/zhijack.sh: ./diag not found (diagnostics skipped)" >&2
+fi
+
+# FrogUI is itself a libretro core; picoarch loads it as the front-end menu.
+# (LAUNCH_FILE=/tmp/frogui_launch.txt + RETRO_ENVIRONMENT_SHUTDOWN are handled
+#  internally by picoarch/FrogUI — no env setup needed here.)
+if [ ! -x ./picoarch ]; then
+    echo "cubegm/zhijack.sh: ./picoarch not found in $SCRIPT_DIR" >&2
+    exit 1
+fi
+if [ ! -e ./cores/frogui_libretro.so ]; then
+    echo "cubegm/zhijack.sh: ./cores/frogui_libretro.so not found" >&2
+    exit 1
+fi
+
+exec ./picoarch ./cores/frogui_libretro.so

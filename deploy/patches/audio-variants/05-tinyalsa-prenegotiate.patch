@@ -1,0 +1,32 @@
+From: CubeGM v7.2 <hermes@local>
+Subject: [PATCH] 05-tinyalsa-prenegotiate.patch (v7.2: Fix B only)
+
+v7.2 (2026-09-04, #465 实机证伪后最终版):
+  - 移除 v6.0 版 use_alsa dlopen 链（tinyalsa.c hunks）——该链在
+    #463/#464/#465 三次实机证伪：hw:0,1 (rk3036-voice 纯 DAC 无 DMA
+    触发) 端点阻塞 writei → 整机 3-6s 冻结。
+  - 只保留 Fix B：重采样器编译期质量提升（config.def.h 两宏）。
+  - 本 patch 基于 RetroArch 282a12d 生成，与 01-04 链兼容。
+
+diff --git a/config.def.h b/config.def.h
+index badee7a..d6e944a 100644
+--- a/config.def.h
++++ b/config.def.h
+@@ -1345,7 +1345,7 @@
+  * (sinc, nearest, or CC) can be preferred over the float one for any
+  * needed resampling, avoiding the s16<->float round-trip
+  * (bit-reproducible). Opt-in; the float path remains the default. */
+-#define DEFAULT_AUDIO_FASTPATH_S16 false
++#define DEFAULT_AUDIO_FASTPATH_S16 true
+ /* Requested output sample format for negotiable audio drivers:
+  * AUDIO_FORMAT_NEGOTIATION_INT16 (0) or AUDIO_FORMAT_NEGOTIATION_FLOAT (1).
+  * Float by default, matching RetroArch's historical driver behaviour. */
+@@ -1837,7 +1837,7 @@
+ #define DEFAULT_UI_MENUBAR_ENABLE true
+ 
+ #if defined(__QNX__) || defined(_XBOX1) || defined(_XBOX360) || (defined(__MACH__) && defined(IOS)) || defined(ANDROID) || defined(WIIU) || defined(HAVE_NEON) || defined(GEKKO) || defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__PS3__)
+-#define DEFAULT_AUDIO_RESAMPLER_QUALITY_LEVEL RESAMPLER_QUALITY_LOWER
++#define DEFAULT_AUDIO_RESAMPLER_QUALITY_LEVEL RESAMPLER_QUALITY_HIGHER
+ #elif defined(PSP) || defined(_3DS) || defined(VITA) || defined(PS2) || defined(DINGUX)
+ #define DEFAULT_AUDIO_RESAMPLER_QUALITY_LEVEL RESAMPLER_QUALITY_LOWEST
+ #else

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CubeGM open-source frontend — autorun config TEMPLATE.
+
+  The stock device stores its settings in cubegm/setting.xml, which already
+  contains many fields (language, volume, ui, sound, ...). DO NOT overwrite
+  the whole file. Instead, merge ONLY the <autorun> line below into your
+  device's existing cubegm/setting.xml (the <autorun> field exists there but
+  ships empty: <autorun file="" driver="" />).
+
+  This is what tells the stock launcher to hand control to our frontend
+  instead of (or before) the stock menu — without touching any stock binary,
+  so the boot checksum ("sdcard is damaged") is never triggered.
+-->
+<setting>
+  <autorun file="cubegm/zhijack.sh" driver="" />
+</setting>

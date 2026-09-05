@@ -1,0 +1,4 @@
+# Patch files MUST stay LF on every checkout: CI runs `git apply` on them and
+# a CRLF patch (core.autocrlf) breaks context matching.
+*.patch text eol=lf
+*.diff text eol=lf

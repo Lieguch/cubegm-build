@@ -1,0 +1,6 @@
+#!/bin/sh
+# autorun -- the file the stock firmware executes on boot.
+# We simply delegate to zhijack.sh, which launches the open-source front-end.
+# The stock rkgame/icube/driver.so and root.dat are NOT touched, so the device
+# will not report "sdcard is damaged".
+exec "$(dirname "$0")/zhijack.sh" "$@"

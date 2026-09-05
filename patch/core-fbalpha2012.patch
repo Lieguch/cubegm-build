@@ -1,0 +1,9 @@
+diff --git a/svn-current/trunk/src/burn/burnint.h b/svn-current/trunk/src/burn/burnint.h
+index 3b28336..a52a71d 100644
+--- a/svn-current/trunk/src/burn/burnint.h
++++ b/svn-current/trunk/src/burn/burnint.h
+@@ -249,3 +249,4 @@ extern UINT8 DebugCPU_SH2Initted;
+ void DebugTrackerExit();
+ 
+ #endif
++#include "timer.h"

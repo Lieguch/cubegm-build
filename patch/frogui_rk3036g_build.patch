@@ -1,0 +1,38 @@
+diff --git a/frogos.c b/frogos.c
+index 93ff2a5..349991f 100644
+--- a/frogos.c
++++ b/frogos.c
+@@ -33,6 +33,33 @@ static loader_func_t direct_loader = (loader_func_t)LOADER_ADDR;
+ #include "favorites.h"
+ #include "settings.h"
+ 
++// ---------------------------------------------------------------------------
++// [CubeGM / RK3036G] Build fixes for the non-SF2000 (ARM / RK3036G) build.
++// The upstream tip (commit 2f41ace) was developed for SF2000 (MIPS); the
++// unix/ARM Makefile target references symbols never declared in this TU.
++// Declare / stub them here so frogui_libretro.so compiles and links. Game
++// LAUNCHING on RK3036G (the direct_loader path) is a separate, tracked item --
++// direct_loader is a no-op here so the menu still renders.
++// ---------------------------------------------------------------------------
++#ifndef SF2000
++// Game-launch string buffers built by the menu and consumed by retro_run(),
++// which fwrite()s ptr_gs_run_game_file to /mnt/sda1/temp_launch.gba. Upstream
++// added the usages in 2f41ace but omitted these declarations.
++static char ptr_gs_run_game_file[1024];
++static char ptr_gs_run_game_name[1024];
++
++// direct_loader() jumps to the SF2000 stock loader at a fixed address; that
++// mechanism does not exist on RK3036G. Stub it (no-op) so the binary links.
++static void direct_loader(const char *path, int unused) {
++    (void)path; (void)unused;
++}
++#endif
++
++// xlog() is only defined in fbdev.c, which is NOT in the Makefile SOURCES_C,
++// so it is undefined for every Makefile-based build. Provide a local no-op.
++// Declared with varargs because callers pass printf-style format + arguments.
++static void xlog(const char *fmt, ...) { (void)fmt; }
++
+ // Console to core name mapping (from buildcoresworking.sh)
+ typedef struct {
+     const char *console_name;
