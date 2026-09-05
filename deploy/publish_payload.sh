@@ -64,7 +64,7 @@ echo "packed -> /tmp/$ZIP ($SIZE bytes)"
 # errcode:5 "Resource not found" (非 409) → id 解析为空 → exit 1
 # 正确做法: 先 GET /releases/tags/{tag} 复用; 404 才 create。
 # CNB API 要求 Accept: application/json, 否则返回 406。
-TAG_LOOKUP=$(curl -s -w "\nHTTP_CODE=%{http_code}" -H "Authorization: Bearer ***" -H "Accept: application/json" \
+TAG_LOOKUP=$(curl -s -w "\nHTTP_CODE=%{http_code}" -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" \
   "$API/$REPO/-/releases/tags/$TAG")
 TAG_HTTP=$(echo "$TAG_LOOKUP" | tail -1 | sed 's/HTTP_CODE=//')
 TAG_BODY=$(echo "$TAG_LOOKUP" | sed '$d')
@@ -79,7 +79,7 @@ if [ "$TAG_HTTP" = "200" ]; then
 else
   # 404 = tag 不存在, 创建新的
   CREATE_HTTP=$(curl -s -o /tmp/cnb_create_resp -w "%{http_code}" -X POST \
-    -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" -H "Content-Type: application/json" \
     -d "{\"tag_name\":\"$TAG\",\"name\":\"CubeGM payload $TAG\",\"body\":\"v7.4e RetroArch audio rewrite build\",\"draft\":false,\"prerelease\":false,\"target_commitish\":\"${CNB_DEFAULT_BRANCH:-main}\"}" \
     "$API/$REPO/-/releases")
   CREATE=$(cat /tmp/cnb_create_resp)
@@ -98,7 +98,7 @@ fi
 
 # 3) 申请上传 URL -> {upload_url, verify_url}
 UP_HTTP=$(curl -s -o /tmp/cnb_up_resp -w "%{http_code}" -X POST \
-  -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" -H "Content-Type: application/json" \
   -d "{\"asset_name\":\"$ZIP\",\"overwrite\":true,\"size\":$SIZE}" \
   "$API/$REPO/-/releases/$RELEASE_ID/asset-upload-url")
 UP=$(cat /tmp/cnb_up_resp)
@@ -117,7 +117,7 @@ fi
 # 4) PUT 上传
 echo "PUT -> ${UPLOAD_URL:0:80}..."
 PUT_HTTP=$(curl -sS -X PUT -o /tmp/cnb_put_resp -w "%{http_code}" \
-  -H "Authorization: Bearer ***" -H "Content-Type: application/octet-stream" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/octet-stream" \
   --data-binary "@/tmp/$ZIP" "$UPLOAD_URL")
 PUT_BODY=$(cat /tmp/cnb_put_resp)
 echo "PUT HTTP=$PUT_HTTP body: ${PUT_BODY:0:200}"
@@ -129,7 +129,7 @@ echo "PUT done ($SIZE bytes)"
 
 # 5) confirm (必须带 Content-Type: application/vnd.cnb.api+json, 否则 406)
 CONFIRM_HTTP=$(curl -sS -o /tmp/cnb_confirm_resp -w "%{http_code}" -X POST \
-  -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/vnd.cnb.api+json" -d '{}' \
+  -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" -H "Content-Type: application/vnd.cnb.api+json" -d '{}' \
   "$VERIFY_URL")
 CONFIRM_BODY=$(cat /tmp/cnb_confirm_resp)
 echo "confirm HTTP=$CONFIRM_HTTP body: ${CONFIRM_BODY:0:200}"
