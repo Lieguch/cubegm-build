@@ -1,0 +1,13 @@
+diff --git a/Makefile.common b/Makefile.common
+index 06d1310..6b05b94 100644
+--- a/Makefile.common
++++ b/Makefile.common
+@@ -853,6 +853,8 @@ endif
+ 
+ ifeq ($(HAVE_ALSA), 1)
+    OBJ += audio/drivers/alsa.o \
++          audio/drivers/cubegm_alsa.o \
++          audio/drivers/cubegm_alsathread.o \
+           audio/drivers/alsa-s24.o \
+           audio/drivers/alsa-s32.o \
+           audio/common/alsa.o
