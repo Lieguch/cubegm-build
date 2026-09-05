@@ -16,7 +16,16 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="${REPO:-${CNB_GROUP_SLUG:-lieguch}/${CNB_REPO_SLUG:-CubeGM_RetroArch}}"
+# 关键修复: CNB CI 中 CNB_REPO_SLUG 实际是完整路径 "lieguch/CubeGM_RetroArch"
+# (不是单独 repo slug), 不能再拼 ${CNB_GROUP_SLUG}/${CNB_REPO_SLUG} 否则 URL
+# 变成 "lieguch/lieguch/CubeGM_RetroArch" -> 404 Resource not found (stage-2 fail)。
+# 用 bash 取最后一段做兜底, 保证最终 REPO 形如 "<org>/<repo>" 且只含一个 "/"。
+# 优先级: $REPO 显式 > CNB_REPO_SLUG > CNB_GROUP_SLUG/CNB_REPO_PATH basename > 硬编码
+_slug_full="${CNB_REPO_SLUG:-}"
+_slug_short="${CNB_REPO_PATH:-${CNB_REPO_SLUG:-CubeGM_RetroArch}}"
+_repo_short="$(basename "$_slug_short")"
+_org="${CNB_GROUP_SLUG:-lieguch}"
+REPO="${REPO:-${_slug_full:-${_org}/${_repo_short}}}"
 TOKEN="${CNB_TOKEN:-flUpExezGgRdVv8q1e2205htFsE}"
 API="https://api.cnb.cool"
 
@@ -25,6 +34,12 @@ TS=$(date -u +%Y%m%d%H%M)
 ZIP="cubegm-payload-${TS}.zip"
 
 echo "== publish: $REPO tag=$TAG asset=$ZIP =="
+# 校验: 路径只允许一个 "/", 防止双 org 拼接回归
+_slashes=$(echo "$REPO" | tr -cd '/' | wc -c)
+if [ "$_slashes" -ne 1 ]; then
+  echo "ERROR: REPO path malformed (expected '<org>/<repo>', got '$REPO')"
+  exit 1
+fi
 
 # 1) 打包（若 cubegm/ 存在）
 if [ ! -d "$HERE/cubegm" ]; then
