@@ -7,6 +7,41 @@
 #    -> build + ABI gate -> stage deploy/cubegm/ 设备烧录包
 #  报告输出：stage 3 cat BUILD_REPORT.txt（Agent 自动诊断）。
 # =====================================================================
+$:
+  api_trigger:
+    - runner:
+        cpus: 8
+      docker:
+        image: ubuntu:22.04
+        volumes:
+          - /root/.cache:copy-on-write
+      stages:
+        - name: "1/4 apt + bootstrap full build"
+          timeout: 21600
+          script: |
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends sudo >/dev/null 2>&1 || true
+            which sudo || apt-get install -y --no-install-recommends sudo
+            cd deploy
+            sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
+            sed -i 's/\r$//' ../build/toolchain/build_sysroot_ctng.sh ../build/toolchain/verify_target_abi.sh
+            chmod +x bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
+            chmod +x ../build/toolchain/*.sh
+            PREFIX=/opt/cubegm-toolchain ./bootstrap_linux.sh
+        - name: "2/4 build report"
+          timeout: 300
+          script: |
+            if [ -f deploy/BUILD_REPORT.txt ]; then
+              echo "=========== BUILD_REPORT.txt ==========="
+              cat deploy/BUILD_REPORT.txt
+            else
+              echo "NO BUILD_REPORT.txt (build failed before report)"
+            fi
+            echo "=========== device payload ==========="
+            du -sh deploy/cubegm 2>/dev/null || echo "no payload dir"
+            ls -la deploy/cubegm 2>/dev/null | head -20
 main:
   push:
     - runner:
