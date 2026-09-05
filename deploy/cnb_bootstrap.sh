@@ -7,13 +7,18 @@
 #    3. 防御 CRLF（脚本可能在 Windows 编写）
 #    4. 调用 deploy/bootstrap_linux.sh 全链路构建
 #  .cnb.yml 的 push / api_trigger 均调用本脚本，避免 YAML 内嵌复杂脚本。
+#  用法: cnb_bootstrap.sh [--dev]   --dev=仅初始化云开发环境(全工具链+apt)，
+#        不跑全构建(用于 CNB 云原生开发 vscode 事件)。
 # =============================================================================
 set -euo pipefail
+
+DEV_MODE=0
+[ "${1:-}" = "--dev" ] && DEV_MODE=1
 
 export DEBIAN_FRONTEND=noninteractive
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-echo "== CNB bootstrap wrapper (cnb_bootstrap.sh) =="
+echo "== CNB bootstrap wrapper (cnb_bootstrap.sh) ==${DEV_MODE:+ [DEV MODE]}"
 echo "runner: $(uname -a)"
 
 # ---- 1. network diagnostics (never fatal; only informational) --------------
@@ -63,6 +68,23 @@ sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_ar
 sed -i 's/\r$//' ../build/toolchain/build_sysroot_ctng.sh ../build/toolchain/verify_target_abi.sh 2>/dev/null || true
 chmod +x bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh 2>/dev/null || true
 chmod +x ../build/toolchain/*.sh 2>/dev/null || true
+
+# ---- 3.5 dev-mode: full toolchain, then STOP (no full build) ----------------
+if [ "$DEV_MODE" = "1" ]; then
+  echo "== [DEV] installing full build toolchain =="
+  apt-get install -y -qq --no-install-recommends \
+      build-essential gcc g++ flex bison texinfo gawk \
+      libgmp-dev libmpfr-dev libmpc-dev pkg-config autoconf automake \
+      libtool libtool-bin gperf dpkg-dev binutils-dev zlib1g-dev \
+      python3 python3-pip python3-dev help2man zip unzip file \
+      libdrm-dev libasound2-dev gettext >/dev/null 2>&1 || true
+  echo "== [DEV] toolchain ready =="
+  git --version
+  gcc --version | head -1
+  python3 --version
+  echo "== [DEV] environment initialized. Connect via VS Code/WebIDE. =="
+  exit 0
+fi
 
 # ---- 4. full bootstrap build ------------------------------------------------
 echo "== running deploy/bootstrap_linux.sh =="
