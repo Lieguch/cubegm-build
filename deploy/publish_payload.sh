@@ -38,12 +38,13 @@ SIZE=$(stat -c%s "/tmp/$ZIP")
 echo "packed -> /tmp/$ZIP ($SIZE bytes)"
 
 # 2) 创建或复用 Release (tag)
-RELEASE_ID=$(curl -s -H "Authorization: Bearer $TOKEN" "$API/$REPO/-/releases/latest" \
+# CNB API 要求 Accept: application/json, 否则返回 406 导致 json.load 失败
+RELEASE_ID=$(curl -s -H "Authorization: Bearer ***" -H "Accept: application/json" "$API/$REPO/-/releases/latest" \
   | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('id',''))" 2>/dev/null || echo "")
 if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "None" ]; then
   echo "release already exists id=$RELEASE_ID"
 else
-  CREATE=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  CREATE=$(curl -s -X POST -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
     -d "{\"tag_name\":\"$TAG\",\"name\":\"CubeGM payload $TAG\",\"body\":\"v7.4e RetroArch audio rewrite build\",\"draft\":false,\"prerelease\":false,\"target_commitish\":\"${CNB_DEFAULT_BRANCH:-main}\"}" \
     "$API/$REPO/-/releases")
   echo "create resp: ${CREATE:0:300}"
@@ -56,7 +57,7 @@ else
 fi
 
 # 3) 申请上传 URL -> {upload_url, verify_url}
-UP=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+UP=$(curl -s -X POST -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
   -d "{\"asset_name\":\"$ZIP\",\"overwrite\":true,\"size\":$SIZE}" \
   "$API/$REPO/-/releases/$RELEASE_ID/asset-upload-url")
 UPLOAD_URL=$(echo "$UP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('upload_url',''))" 2>/dev/null || echo "")
