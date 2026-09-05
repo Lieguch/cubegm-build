@@ -284,8 +284,12 @@ if [ "$(id -u)" = "0" ]; then
     LOG_DIR=$(dirname "$LOG" 2>/dev/null)
     [ -n "$LOG_DIR" ] && chown -R "$BUILDER_UID:$BUILDER_UID" "$LOG_DIR" 2>/dev/null || true
     echo "  [ct-ng] 降权到 uid=$BUILDER_UID 运行 ct-ng build（crosstool-NG 拒绝 root）"
+  # setpriv 不会自动改 HOME；ct-ng 期望 $HOME/src（即 /home/builder/src），
+  # 不然会 'WARN Directory /root/src does not exist' → 'Build failed in step (top-level)'。
+  # 同时显式 export HOME/USER/LOGNAME，并 cd 到工作目录再跑 ct-ng。
   setpriv --reuid="$BUILDER_UID" --regid="$BUILDER_UID" --clear-groups \
-    ./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" build CT_JOBS="$JOBS"
+    env HOME="/home/builder" USER="builder" LOGNAME="builder" \
+    bash -c "cd \"$PWD\" && ./crosstool-NG/ct-ng CT_LIB_DIR=\"$CTNG_DIR\" build CT_JOBS=\"$JOBS\""
 else
   ./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" build CT_JOBS="$JOBS"
 fi
