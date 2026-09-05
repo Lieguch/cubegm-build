@@ -52,29 +52,55 @@ zip -qr "/tmp/$ZIP" cubegm
 SIZE=$(stat -c%s "/tmp/$ZIP")
 echo "packed -> /tmp/$ZIP ($SIZE bytes)"
 
-# 2) 创建或复用 Release (tag)
-# CNB API 要求 Accept: application/json, 否则返回 406 导致 json.load 失败
-RELEASE_ID=$(curl -s -H "Authorization: Bearer ***" -H "Accept: application/json" "$API/$REPO/-/releases/latest" \
-  | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('id',''))" 2>/dev/null || echo "")
-if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "None" ]; then
-  echo "release already exists id=$RELEASE_ID"
-else
-  CREATE=$(curl -s -X POST -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
-    -d "{\"tag_name\":\"$TAG\",\"name\":\"CubeGM payload $TAG\",\"body\":\"v7.4e RetroArch audio rewrite build\",\"draft\":false,\"prerelease\":false,\"target_commitish\":\"${CNB_DEFAULT_BRANCH:-main}\"}" \
-    "$API/$REPO/-/releases")
-  echo "create resp: ${CREATE:0:300}"
-  RELEASE_ID=$(echo "$CREATE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
-  if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "None" ]; then
-    echo "ERROR: release create failed: ${CREATE:0:500}"
+# 2) 按 tag 查找/创建 Release
+# 关键修复 (cnb-ccn-1k1oa5h61): 之前查 /releases/latest 取 ID, 但若没标 latest
+# 该 endpoint 返回空对象, 走 create 分支, 而 tag 已存在时 CNB 返回
+# errcode:5 "Resource not found" (非 409) → id 解析为空 → exit 1
+# 正确做法: 先 GET /releases/tags/{tag} 复用; 404 才 create。
+# CNB API 要求 Accept: application/json, 否则返回 406。
+TAG_LOOKUP=$(curl -s -w "\nHTTP_CODE=%{http_code}" -H "Authorization: Bearer ***" -H "Accept: application/json" \
+  "$API/$REPO/-/releases/tags/$TAG")
+TAG_HTTP=$(echo "$TAG_LOOKUP" | tail -1 | sed 's/HTTP_CODE=//')
+TAG_BODY=$(echo "$TAG_LOOKUP" | sed '$d')
+if [ "$TAG_HTTP" = "200" ]; then
+  RELEASE_ID=$(echo "$TAG_BODY" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+  if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "None" ]; then
+    echo "release already exists (tag=$TAG) id=$RELEASE_ID"
+  else
+    echo "ERROR: /releases/tags/$TAG returned 200 but no id: ${TAG_BODY:0:300}"
     exit 1
   fi
-  echo "release created id=$RELEASE_ID"
+else
+  # 404 = tag 不存在, 创建新的
+  CREATE_HTTP=$(curl -s -o /tmp/cnb_create_resp -w "%{http_code}" -X POST \
+    -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
+    -d "{\"tag_name\":\"$TAG\",\"name\":\"CubeGM payload $TAG\",\"body\":\"v7.4e RetroArch audio rewrite build\",\"draft\":false,\"prerelease\":false,\"target_commitish\":\"${CNB_DEFAULT_BRANCH:-main}\"}" \
+    "$API/$REPO/-/releases")
+  CREATE=$(cat /tmp/cnb_create_resp)
+  echo "create HTTP=$CREATE_HTTP resp: ${CREATE:0:300}"
+  if [ "$CREATE_HTTP" != "200" ] && [ "$CREATE_HTTP" != "201" ]; then
+    echo "ERROR: release create HTTP $CREATE_HTTP: ${CREATE:0:500}"
+    exit 1
+  fi
+  RELEASE_ID=$(echo "$CREATE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+  if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "None" ]; then
+    echo "ERROR: release create resp missing id: ${CREATE:0:500}"
+    exit 1
+  fi
+  echo "release created (tag=$TAG) id=$RELEASE_ID"
 fi
 
 # 3) 申请上传 URL -> {upload_url, verify_url}
-UP=$(curl -s -X POST -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
+UP_HTTP=$(curl -s -o /tmp/cnb_up_resp -w "%{http_code}" -X POST \
+  -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/json" \
   -d "{\"asset_name\":\"$ZIP\",\"overwrite\":true,\"size\":$SIZE}" \
   "$API/$REPO/-/releases/$RELEASE_ID/asset-upload-url")
+UP=$(cat /tmp/cnb_up_resp)
+echo "asset-upload-url HTTP=$UP_HTTP resp: ${UP:0:300}"
+if [ "$UP_HTTP" != "200" ]; then
+  echo "ERROR: asset-upload-url HTTP $UP_HTTP: ${UP:0:500}"
+  exit 1
+fi
 UPLOAD_URL=$(echo "$UP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('upload_url',''))" 2>/dev/null || echo "")
 VERIFY_URL=$(echo "$UP" | python3 -c "import sys,json;print(json.load(sys.stdin).get('verify_url',''))" 2>/dev/null || echo "")
 if [ -z "$UPLOAD_URL" ] || [ -z "$VERIFY_URL" ]; then
@@ -84,15 +110,27 @@ fi
 
 # 4) PUT 上传
 echo "PUT -> ${UPLOAD_URL:0:80}..."
-curl -sS -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/octet-stream" \
-  --data-binary "@/tmp/$ZIP" "$UPLOAD_URL" | head -c 200
-echo
+PUT_HTTP=$(curl -sS -X PUT -o /tmp/cnb_put_resp -w "%{http_code}" \
+  -H "Authorization: Bearer ***" -H "Content-Type: application/octet-stream" \
+  --data-binary "@/tmp/$ZIP" "$UPLOAD_URL")
+PUT_BODY=$(cat /tmp/cnb_put_resp)
+echo "PUT HTTP=$PUT_HTTP body: ${PUT_BODY:0:200}"
+if [ "$PUT_HTTP" != "200" ]; then
+  echo "ERROR: PUT HTTP $PUT_HTTP: ${PUT_BODY:0:500}"
+  exit 1
+fi
 echo "PUT done ($SIZE bytes)"
 
-# 5) confirm (必须带 Content-Type: application/json)
-curl -sS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{}' \
-  "$VERIFY_URL" | head -c 200
-echo
+# 5) confirm (必须带 Content-Type: application/vnd.cnb.api+json, 否则 406)
+CONFIRM_HTTP=$(curl -sS -o /tmp/cnb_confirm_resp -w "%{http_code}" -X POST \
+  -H "Authorization: Bearer ***" -H "Accept: application/json" -H "Content-Type: application/vnd.cnb.api+json" -d '{}' \
+  "$VERIFY_URL")
+CONFIRM_BODY=$(cat /tmp/cnb_confirm_resp)
+echo "confirm HTTP=$CONFIRM_HTTP body: ${CONFIRM_BODY:0:200}"
+if [ "$CONFIRM_HTTP" != "200" ]; then
+  echo "ERROR: confirm HTTP $CONFIRM_HTTP: ${CONFIRM_BODY:0:500}"
+  exit 1
+fi
 echo "confirm done"
 
 echo "=============================================================="
