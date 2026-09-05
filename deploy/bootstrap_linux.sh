@@ -147,6 +147,7 @@ if command -v apt-get >/dev/null 2>&1; then
             pkg-config autoconf automake libtool libtool-bin \
             gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip python3-dev \
             help2man zip unzip file libdrm-dev libasound2-dev \
+            libncurses-dev libncursesw5-dev gettext \
             || log "WARN: apt-get install failed -- continuing with preinstalled tools"
         sudo touch /tmp/.cubegm_apt_done
         log "STAGE 0: apt deps installed."

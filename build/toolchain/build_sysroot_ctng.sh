@@ -36,6 +36,16 @@ exec > >(tee -a "$LOG") 2>&1
 echo "[ct-ng] logging to $LOG"
 echo "[ct-ng] PREFIX=$PREFIX  CTNG_VER=$CTNG_VER  JOBS=$JOBS  host=$(uname -a)"
 
+echo "== 0) 构建机 ncurses 预检（ct-ng 自身 configure 是硬依赖，缺了会 'curses library not found'）=="
+if ! { [ -e /usr/include/ncurses.h ] || [ -e /usr/include/ncursesw/curses.h ] || [ -e /usr/include/curses.h ]; } \
+   && ! { command -v pkg-config >/dev/null 2>&1 && pkg-config --exists ncursesw; }; then
+  echo "  [FATAL] 检测不到 ncurses 开发库。crosstool-NG configure 需要它构建 menuconfig。"
+  echo "         请先安装：  apt-get install -y --no-install-recommends libncurses-dev libncursesw5-dev"
+  echo "         或 ref: deploy/bootstrap_linux.sh STAGE 0 apt 依赖清单。"
+  exit 1
+fi
+echo "  ncurses 头文件 OK"
+
 echo "== 1) 获取 crosstool-NG $CTNG_VER =="
 if [ ! -d crosstool-NG ]; then
   git clone https://github.com/crosstool-ng/crosstool-NG.git
