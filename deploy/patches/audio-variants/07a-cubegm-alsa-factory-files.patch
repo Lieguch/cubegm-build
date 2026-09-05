@@ -1,9 +1,9 @@
 diff --git a/audio/drivers/cubegm_alsa.c b/audio/drivers/cubegm_alsa.c
 new file mode 100644
-index 0000000..ac257e6
+index 0000000..dc05336
 --- /dev/null
 +++ b/audio/drivers/cubegm_alsa.c
-@@ -0,0 +1,385 @@
+@@ -0,0 +1,388 @@
 +/* ============================================================================
 + *  RetroArch - ALSA audio driver (C: factory driver.so architecture)
 + *  CubeGM v7.4 (2026-09-04) — full reimplementation aligned to RK3036
@@ -184,7 +184,9 @@ index 0000000..ac257e6
 +   }
 +
 +   /* factory at 0x5b84 / 0x5bc4: get refined buffer/period sizes. */
-+   snd_pcm_hw_params_get_buffer_size(params, &alsa->stream_info.buffer_size);
++   snd_pcm_uframes_t buf_frames = 0;
++   snd_pcm_hw_params_get_buffer_size(params, &buf_frames);
++   alsa->stream_info.buffer_size = (size_t)buf_frames;
 +   snd_pcm_hw_params_get_period_size(params,
 +         &alsa->stream_info.period_frames, NULL);
 +   alsa->stream_info.period_size =
@@ -362,7 +364,8 @@ index 0000000..ac257e6
 +   (void)len;
 +   if (!alsa)
 +      return 0;
-+   snd_pcm_sframes_t delay = snd_pcm_delay(alsa->pcm);
++   snd_pcm_sframes_t delay = 0;
++   snd_pcm_delay(alsa->pcm, &delay);
 +   return delay > 0 ? (size_t)delay * 1000 / alsa->stream_info.rate : 0;
 +}
 +
@@ -391,10 +394,10 @@ index 0000000..ac257e6
 +};
 diff --git a/audio/drivers/cubegm_alsathread.c b/audio/drivers/cubegm_alsathread.c
 new file mode 100644
-index 0000000..806d8af
+index 0000000..2e86535
 --- /dev/null
 +++ b/audio/drivers/cubegm_alsathread.c
-@@ -0,0 +1,363 @@
+@@ -0,0 +1,365 @@
 +/* ============================================================================
 + *  RetroArch - ALSA "alsathread" audio driver (C+D: factory pthread path)
 + *  CubeGM v7.4 (2026-09-04) — full reimplementation aligned to RK3036
@@ -508,7 +511,9 @@ index 0000000..806d8af
 +                  &period_size, 0)) < 0) goto fail;
 +
 +   if ((err = snd_pcm_hw_params(alsa->pcm, params)) < 0) goto fail;
-+   snd_pcm_hw_params_get_buffer_size(params, &alsa->stream_info.buffer_size);
++   snd_pcm_uframes_t buf_frames = 0;
++   snd_pcm_hw_params_get_buffer_size(params, &buf_frames);
++   alsa->stream_info.buffer_size = (size_t)buf_frames;
 +   snd_pcm_hw_params_get_period_size(params,
 +         &alsa->stream_info.period_frames, NULL);
 +   alsa->stream_info.period_size =
