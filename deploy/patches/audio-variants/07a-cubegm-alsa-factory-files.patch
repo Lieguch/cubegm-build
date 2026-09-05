@@ -375,7 +375,7 @@ index 0000000..dc05336
 +   /* factory: BLOCKING throughout.  No nonblock path. */
 +}
 +
-+audio_driver_t audio_alsa = {
++audio_driver_t audio_cubegm_alsa = {
 +   alsa_factory_init,
 +   alsa_factory_write,
 +   alsa_factory_stop,
@@ -747,7 +747,7 @@ index 0000000..2e86535
 +   (void)data; (void)state;
 +}
 +
-+audio_driver_t audio_alsathread = {
++audio_driver_t audio_cubegm_alsathread = {
 +   alsathread_factory_init,
 +   alsathread_factory_write,
 +   alsathread_factory_stop,

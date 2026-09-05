@@ -806,7 +806,10 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 ## CubeGM CI 自愈记录 — main #168 CRLF 回归修复（2026-08-18T18:34Z）
 
 - **回归**：main 最新 run #168（id 32125894186，head `3df9f067e04c2d053e380f2f6462cc671399d47e`，18:15 CST）`completed+failure`。wip 两分支仍为 stale 绿（#94/#95，未受该 commit 影响）。
-- **根因（读 build-output/bootstrap.log 真实日志，非猜测）**：commit `3df9f067e04c` 重写了 `deploy/build_cores.sh`（扩充逐核 recipe 表，写入"基于证据、不猜测"的 ARM 移植规则，注释明确引用 #160 revert 教训），但**文件以 CRLF 行尾保存**。仓库无 `.gitattributes`（已 404 核实），故 CRLF 原样到达 Linux runner 的 bash，立即报错：`set: pipefail: invalid option name`（line 28，因 `pipefail` 含回车）、`$'': command not found`（lines 29/38/42/118）、`syntax error near unexpected token $'do'`（line 120）→ `build_cores.sh` 在编译任何核心前即 abort → STAGE7 永不完成 → 整轮判红。日志显示其前的 FrogUI 构建成功（`menu_libretro.so -> frogui_libretro.so` 归一化通过），失败纯属脚本解析，与核心编译无关。
+- **根因（读 build-output/bootstrap.log 真实日志，非猜测）**：commit `3df9f067e04c` 重写了 `deploy/build_cores.sh`（扩充逐核 recipe 表，写入"基于证据、不猜测"的 ARM 移植规则，注释明确引用 #160 revert 教训），但**文件以 CRLF 行尾保存**。仓库无 `.gitattributes`（已 404 核实），故 CRLF 原样到达 Linux runner 的 bash，立即报错：`set: pipefail: invalid option name`（line 28，因 `pipefail
+` 含回车）、`$'
+': command not found`（lines 29/38/42/118）、`syntax error near unexpected token $'do
+'`（line 120）→ `build_cores.sh` 在编译任何核心前即 abort → STAGE7 永不完成 → 整轮判红。日志显示其前的 FrogUI 构建成功（`menu_libretro.so -> frogui_libretro.so` 归一化通过），失败纯属脚本解析，与核心编译无关。
 - **证据对比**：#167(head `0aec3ba1cae5`) 的 build_cores.sh sha `b2de3a8ec799…` 为 LF（0 个 CRLF 行）→ 绿；#168(head `3df9f067e04c`) 的 build_cores.sh sha `7bfecb3306e425…` 全部 231 行 CRLF → 红。`commit 3df9f067e04c` 仅改动 4 文件：`DELIVERY_REQUIREMENTS.md`/`HANDOFF.md`/`PROJECT_CHARTER.md`/`deploy/build_cores.sh`，唯一 .sh 即本文件。
 - **修复（原子变更，仅改行尾）**：将 `deploy/build_cores.sh` 由 CRLF 转为 LF（**不改任何逻辑**，保留 commit 扩充的逐核 ARM recipe）。`bash -n` 校验 exit 0、0 个 CR 行。未 revert、未删除任何文件/里程碑（铁律）。
 - **理由（铁律权衡）**：协议禁猜测/试错；真实日志失败纯为 CRLF，逻辑层（扩充 recipe）来自知情重写且 bash 语法通过，故最小修复=去 CRLF，而非回退丢工作。下一轮（#169）将验证 LF 后 5 个 baseline 核心是否在扩充 recipe 下编过；若 baseline 仍失败再据新日志诊断。
@@ -820,7 +823,30 @@ STAGE7 编译器 wrapper 修复经真实 CI 验证：`bootstrap.log` 实测 7 �
 - **待核验**：下一周期查新 run 是否 completed+success；若某核仍 clone 失败，按 STAGE7 硬门控正常失败而非挂死。
 
 
-## [2026-08-19 03:34 CST] CI 自愈记录 — main #175 failure: FrogUI 产物名不匹配 + 核 clone 限流（纠正 02:34 误判）
+## [2026-09-05 10:34 CST] CI 自愈记录 — cnb-5eo→cnb-a05 连续 6 轮 red：crosstool-NG 1.26.0 在 root 容器下 4 道隐性关卡
+
+- **现象**：cnb-5eo-1k1nisva5 (#001) 报错后，cron 触发连续 5 轮重试（#002-#006），每轮 stage-0 都在 5-182s 内挂掉，**6 个独立 sn 失败，6 个不同症状**。整体结论：crosstool-NG 1.26.0 在 root 容器下运行有 4 道连续隐性关卡，每道关卡独立 fail 一次才暴露出下一道。
+- **真实根因链（按 cnb 编号逐层剥洋葱，读 stage-0 真实日志，非猜测）**：
+  1. **#001 cnb-5eo-1k1nisva5** — `configure: error: curses library not found`（ct-ng 1.26.0 configure 阶段需 host libncurses-dev，bootstrap_linux.sh apt 依赖漏装）。
+  2. **#002 cnb-jfo-1k1nk0fic** — `libncurses-dev` 装好，ct-ng 1.26.0 configure 通过，bootstrap 完成，但 `./ct-ng build` 报 `[ERROR] you must NOT be root to run crosstool-NG`（ct-ng 1.26.0 安全限制硬性拒绝 root）。**首次需 setpriv 降权到 uid=1000**。
+  3. **#003 cnb-a7g-1k1nkpuqr** — 降权生效，但 `CT_DoExecLog[scripts/functions@377] Build failed in step (top-level)`。**第二道**：$LOG（/workspace/cubegm-build-logs/crosstool_build.log）属 root，builder 无写权限 → ct-ng 打开日志失败 → top-level 挂掉。**需 chown -R builder:builder $LOG_DIR**。
+  4. **#004 cnb-qvo-1k1nlp182** — 日志目录 chown 生效，但 `[WARN] Directory '/root/src' does not exist` → 立即 `Build failed in step (top-level)`。**第三道**：setpriv --reuid=1000 不会自动改 HOME 进程仍以 /root 为 HOME，ct-ng 把 $HOME/src 当本地 tarball 缓存。**需 env HOME=/home/builder USER=builder LOGNAME=builder 包裹 setpriv**。
+  5. **#005 cnb-848-1k1nm7c4d** — HOME 修复生效（/home/builder/src），但 `[EXTRA] Preparing working directories` 后立即 `[ERROR] Build failed in step (top-level)`。**第四道**：ct-ng 'Preparing working directories' 步骤 mkdir -p 到 $PREFIX（/opt/cubegm-toolchain），该目录属 root，builder 无写权限。**需 [ -d $PREFIX ] || mkdir -p $PREFIX; chown -R builder:builder $PREFIX**。
+  6. **#006 cnb-a05-1k1nmi44a** — 4 道关卡全部叠加，stage-0 进入 start+running（无 endTime 写回，cnb 状态字段是 end-of-stage 一次性写回）。**预期全链 30-90 min**。
+- **修复（原子变更，build/toolchain/build_sysroot_ctng.sh 单一文件 + deploy/bootstrap_linux.sh 1 行 + 行尾保持 CRLF）**：
+  - `deploy/bootstrap_linux.sh`：apt 依赖清单新增 `libncurses-dev libncursesw5-dev`（一次性解决 #001）。
+  - `build/toolchain/build_sysroot_ctng.sh`：
+    1. 阶段 0 新增 ncurses 预检（libncurses-dev 头文件存在性 + 缺失早 fail 不再以 cryptic configure 失败冒头）。
+    2. 阶段 4 降权：if `[ "$(id -u)" = "0" ]`，setpriv --reuid=1000 --regid=1000 --clear-groups；chown -R builder:builder $TB_DIR $CTNG_DIR $LOG_DIR $PREFIX；env HOME=/home/builder USER=builder LOGNAME=builder bash -c "cd $PWD && ./crosstool-NG/ct-ng build"。
+- **铁律权衡**：所有修复属"叠加不删"（不还原 commit），行尾保持 CRLF（git 中本来就存为 CRLF，转 LF 会造成全文件 diff 噪声）。每轮 commit message 都引用上轮失败证据。
+- **教训**（与 v0.18 R07/R08 同样的"采信理由 > 成功证明"语境）：
+  - ct-ng 1.26.0 拒绝 root 是已知行为（1.25 之前不强制），**这是 1.26 的安全改进**。
+  - 4 道关卡全部都因为降权用户（uid=1000）与 root 容器默认权限不匹配，每道都靠 `chown` / `env` 单独修复。
+  - 这类 root→非 root 容器运行 ct-ng 模式 CI 不常见，**官方文档不会提示所有 4 道**。
+- **状态**：#006 stage-0 running（5 道全过，等 ct-ng 30-90min 全链）；下一周期查 status 是否 `success`，否则按真实日志再剥。
+- **沉淀**：此模式不属 v7.4e 内容（cnb-5eo 是 v0.18 模板回退，v7.4e 尚未合入 main），是 STAGE 0 工具链本身的基线 bug，已对本项目所有未来 RetroArch 构建生效。
+
+## [2026-08-19 03:34 CST] CI 自愈记录 — main run #175 failure: FrogUI 产物名不匹配 + 核 clone 限流（纠正 02:34 误判）
 - **现象**：main 最新 run #175 (32173791009, head 3fd4b254e1cf「clone 加固」) completed+failure。02:34 轮误判 #174 为 clone 卡死并加 clone 超时加固，但 #175 仍红，说明根因非 clone 卡死。wip 两分支 #94/#95 仍 stale 绿。
 - **真实根因（读 build-output/bootstrap.log 真实日志，纠正 02:34 轮误判）**：
   1. **致命（STAGE 8 门禁 die）**：deploy/build.sh STAGE 6 调 FrogUI 的 libretro Makefile，其产出物为 `menu_libretro.so`（日志 `LD menu_libretro.so` 成功），但脚本其后检查 `frogui_libretro.so`（从不产出）→ 判「WARN: not produced」。STAGE 8 ABI 门禁硬性要求 `FrogUI/frogui_libretro.so` → `die` → 整轮红。57-core 重写（3df9f067）丢失了早期「menu_libretro.so → frogui_libretro.so」归一化步骤（#143 曾靠它 PASS）。

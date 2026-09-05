@@ -5,35 +5,34 @@
 #    apt deps -> crosstool glibc-2.29 sysroot -> SDL/libpng/alsa
 #    -> clone RetroArch 282a12d + 8 个 audio-variant patch (01..07c)
 #    -> build + ABI gate -> stage deploy/cubegm/ 设备烧录包
-#  报告输出：stage 3 cat BUILD_REPORT.txt（Agent 自动诊断）。
+#  报告输出：stage 2 cat BUILD_REPORT.txt（Agent 自动诊断）。
+#  产物交付：stage 3 publish_payload.sh 打包 -> 发布 CNB Release
+#            (stable download URL，见脚本末尾 DOWNLOAD URL)。
+#  构建逻辑封装在 deploy/cnb_bootstrap.sh（避免 YAML 内嵌复杂脚本）。
+#  注意：timeout 默认单位是 ms（毫秒），必须带单位 s/m/h。
 # =====================================================================
-main:
-  push:
+# 事件说明:
+#   - main.push: 推送到 main 自动全量构建 (生产环境)
+#   - $.api_trigger: Agent StartBuild API 显式触发全量构建 (监控/重跑)
+#   - $.web_trigger_dev: 仓库页点「云原生开发」按钮 -> 启动云端开发机
+#     (全工具链环境, 不跑构建, 用户点这个按钮进 vscode/WebIDE)
+# =====================================================================
+$:
+  api_trigger:
     - runner:
         cpus: 8
       docker:
         image: ubuntu:22.04
         volumes:
           - /root/.cache:copy-on-write
+          - /opt/cubegm-toolchain:copy-on-write
       stages:
-        - name: "1/4 apt + bootstrap full build"
-          timeout: 21600
+        - name: "build: full bootstrap"
+          timeout: 6h
           script: |
-            set -e
-            export DEBIAN_FRONTEND=noninteractive
-            # ensure sudo exists inside container
-            apt-get update -qq
-            apt-get install -y -qq --no-install-recommends sudo >/dev/null 2>&1 || true
-            which sudo || apt-get install -y --no-install-recommends sudo
-            # defend CRLF (files authored on Windows)
-            cd deploy
-            sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
-            sed -i 's/\r$//' ../build/toolchain/build_sysroot_ctng.sh ../build/toolchain/verify_target_abi.sh
-            chmod +x bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
-            chmod +x ../build/toolchain/*.sh
-            PREFIX=/opt/cubegm-toolchain ./bootstrap_linux.sh
-        - name: "2/4 build report"
-          timeout: 300
+            bash deploy/cnb_bootstrap.sh
+        - name: "report: BUILD_REPORT.txt"
+          timeout: 5m
           script: |
             if [ -f deploy/BUILD_REPORT.txt ]; then
               echo "=========== BUILD_REPORT.txt ==========="
@@ -44,3 +43,51 @@ main:
             echo "=========== device payload ==========="
             du -sh deploy/cubegm 2>/dev/null || echo "no payload dir"
             ls -la deploy/cubegm 2>/dev/null | head -20
+        - name: "publish: payload -> CNB Release"
+          timeout: 10m
+          script: |
+            bash deploy/publish_payload.sh
+  web_trigger_dev:
+    - runner:
+        cpus: 8
+      services:
+        - vscode
+      docker:
+        image: ubuntu:22.04
+        volumes:
+          - /opt/cubegm-toolchain:copy-on-write
+      stages:
+        - name: "setup dev env"
+          timeout: 10m
+          script: |
+            bash deploy/cnb_bootstrap.sh --dev
+main:
+  push:
+    - runner:
+        cpus: 8
+      docker:
+        image: ubuntu:22.04
+        volumes:
+          - /root/.cache:copy-on-write
+          - /opt/cubegm-toolchain:copy-on-write
+      stages:
+        - name: "build: full bootstrap"
+          timeout: 6h
+          script: |
+            bash deploy/cnb_bootstrap.sh
+        - name: "report: BUILD_REPORT.txt"
+          timeout: 5m
+          script: |
+            if [ -f deploy/BUILD_REPORT.txt ]; then
+              echo "=========== BUILD_REPORT.txt ==========="
+              cat deploy/BUILD_REPORT.txt
+            else
+              echo "NO BUILD_REPORT.txt (build failed before report)"
+            fi
+            echo "=========== device payload ==========="
+            du -sh deploy/cubegm 2>/dev/null || echo "no payload dir"
+            ls -la deploy/cubegm 2>/dev/null | head -20
+        - name: "publish: payload -> CNB Release"
+          timeout: 10m
+          script: |
+            bash deploy/publish_payload.sh

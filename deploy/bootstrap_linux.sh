@@ -140,6 +140,11 @@ if command -v apt-get >/dev/null 2>&1; then
             log "WARN: apt-get update attempt $i failed -- retrying in $((i*5))s"
             sleep "$((i*5))"
         done
+        # STAGE 0 apt-get install 改为 strict: 任一包失败即 die。
+        # 历史教训 (2026-09-05 run cnb-5eo-1k1nisva5): `|| log "WARN..."` 静默吞错,
+        # 结果 libncurses-dev 实际未装,STAGE 1 ct-ng configure 报 'curses library not found'
+        # 浪费 1m37s bootstrap + 1m ct-ng clone + autoreconf 后才发现根因。
+        # 牺牲 ~5s 重试时间换取"早红",远比 30s+ ct-ng clone 后再红划算。
         sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=90 install -y \
             --no-install-recommends \
             build-essential gcc g++ make git curl wget xz-utils \
@@ -147,7 +152,19 @@ if command -v apt-get >/dev/null 2>&1; then
             pkg-config autoconf automake libtool libtool-bin \
             gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip python3-dev \
             help2man zip unzip file libdrm-dev libasound2-dev \
-            || log "WARN: apt-get install failed -- continuing with preinstalled tools"
+            libncurses-dev libncursesw5-dev gettext \
+            || die "STAGE 0: apt-get install failed -- 上面有具体哪个包拉取/解压失败,修镜像或重试"
+        # 二次校验:ct-ng configure 用 AX_WITH_CURSES,需要 pkg-config 找得到 ncurses。
+        # cnb_bootstrap 已装过一次,这里再装是幂等的(无新下载),但若上游静默 install
+        # 异常(无 .pc 文件等),这条能在 STAGE 1 之前拦截。
+        if ! pkg-config --exists ncurses 2>/dev/null; then
+            log "WARN: pkg-config 仍找不到 ncurses.pc -- 尝试重装 libncurses-dev"
+            sudo apt-get install -y --reinstall libncurses-dev libncursesw5-dev \
+                || die "STAGE 0: 重装 libncurses-dev 后 pkg-config 仍失败 -- 镜像异常,需排查"
+            pkg-config --exists ncurses 2>/dev/null \
+                || die "STAGE 0: 致命 -- libncurses-dev 装上了但 pkg-config 仍找不到 ncurses.pc"
+        fi
+        log "STAGE 0: ncurses OK ($(pkg-config --modversion ncurses) at $(pkg-config --variable=pcfiledir ncurses)/ncurses.pc)"
         sudo touch /tmp/.cubegm_apt_done
         log "STAGE 0: apt deps installed."
     fi
