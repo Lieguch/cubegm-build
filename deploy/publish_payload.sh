@@ -21,11 +21,29 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # 变成 "lieguch/lieguch/CubeGM_RetroArch" -> 404 Resource not found (stage-2 fail)。
 # 用 bash 取最后一段做兜底, 保证最终 REPO 形如 "<org>/<repo>" 且只含一个 "/"。
 # 优先级: $REPO 显式 > CNB_REPO_SLUG > CNB_GROUP_SLUG/CNB_REPO_PATH basename > 硬编码
-_slug_full="${CNB_REPO_SLUG:-}"
-_slug_short="${CNB_REPO_PATH:-${CNB_REPO_SLUG:-CubeGM_RetroArch}}"
-_repo_short="$(basename "$_slug_short")"
-_org="${CNB_GROUP_SLUG:-lieguch}"
-REPO="${REPO:-${_slug_full:-${_org}/${_repo_short}}}"
+# 关键修复 (cnb-ccn-1k1oa5h61, 2026-09-05 stage-2): 之前的 fallback
+# ${_slug_full:-${_org}/${_repo_short}} 在 push 事件下, $_slug_full 被
+# CNB 注入为不完整字符串 (或 _org 被异常注入为 lieguch/lieguch),
+# 导致 REPO 最终变成 "lieguch/lieguch/CubeGM_RetroArch" (三段).
+# CNB API 对该 URL 既查不到 release -> create 又返 errcode:5
+# "Resource not found". 最简稳妥解法: REPO 只信任显式注入或写死
+# "lieguch/CubeGM_RetroArch", 不再做 basename 拼接. 同时打印
+# 实际 $REPO 让 stage-2 日志一眼可定位路径是否正确.
+REPO="${REPO:-${CNB_REPO_SLUG:-lieguch/CubeGM_RetroArch}}"
+# 容错: 如果上游注入的 REPO 含多个 "/" (CI 偶发, 历史上出现过
+# lieguch/lieguch/CubeGM_RetroArch 三段), 取前两段后再次校验:
+#   - 第二段为 'lieguch' (重复 org) -> 直接重置为硬编码
+#   - 第二段是 repo 名字 (CubeGM_RetroArch) -> 用硬编码强制覆盖
+# 这样无论 CI env 怎么注入, REPO 始终是 "lieguch/CubeGM_RetroArch".
+_slashes=$(echo "$REPO" | tr -cd '/' | wc -c)
+if [ "$_slashes" -ne 1 ]; then
+  echo "WARN: REPO path malformed ('$REPO', slashes=$_slashes), reset to lieguch/CubeGM_RetroArch"
+  REPO="lieguch/CubeGM_RetroArch"
+elif [ "$REPO" != "lieguch/CubeGM_RetroArch" ]; then
+  # 单段但不是预期 repo (如 CNB 注入 CNB_REPO_SLUG=lieguch 时): 也强制覆盖
+  echo "WARN: REPO '$REPO' != expected lieguch/CubeGM_RetroArch, reset"
+  REPO="lieguch/CubeGM_RetroArch"
+fi
 # 关键修复 (cnb-o0g-1k1ofrm1p 2026-09-05 stage-2): CI 自动注入的 $CNB_TOKEN 是 task 范围,
 # 仅有 build 读写权限, 对 POST /-/releases 返回 401 "user is not logged in" (errcode:16),
 # 即使 GET /releases 列表能成功. 之前 4 次 fallback 用 ${CNB_TOKEN:-...} 因 CNB_TOKEN 在 CI
