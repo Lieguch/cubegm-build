@@ -278,9 +278,12 @@ if [ "$(id -u)" = "0" ]; then
     useradd -u "$BUILDER_UID" -m -s /bin/bash builder 2>/dev/null || true
   fi
   # ct-ng build 会写入 $TB_DIR / $CTNG_DIR / 当前目录下的 arm-linux-gnueabihf/，
-  # 降权用户必须有写权限。
-  chown -R "$BUILDER_UID:$BUILDER_UID" "$TB_DIR" "$CTNG_DIR" . 2>/dev/null || true
-  echo "  [ct-ng] 降权到 uid=$BUILDER_UID 运行 ct-ng build（crosstool-NG 拒绝 root）"
+    # 以及日志文件（由外层 bootstrap 传入的 $LOG 指定，通常在 /workspace/cubegm-build-logs/），
+    # 降权用户必须对这些路径都有写权限。
+    chown -R "$BUILDER_UID:$BUILDER_UID" "$TB_DIR" "$CTNG_DIR" . 2>/dev/null || true
+    LOG_DIR=$(dirname "$LOG" 2>/dev/null)
+    [ -n "$LOG_DIR" ] && chown -R "$BUILDER_UID:$BUILDER_UID" "$LOG_DIR" 2>/dev/null || true
+    echo "  [ct-ng] 降权到 uid=$BUILDER_UID 运行 ct-ng build（crosstool-NG 拒绝 root）"
   setpriv --reuid="$BUILDER_UID" --regid="$BUILDER_UID" --clear-groups \
     ./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" build CT_JOBS="$JOBS"
 else
