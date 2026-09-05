@@ -7,6 +7,7 @@
 #    -> build + ABI gate -> stage deploy/cubegm/ 设备烧录包
 #  报告输出：stage 2 cat BUILD_REPORT.txt（Agent 自动诊断）。
 #  构建逻辑封装在 deploy/cnb_bootstrap.sh（避免 YAML 内嵌复杂脚本）。
+#  注意：timeout 默认单位是 ms（毫秒），必须带单位 s/m/h。
 # =====================================================================
 $:
   api_trigger:
@@ -17,12 +18,12 @@ $:
         volumes:
           - /root/.cache:copy-on-write
       stages:
-        - name: "1/4 apt mirror + bootstrap full build"
-          timeout: 21600
+        - name: "build: full bootstrap"
+          timeout: 6h
           script: |
             bash deploy/cnb_bootstrap.sh
-        - name: "2/4 build report"
-          timeout: 300
+        - name: "report: BUILD_REPORT.txt"
+          timeout: 5m
           script: |
             if [ -f deploy/BUILD_REPORT.txt ]; then
               echo "=========== BUILD_REPORT.txt ==========="
@@ -42,12 +43,12 @@ main:
         volumes:
           - /root/.cache:copy-on-write
       stages:
-        - name: "1/4 apt mirror + bootstrap full build"
-          timeout: 21600
+        - name: "build: full bootstrap"
+          timeout: 6h
           script: |
             bash deploy/cnb_bootstrap.sh
-        - name: "2/4 build report"
-          timeout: 300
+        - name: "report: BUILD_REPORT.txt"
+          timeout: 5m
           script: |
             if [ -f deploy/BUILD_REPORT.txt ]; then
               echo "=========== BUILD_REPORT.txt ==========="
