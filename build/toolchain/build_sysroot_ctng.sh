@@ -266,7 +266,26 @@ done
 echo "CT_TARBALLS_DIR=\"$TB_DIR\"" >> .config
 
 echo "== 4) 构建（耗时较长，可喝杯茶）=="
-./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" build CT_JOBS="$JOBS"
+# crosstool-NG 1.26.0 拒绝 root 运行（安全限制）：'you must NOT be root to run crosstool-NG'。
+# CNB 构建容器默认 root，必须降权到非 root 用户再 build。
+if [ "$(id -u)" = "0" ]; then
+  if ! command -v setpriv >/dev/null 2>&1; then
+    echo "  [FATAL] crosstool-NG 需要非 root 运行，但 setpriv 不可用。请安装 util-linux（含 setpriv）。"
+    exit 1
+  fi
+  BUILDER_UID=1000
+  if ! id builder >/dev/null 2>&1; then
+    useradd -u "$BUILDER_UID" -m -s /bin/bash builder 2>/dev/null || true
+  fi
+  # ct-ng build 会写入 $TB_DIR / $CTNG_DIR / 当前目录下的 arm-linux-gnueabihf/，
+  # 降权用户必须有写权限。
+  chown -R "$BUILDER_UID:$BUILDER_UID" "$TB_DIR" "$CTNG_DIR" . 2>/dev/null || true
+  echo "  [ct-ng] 降权到 uid=$BUILDER_UID 运行 ct-ng build（crosstool-NG 拒绝 root）"
+  setpriv --reuid="$BUILDER_UID" --regid="$BUILDER_UID" --clear-groups \
+    ./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" build CT_JOBS="$JOBS"
+else
+  ./crosstool-NG/ct-ng CT_LIB_DIR="$CTNG_DIR" build CT_JOBS="$JOBS"
+fi
 
 echo "== 5) 产出与校验 =="
 SYSROOT="$PREFIX/arm-linux-gnueabihf/sysroot"
