@@ -43,7 +43,11 @@ for i in 1 2 3; do
   sleep "$((i*5))"
 done
 apt-get install -y -qq --no-install-recommends \
-    sudo ca-certificates git make curl wget >/dev/null 2>&1 || true
+    sudo ca-certificates git make curl wget libncurses-dev libncursesw5-dev >/dev/null 2>&1 || true
+# crosstool-NG configure 需要 curses; 纯净容器缺 libncurses-dev
+if ! apt-get install -y -qq libncurses-dev libncursesw5-dev >/dev/null 2>&1; then
+  echo "WARN: libncurses-dev install failed (crosstool configure may fail)"
+fi
 
 # ---- 1b. post-cert network check -------------------------------------------------
 echo "== network diagnostics (post-cert) =="
