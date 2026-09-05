@@ -283,6 +283,9 @@ if [ "$(id -u)" = "0" ]; then
     chown -R "$BUILDER_UID:$BUILDER_UID" "$TB_DIR" "$CTNG_DIR" . 2>/dev/null || true
     LOG_DIR=$(dirname "$LOG" 2>/dev/null)
     [ -n "$LOG_DIR" ] && chown -R "$BUILDER_UID:$BUILDER_UID" "$LOG_DIR" 2>/dev/null || true
+    # ct-ng 'Preparing working directories' 要 mkdir -p $PREFIX (/opt/cubegm-toolchain)，
+    # 之前没 chown 导致 builder 写不进，挂在 (top-level)。
+    [ -n "$PREFIX" ] && { [ -d "$PREFIX" ] || mkdir -p "$PREFIX" 2>/dev/null; chown -R "$BUILDER_UID:$BUILDER_UID" "$PREFIX" 2>/dev/null || true; }
     echo "  [ct-ng] 降权到 uid=$BUILDER_UID 运行 ct-ng build（crosstool-NG 拒绝 root）"
   # setpriv 不会自动改 HOME；ct-ng 期望 $HOME/src（即 /home/builder/src），
   # 不然会 'WARN Directory /root/src does not exist' → 'Build failed in step (top-level)'。
