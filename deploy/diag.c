@@ -767,6 +767,230 @@ out:
     if (h) { dlclose(h); }
 }
 
+/* ===========================================================================
+ * audio_acodec_probe -- S1.1 (2026-09-06)
+ * ==========================================================================
+ * PURPOSE
+ *   The acodec endpoint (hw:0,1, rk3036-voice dai-link) is the ONLY path
+ *   on this SoC that natively supports 44100 Hz (inno_rk3036.c RATES list
+ *   includes 44100; the hdmi-hifi dai-link does NOT).  Bypassing the
+ *   44100->48000 mandatory SRC in RetroArch requires using this PCM.
+ *
+ *   But 471/449 real-machine logs show
+ *     [hw:0,1] open rc=0  set_params(48k stereo) rc=0  writei rc=-5 (EIO)
+ *   which was interpreted as "no TX DMA assigned to dai-link@1".  That
+ *   guess needs EVIDENCE before we waste CI on cfg changes.
+ *
+ *   This command runs the FULL ALSA playback sequence 5 times in a row,
+ *   on hw:0,1, at the EXACT rate the S1 plan would request (44100 Hz,
+ *   S16, 2ch).  Every step's return code is logged; the verdict at the
+ *   end tells the user "S1 is feasible" or "S1 is dead, go to S3".
+ *
+ * DESIGN NOTES
+ *   - Same dlopen-of-libasound + dlsym pattern as cmd_audio_chain.  No
+ *     compile-time ALSA dep, no glibc symbols beyond libc/dl.
+ *   - 5 iterations: if it works once it should work every time; if it
+ *     fails 5/5 we are certain it is not a timing race.  Variable
+ *     state: re-acquire the pcm_params struct on each iteration, never
+ *     reuse a closed handle.
+ *   - After each successful start, the acodec VWL/FWL registers are
+ *     dumped from /dev/mem (same dump_regs helper as cmd_audio_chain),
+ *     proving that the kernel actually committed the new format.
+ *   - The 1kHz tone is the SAME int16 buffer as cmd_audio: 4800 samples
+ *     = 100 ms at 48k, 106.4 ms at 44.1k.  We write 5 periods to make
+ *     sure underrun is reported if the DMA is starving.
+ *
+ * OUTPUT
+ *   /mnt/sdcard/diag_report.txt  (line-prefixed with === audio_acodec_probe ===)
+ *   Five blocks, one per iteration, with PASS/FAIL verdict at the end.
+ * ========================================================================== */
+static void cmd_audio_acodec_probe(void) {
+    g_fault_module = 8;  /* never used by anyone else */
+    logf("\n=== audio_acodec_probe (S1.1) ===\n");
+    logf("PURPOSE: 5-iteration proof of hw:0,1 (acodec-ana) 44100 Hz playback path\n");
+    logf("  if ANY iteration passes all 7 ALSA steps, S1 (44100 direct) is feasible\n");
+    logf("  if 5/5 fail at writei/recover, S1 is dead and S3 fallback is the only path\n\n");
+
+    /* ---- /dev/mem mapping for register dump (optional, best-effort) ---- */
+    int memfd = open("/dev/mem", O_RDWR | O_SYNC);
+    volatile uint32_t *regs = NULL;
+    int can_read = 0;
+    if (memfd >= 0) {
+        regs = (volatile uint32_t *)mmap(NULL, 0xb0, PROT_READ | PROT_WRITE,
+                                          MAP_SHARED, memfd, 0x20030000);
+        if (regs != MAP_FAILED) can_read = 1;
+        else { logf("  /dev/mem mmap @0x20030000 FAILED: %s\n", strerror(errno)); regs = NULL; }
+    } else {
+        logf("  /dev/mem open FAILED: %s (register dump disabled)\n", strerror(errno));
+    }
+
+    /* ---- dlopen libasound ---- */
+    void *h = dlopen("libasound.so.2", RTLD_LAZY);
+    if (!h) { logf("  dlopen libasound.so.2 FAILED: %s\n", dlerror()); goto out; }
+    typedef int (*p_open_fn)(void **, const char *, int, int);
+    typedef int (*p_close_fn)(void *);
+    typedef int (*p_hmalloc_fn)(void **);
+    typedef int (*p_any_fn)(void *, void *);
+    typedef int (*p_setacc_fn)(void *, void *, int);
+    typedef int (*p_setfmt_fn)(void *, void *, int);
+    typedef int (*p_setch_fn)(void *, void *, unsigned);
+    typedef int (*p_setrate_fn)(void *, void *, unsigned *, int);
+    typedef int (*p_hwparams_fn)(void *, void *);
+    typedef int (*p_hwfree_fn)(void *);
+    typedef int (*p_prepare_fn)(void *);
+    typedef int (*p_start_fn)(void *);
+    typedef int (*p_drop_fn)(void *);
+    typedef int (*p_drain_fn)(void *);
+    typedef int (*p_recover_fn)(void *, int, int);
+    typedef long (*p_avail_fn)(void *);
+    typedef int  (*p_state_fn)(void *);
+    typedef long (*p_writei_fn)(void *, const void *, unsigned long);
+    p_open_fn    p_open    = (p_open_fn)    dlsym(h, "snd_pcm_open");
+    p_hmalloc_fn p_hmalloc = (p_hmalloc_fn) dlsym(h, "snd_pcm_hw_params_malloc");
+    p_any_fn     p_any     = (p_any_fn)     dlsym(h, "snd_pcm_hw_params_any");
+    p_setacc_fn  p_setacc  = (p_setacc_fn)  dlsym(h, "snd_pcm_hw_params_set_access");
+    p_setfmt_fn  p_setfmt  = (p_setfmt_fn)  dlsym(h, "snd_pcm_hw_params_set_format");
+    p_setch_fn   p_setch   = (p_setch_fn)   dlsym(h, "snd_pcm_hw_params_set_channels");
+    p_setrate_fn p_setrate = (p_setrate_fn) dlsym(h, "snd_pcm_hw_params_set_rate_near");
+    p_hwparams_fn p_hw     = (p_hwparams_fn) dlsym(h, "snd_pcm_hw_params");
+    p_hwfree_fn  p_hwfree  = (p_hwfree_fn)  dlsym(h, "snd_pcm_hw_params_free");
+    p_close_fn   p_close   = (p_close_fn)   dlsym(h, "snd_pcm_close");
+    p_prepare_fn p_prepare = (p_prepare_fn) dlsym(h, "snd_pcm_prepare");
+    p_start_fn   p_start   = (p_start_fn)   dlsym(h, "snd_pcm_start");
+    p_drop_fn    p_drop    = (p_drop_fn)    dlsym(h, "snd_pcm_drop");
+    p_drain_fn   p_drain   = (p_drain_fn)   dlsym(h, "snd_pcm_drain");
+    p_recover_fn p_recover = (p_recover_fn) dlsym(h, "snd_pcm_recover");
+    p_avail_fn   p_avail   = (p_avail_fn)   dlsym(h, "snd_pcm_avail_update");
+    p_state_fn   p_state   = (p_state_fn)   dlsym(h, "snd_pcm_state");
+    p_writei_fn  p_writei  = (p_writei_fn)  dlsym(h, "snd_pcm_writei");
+
+    int missing = 0;
+    if (!p_open)   { logf("  dlsym snd_pcm_open: MISSING\n"); missing++; }
+    if (!p_writei) { logf("  dlsym snd_pcm_writei: MISSING\n"); missing++; }
+    if (missing) { logf("  >>> FATAL: %d symbols missing\n", missing); goto out; }
+
+    /* ---- 1 kHz tone, 100 ms @ 44100 (4424 frames = 100.3 ms) ---- */
+    int16_t buf[4424];
+    for (int i = 0; i < 4424; i++) {
+        double t = (double)i / 44100.0;
+        buf[i] = (int16_t)(12000.0 * (t * 1000.0 < 0.5 ? 1.0 : -1.0));
+    }
+
+    int pass_full = 0;  /* 7-step clean PASS count */
+    int fail_break[7] = {0,0,0,0,0,0,0};  /* step index where 5/5 fails */
+    /*  step 0=open 1=hwmalloc 2=set_access 3=set_format 4=set_channels
+     *  5=set_rate_near 6=hw_params commit */
+
+    for (int it = 1; it <= 5; it++) {
+        logf("\n  --- ITERATION %d/5 (hw:0,1, 44100 Hz, S16_LE, 2ch) ---\n", it);
+        void *pcm = NULL;
+        int rc = p_open(&pcm, "hw:0,1", 0 /*PLAYBACK*/, 0 /*BLOCKING*/);
+        logf("  [it%d] snd_pcm_open(hw:0,1, PLAYBACK, 0) rc=%d pcm=%p\n", it, rc, (void*)pcm);
+        if (rc < 0 || !pcm) { fail_break[0]++; logf("  [it%d] FAIL: cannot open\n", it); continue; }
+
+        void *params = NULL;
+        rc = p_hmalloc(&params);
+        logf("  [it%d] snd_pcm_hw_params_malloc: rc=%d\n", it, rc);
+        if (rc < 0) { fail_break[1]++; p_close(pcm); continue; }
+
+        rc = p_any(pcm, params);
+        if (rc < 0) { logf("  [it%d] hw_params_any rc=%d FAIL\n", it, rc); fail_break[2]++; p_hwfree(params); p_close(pcm); continue; }
+
+        rc = p_setacc(pcm, params, 3 /*RW_INTERLEAVED*/);
+        if (rc < 0) { logf("  [it%d] set_access rc=%d FAIL\n", it, rc); fail_break[2]++; p_hwfree(params); p_close(pcm); continue; }
+
+        rc = p_setfmt(pcm, params, 2 /*S16_LE*/);
+        logf("  [it%d] set_format(S16_LE): rc=%d\n", it, rc);
+        if (rc < 0) { fail_break[3]++; p_hwfree(params); p_close(pcm); continue; }
+
+        rc = p_setch(pcm, params, 2);
+        if (rc < 0) { logf("  [it%d] set_channels(2) rc=%d FAIL\n", it, rc); fail_break[4]++; p_hwfree(params); p_close(pcm); continue; }
+
+        unsigned int rate = 44100;
+        rc = p_setrate(pcm, params, &rate, 0);
+        logf("  [it%d] set_rate_near(44100): rc=%d rate=%u\n", it, rc, rate);
+        if (rc < 0) { fail_break[5]++; p_hwfree(params); p_close(pcm); continue; }
+
+        rc = p_hw(pcm, params);
+        logf("  [it%d] hw_params commit: rc=%d\n", it, rc);
+        if (rc < 0) { fail_break[6]++; p_hwfree(params); p_close(pcm); continue; }
+        p_hwfree(params);
+
+        /* ---- up to here is the 7-step configuration; now playback ---- */
+        if (p_prepare) p_prepare(pcm);
+        if (p_start) {
+            rc = p_start(pcm);
+            logf("  [it%d] snd_pcm_start: rc=%d (rc=-32=EPIPE if DMA not yet running)\n", it, rc);
+        }
+        if (can_read) {
+            uint32_t R02 = regs[0x10/4];
+            unsigned vwl = (R02>>5)&3;
+            logf("  [it%d] ACODEC R02=0x%08x VWL=%u (%s)  R03=0x%08x FWL=%u (%s)\n",
+                 it, R02, vwl, inno_vwl_name(vwl), regs[0x14/4], regs[0x14/4]>>2&3, inno_fwl_name(regs[0x14/4]>>2&3));
+        }
+        /* write 5 periods back-to-back so an underrun surfaces immediately */
+        long w_total = 0;
+        int  w_failures = 0;
+        for (int rep = 0; rep < 5; rep++) {
+            long w = p_writei(pcm, buf, 4424);
+            if (w < 0) {
+                w_failures++;
+                logf("  [it%d] writei[%d] rc=%ld (EIO=%ld, EPIPE=%ld) -- snd_pcm_recover...\n",
+                     it, rep, w, (long)-EIO, (long)-EPIPE);
+                if (p_recover) {
+                    int rrc = p_recover(pcm, (int)w, 0 /*PRINT*/);
+                    logf("  [it%d] snd_pcm_recover rc=%d\n", it, rrc);
+                }
+            } else {
+                w_total += w;
+            }
+        }
+        logf("  [it%d] writei sum: %ld frames written, %d failures (of 5)\n",
+             it, w_total, w_failures);
+        if (p_avail) { long a = p_avail(pcm); logf("  [it%d] avail after writes: %ld\n", it, a); }
+        if (p_state) { logf("  [it%d] state code: %d (0=OPEN 1=SETUP 2=PREPARED 3=RUNNING 4=XRUN 5=DRAINING)\n",
+                            it, p_state(pcm)); }
+
+        if (p_drop) p_drop(pcm);
+        if (p_drain && w_failures == 0) p_drain(pcm);
+        p_close(pcm);
+
+        if (w_failures == 0) { pass_full++; logf("  [it%d] PASS: 7 steps + 5-period writei clean\n", it); }
+        else { logf("  [it%d] PARTIAL: 7-step config OK, writei unstable\n", it); }
+    }
+
+    logf("\n=== audio_acodec_probe SUMMARY ===\n");
+    logf("  iterations: 5\n");
+    logf("  full PASS (7-step + 5x writei clean): %d/5\n", pass_full);
+    logf("  failure point histogram (steps 0..6):\n");
+    logf("    [0 open]   %d/5\n", fail_break[0]);
+    logf("    [1 malloc] %d/5\n", fail_break[1]);
+    logf("    [2 access] %d/5\n", fail_break[2]);
+    logf("    [3 format] %d/5\n", fail_break[3]);
+    logf("    [4 chans]  %d/5\n", fail_break[4]);
+    logf("    [5 rate]   %d/5\n", fail_break[5]);
+    logf("    [6 commit] %d/5\n", fail_break[6]);
+    if (pass_full == 5) {
+        logf("  >>> VERDICT: S1 FEASIBLE -- hw:0,1 is fully usable for 44100 Hz playback\n");
+        logf("  >>>           next step: S1.2 (retroarch.cfg audio_device=\"cubegm_speaker\")\n");
+    } else if (pass_full >= 1) {
+        logf("  >>> VERDICT: S1 INTERMITTENT -- hw:0,1 sometimes works (timing? ASoC state?)\n");
+        logf("  >>>           investigate: do 5 back-to-back starts leave a residual lock?\n");
+    } else if (fail_break[6] == 5 || fail_break[5] == 5) {
+        logf("  >>> VERDICT: S1 INFEASIBLE -- hw_params commit / set_rate_near fails for 44100\n");
+        logf("  >>>           kernel refuses acodec at 44100 (despite header declaring it)\n");
+    } else {
+        logf("  >>> VERDICT: S1 INFEASIBLE -- no TX DMA available for dai-link@1\n");
+        logf("  >>>           fallback to S3 (tinyalsa+48000+latency=240+rate_control=false)\n");
+    }
+
+out:
+    if (regs) munmap((void*)regs, 0xb0);
+    if (memfd >= 0) close(memfd);
+    if (h) dlclose(h);
+    logf("=== audio_acodec_probe done ===\n");
+}
+
 /* Recursive read-only dir dumper for /proc/device-tree subtrees.
  * Avoids re-opening the same dir twice and limits depth so a
  * /proc/device-tree branch doesn't drown the report. */
@@ -1074,6 +1298,7 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio_chain") == 0) cmd_audio_chain();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio_distortion") == 0) cmd_audio_distortion();
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "audio_acodec_probe") == 0) cmd_audio_acodec_probe();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
     if (g_out) { logf("# diag finished OK\n"); fclose(g_out); }
     logf("REPORT -> %s\n", REPORT);
