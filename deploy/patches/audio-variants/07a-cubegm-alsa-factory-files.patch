@@ -756,7 +756,7 @@ index 0000000..2e86535
 +   alsathread_factory_set_nonblock_state,
 +   alsathread_factory_free,
 +   alsathread_factory_use_float,
-+   "alsathread",
++   "cubegm_alsathread",
 +   NULL, NULL,
 +   alsathread_factory_write_avail,
 +   alsathread_factory_buffer_size,

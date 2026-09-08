@@ -1,0 +1,71 @@
+--- a/audio/drivers/tinyalsa.c
++++ b/audio/drivers/tinyalsa.c
+@@ -2336,8 +2336,14 @@
+       {
+          snd_pcm_sframes_t frames   = pcm_writei(tinyalsa->pcm, buf, size);
+ 
++         if (frames == -EPIPE || frames == -ESTRPIPE)
++         {
++            if (pcm_prepare(tinyalsa->pcm) < 0)
++               return -1;
++            continue;
++         }
+          if (frames < 0)
+-            pcm_stop(tinyalsa->pcm);
++            return -1;
+ 
+          _len    += frames;
+          buf     += (frames << 1) * frames_size;
+@@ -2346,19 +2352,51 @@
+    }
+    else
+    {
++      const int wait_ms   = 50;
++      int       idle_wait = 0;
++
+       while (size)
+       {
+          snd_pcm_sframes_t frames;
+-         pcm_wait(tinyalsa->pcm, -1);
++         int wait_rc;
++
++         wait_rc   = pcm_wait(tinyalsa->pcm, wait_ms);
++
++         if (wait_rc == -EPIPE || wait_rc == -ESTRPIPE)
++         {
++            if (pcm_prepare(tinyalsa->pcm) < 0)
++               return -1;
++            continue;
++         }
++         if (wait_rc < 0)
++            return -1;
++
++         if (wait_rc == 0)
++         {
++            if (++idle_wait >= 4)
++            {
++               if (pcm_prepare(tinyalsa->pcm) < 0)
++                  return -1;
++               idle_wait = 0;
++            }
++            continue;
++         }
+ 
+          frames   = pcm_writei(tinyalsa->pcm, buf, size);
+ 
++         if (frames == -EPIPE || frames == -ESTRPIPE)
++         {
++            if (pcm_prepare(tinyalsa->pcm) < 0)
++               return -1;
++            continue;
++         }
+          if (frames < 0)
+             return -1;
+ 
+          _len    += frames;
+          buf     += (frames << 1) * frames_size;
+          size    -= frames;
++         idle_wait = 0;
+       }
+    }
+ 
