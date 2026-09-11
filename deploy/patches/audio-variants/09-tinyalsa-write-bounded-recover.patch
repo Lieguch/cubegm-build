@@ -1,71 +1,36 @@
 --- a/audio/drivers/tinyalsa.c
 +++ b/audio/drivers/tinyalsa.c
-@@ -2336,8 +2336,14 @@
-       {
+@@ -2337,7 +2337,7 @@
           snd_pcm_sframes_t frames   = pcm_writei(tinyalsa->pcm, buf, size);
  
-+         if (frames == -EPIPE || frames == -ESTRPIPE)
-+         {
-+            if (pcm_prepare(tinyalsa->pcm) < 0)
-+               return -1;
-+            continue;
-+         }
           if (frames < 0)
 -            pcm_stop(tinyalsa->pcm);
 +            return -1;
  
           _len    += frames;
           buf     += (frames << 1) * frames_size;
-@@ -2346,19 +2352,51 @@
+@@ -2346,10 +2346,23 @@
     }
     else
     {
-+      const int wait_ms   = 50;
-+      int       idle_wait = 0;
++      const int wait_ms = 50;
 +
        while (size)
        {
           snd_pcm_sframes_t frames;
 -         pcm_wait(tinyalsa->pcm, -1);
-+         int wait_rc;
 +
-+         wait_rc   = pcm_wait(tinyalsa->pcm, wait_ms);
-+
-+         if (wait_rc == -EPIPE || wait_rc == -ESTRPIPE)
-+         {
-+            if (pcm_prepare(tinyalsa->pcm) < 0)
-+               return -1;
++         /* Bounded wait (upstream used -1 = block forever).  Timeout (0)
++          * just retries the poll.  A negative return (XRUN surfaces as
++          * -EIO on the mmap path, -EPIPE on the sync_ptr path) is NOT
++          * fatal and must NOT be treated as such: fall through to
++          * pcm_writei(), whose own EPIPE path clears prepared/running and
++          * `goto restart` (PREPARE + first-write implicit start) is the
++          * only self-heal sequence this i2s/HDMI link accepts.  Explicit
++          * SNDRV_PCM_IOCTL_START always EPIPEs here (diag), so an
++          * upper-layer pcm_prepare() would leave the DMA stalled. */
++         if (pcm_wait(tinyalsa->pcm, wait_ms) == 0)
 +            continue;
-+         }
-+         if (wait_rc < 0)
-+            return -1;
-+
-+         if (wait_rc == 0)
-+         {
-+            if (++idle_wait >= 4)
-+            {
-+               if (pcm_prepare(tinyalsa->pcm) < 0)
-+                  return -1;
-+               idle_wait = 0;
-+            }
-+            continue;
-+         }
  
           frames   = pcm_writei(tinyalsa->pcm, buf, size);
- 
-+         if (frames == -EPIPE || frames == -ESTRPIPE)
-+         {
-+            if (pcm_prepare(tinyalsa->pcm) < 0)
-+               return -1;
-+            continue;
-+         }
-          if (frames < 0)
-             return -1;
- 
-          _len    += frames;
-          buf     += (frames << 1) * frames_size;
-          size    -= frames;
-+         idle_wait = 0;
-       }
-    }
  
