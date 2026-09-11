@@ -1,0 +1,19 @@
+Subject: [PATCH] 10-alsa-thread-s16.patch
+
+v0.8: alsathread 驱动强制 S16（对齐原厂 driver.so S16_LE），
+避开 alsa_init_pcm 的 FLOAT 探测路径（471 实证 FLOAT_LE underrun 风暴）。
+
+diff --git a/audio/drivers/alsa.c b/audio/drivers/alsa.c
+--- a/audio/drivers/alsa.c
++++ b/audio/drivers/alsa.c
+@@ -1150,8 +1150,8 @@
+ 
+    RARCH_LOG("[ALSA] Using ALSA version %s.\n", snd_asoundlib_version());
+ 
+-   if (alsa_init_pcm(&alsa->info.pcm, device, SND_PCM_STREAM_PLAYBACK, rate,
+-            latency, 2, &alsa->info.stream_info, new_rate, 0) < 0)
++   if (alsa_init_pcm_fmt(&alsa->info.pcm, device, SND_PCM_STREAM_PLAYBACK, rate,
++            latency, 2, SND_PCM_FORMAT_S16, &alsa->info.stream_info, new_rate, 0) < 0)
+       goto error;
+ 
+    alsa->info.fifo_lock = slock_new();

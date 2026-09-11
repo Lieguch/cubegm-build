@@ -335,7 +335,8 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         "$HERE/patches/audio-variants/07b-cubegm-alsa-register.patch" \
         "$HERE/patches/audio-variants/07c-cubegm-makefile.patch" \
         "$HERE/patches/audio-variants/08-sinc-int16-tpdf-dither.patch" \
-        "$HERE/patches/audio-variants/09-tinyalsa-write-bounded-recover.patch"; do
+        "$HERE/patches/audio-variants/09-tinyalsa-write-bounded-recover.patch" \
+        "$HERE/patches/audio-variants/10-alsa-thread-s16.patch"; do
         if [ -f "$_ap" ]; then
             if ! git apply "$_ap"; then
                 if ! git apply --reverse --check "$_ap" 2>/dev/null; then
