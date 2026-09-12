@@ -409,7 +409,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     LIBRETRO_COMMON_INC="-I${WORKDIR}/RetroArch/libretro-common/include"
     RETROARCH_ROOT_INC="-I${WORKDIR}/RetroArch -I${WORKDIR}/RetroArch/libretro-common -I${WORKDIR}/RetroArch/libretro-common/compat"
     DEPS_INC="-I${WORKDIR}/RetroArch/deps -I${WORKDIR}/RetroArch/deps/zstd/lib"
-    make -j"$(nproc)" CPPFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC" \
+    make -j"$(nproc)" CPPFLAGS="$CFLAGS $LIBRETRO_COMMON_INC $RETROARCH_ROOT_INC $DEPS_INC -DSINC_I16_TPDF_DITHER=1" \
         Q= 2>&1 || \
         die "RetroArch make failed."
     # Strip Q= on next run to suppress verbose output

@@ -1,3 +1,15 @@
+From: CubeGM v7.5 <hermes@local>
+Subject: [PATCH] 08-sinc-int16-tpdf-dither.patch v2 (lanczos 补注入 + kaiser 去冗余 + C89 无 inline)
+
+v2 (2026-09-12, 用户批准执行"这张牌"):
+  - v1 只有 kaiser 路径有 dither，质量档切到 LOWER/LOWEST（lanczos
+    window）时 dither 静默失效。v2 在 lanczos 截断点补同款注入。
+  - v1 的 kaiser 段有冗余双层 #ifdef 嵌套（无害但脏），v2 改单层。
+  - helper 去 inline（本文件 C89 规则，-std=c89 下 inline 未声明）。
+  - 注入点验证：audio_driver.c L1092-1216 int16 主通路唯一量化点
+    （音量默认 0dB gain=1.0 直通）；NEON fission 不触碰输出截断。
+  - 打开开关：build.sh CFLAGS 加 -DSINC_I16_TPDF_DITHER=1。
+
 --- a/libretro-common/audio/resampler/drivers/sinc_resampler_int16.c
 +++ b/libretro-common/audio/resampler/drivers/sinc_resampler_int16.c
 @@ -44,6 +44,21 @@
@@ -22,16 +34,17 @@
   */
  
  #include <stdint.h>
-@@ -54,6 +69,36 @@
+@@ -53,6 +68,36 @@
+ #include <math.h>
  
  #include <audio/sinc_resampler_int16.h>
- 
++
 +/* ------------------------------------------------------------------------- */
 +/* TPDF dither helpers (gated by SINC_I16_TPDF_DITHER)                      */
 +/* ------------------------------------------------------------------------- */
 +#ifdef SINC_I16_TPDF_DITHER
 +static uint32_t sinc_i16_dither_state = 0xDEADBEEFu;
-+static inline int32_t sinc_i16_tpdf_dither(void)
++static int32_t sinc_i16_tpdf_dither(void)
 +{
 +   /* TPDF (triangular probability density) dither on {-2..+2} LSB:
 +    *   two independent draws from uniform {-1, 0, +1} are summed.
@@ -55,11 +68,10 @@
 +   return r1 + r2;
 +}
 +#endif
-+
+ 
  /* On targets whose compiler can auto-vectorize an int16*int32->int64 MAC
   * (e.g. AArch64/NEON via smlal), splitting the Kaiser inner loop into a
-  * branchless interpolation pass and a pure MAC pass lets the vectorizer take
-@@ -373,8 +418,20 @@
+@@ -373,8 +418,14 @@
              }
  #endif
  
@@ -68,6 +80,16 @@
 +              output[0] = sinc_i16_sat(sinc_i16_round_shift(sum_l) + dl);
 +              output[1] = sinc_i16_sat(sinc_i16_round_shift(sum_r) + dr); }
 +#else
+             output[0] = sinc_i16_sat(sinc_i16_round_shift(sum_l));
+             output[1] = sinc_i16_sat(sinc_i16_round_shift(sum_r));
++#endif
+             output   += 2;
+             out_frames++;
+             re->time += ratio;
+@@ -423,8 +474,14 @@
+                sum_r += (int64_t)buffer_r[i] * pt[i];
+             }
+ 
 +#ifdef SINC_I16_TPDF_DITHER
 +            { int32_t dl = sinc_i16_tpdf_dither(); int32_t dr = sinc_i16_tpdf_dither();
 +              output[0] = sinc_i16_sat(sinc_i16_round_shift(sum_l) + dl);
@@ -75,7 +97,6 @@
 +#else
              output[0] = sinc_i16_sat(sinc_i16_round_shift(sum_l));
              output[1] = sinc_i16_sat(sinc_i16_round_shift(sum_r));
-+#endif
 +#endif
              output   += 2;
              out_frames++;
