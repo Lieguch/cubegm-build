@@ -54,6 +54,7 @@
 #include <drm/drm.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_fourcc.h>   /* DRM_FORMAT_RGB565 (run 281: undeclared) */
+#include <sys/statvfs.h>
 
 #define REPORT "/mnt/sdcard/diag_report.txt"
 static FILE *g_out = NULL;
@@ -594,6 +595,447 @@ static void cmd_cores(void) {
     logf("  cores scanned=%d ok=%d\n", n, ok);
     logf("=== cores done ===\n");
 }
+/* ==== P1+P2: full-system debug modules ===== */
+/* ===========================================================================
+ * P1 -- helpers + cmd_sysdeep (full-system deep debug snapshot)
+ * Inserted before main() in the enhanced diag.  Depends only on helpers that
+ * helpers already in the 401 base (logf / cat_file).
+ * ========================================================================== */
+
+/* ---- safe single-value reader ---- */
+static long sysfs_read_int(const char *path, long dflt) {
+    FILE *f = fopen(path, "r");
+    if (!f) return dflt;
+    char buf[128]; long v = dflt;
+    if (fgets(buf, sizeof buf, f)) {
+        char *end = NULL; v = strtol(buf, &end, 0);
+        if (end == buf) v = dflt;
+    }
+    fclose(f); return v;
+}
+static void sysfs_print_raw(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) { logf("    [%s] n/a (%s)\n", path, strerror(errno)); return; }
+    char line[512];
+    if (fgets(line, sizeof line, f)) { line[strcspn(line, "\r\n")] = 0; logf("    %s\n", line); }
+    fclose(f);
+}
+
+/* ---- list a /sys class dir ---- */
+static void sys_class_list(const char *base) {
+    DIR *d = opendir(base);
+    if (!d) { logf("    [%s] n/a (%s)\n", base, strerror(errno)); return; }
+    struct dirent *e;
+    int n = 0;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.') continue;
+        char p[256]; snprintf(p, sizeof p, "%s/%s", base, e->d_name);
+        logf("    %s\n", p);
+        n++;
+    }
+    closedir(d);
+    if (n == 0) logf("    (empty)\n");
+}
+
+/* ---- process table ---- */
+static void proc_ps(void) {
+    logf("--- processes /proc/[pid] (pid ppid st threads rss cmdline) ---\n");
+    DIR *d = opendir("/proc");
+    if (!d) { logf("    opendir /proc failed: %s\n", strerror(errno)); return; }
+    struct dirent *e;
+    int total = 0;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+        char statp[64], cmdp[64];
+        snprintf(statp, sizeof statp, "/proc/%s/stat", e->d_name);
+        snprintf(cmdp,  sizeof cmdp,  "/proc/%s/cmdline", e->d_name);
+        FILE *f = fopen(statp, "r");
+        if (!f) continue;
+        char stbuf[512];
+        if (!fgets(stbuf, sizeof stbuf, f)) { fclose(f); continue; }
+        fclose(f);
+        char *lp = strchr(stbuf, ')');
+        if (!lp) continue;
+        char *p = lp + 2;
+        char state[3]; unsigned ppid = 0;
+        sscanf(p, "%2s %u", state, &ppid);
+        char statusp[64]; snprintf(statusp, sizeof statusp, "/proc/%s/status", e->d_name);
+        long threads = -1, rss = -1;
+        FILE *fs = fopen(statusp, "r");
+        if (fs) { char l[128]; while (fgets(l, sizeof l, fs)) {
+            if (strncmp(l, "Threads:", 8) == 0) threads = strtol(l + 8, NULL, 10);
+            else if (strncmp(l, "VmRSS:", 6) == 0) rss = strtol(l + 6, NULL, 10);
+        } fclose(fs); }
+        char cmd[140] = "?"; size_t cl = 0;
+        FILE *fc = fopen(cmdp, "r");
+        if (fc) { cl = fread(cmd, 1, sizeof cmd - 1, fc); cmd[cl] = 0;
+                  for (size_t i = 0; i < cl; i++) if (cmd[i] == 0) cmd[i] = ' '; fclose(fc); }
+        if (!cl) snprintf(cmd, sizeof cmd, "[%s]", e->d_name);
+        logf("    %6s %2s %6u th=%3ld rss=%6ldkB %s\n", e->d_name, state, ppid, threads, rss, cmd);
+        total++;
+    }
+    closedir(d);
+    logf("    total processes: %d\n", total);
+}
+
+/* ---- CPU util sample (needs two calls) ---- */
+static void cpu_usage_sample(void) {
+    static long prev_total = -1, prev_idle = -1;
+    long total = 0, idle = 0;
+    FILE *f = fopen("/proc/stat", "r");
+    if (!f) return;
+    char l[256];
+    if (fgets(l, sizeof l, f)) {
+        unsigned long a,b,c,d,e,g,h,i,j,k;
+        if (sscanf(l, "cpu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
+                   &a,&b,&c,&d,&e,&g,&h,&i,&j,&k) == 10) {
+            total = a+b+c+d+e+g+h+i+j+k; idle = d;
+        }
+    }
+    fclose(f);
+    if (prev_total > 0) {
+        long dt = total - prev_total;
+        long di = idle - prev_idle;
+        long pct = (dt > 0) ? 100 * (dt - di) / dt : 0;
+        if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+        logf("    cpu util(last sample) = %ld%% (idle %ld%%)\n", pct, 100 - pct);
+    }
+    prev_total = total; prev_idle = idle;
+}
+
+/* ---- memory deep dump ---- */
+static void mem_deep(void) {
+    logf("--- /proc/meminfo (full) ---\n");
+    cat_file("/proc/meminfo");
+    logf("--- /proc/vmstat (paging) ---\n");
+    FILE *f = fopen("/proc/vmstat", "r");
+    if (f) { char l[128]; while (fgets(l, sizeof l, f)) {
+        if (strstr(l, "pgpgin") || strstr(l, "pgpgout") || strstr(l, "pswpin") ||
+            strstr(l, "pswpout") || strstr(l, "pgsteal") || strstr(l, "oom_kill"))
+            logf("    %s", l);
+    } fclose(f); }
+    logf("--- /proc/loadavg ---\n");
+    sysfs_print_raw("/proc/loadavg");
+}
+
+/* ---- storage / mounts / SD space ---- */
+static void storage_deep(void) {
+    logf("--- /proc/mounts ---\n");
+    cat_file("/proc/mounts");
+    logf("--- /proc/partitions ---\n");
+    FILE *f = fopen("/proc/partitions", "r");
+    if (f) { char l[256]; while (fgets(l, sizeof l, f)) logf("    %s", l); fclose(f); }
+    logf("--- filesystem space (statvfs) ---\n");
+    const char *mp[] = {"/mnt/sdcard", "/", "/mnt"};
+    for (unsigned i = 0; i < sizeof mp / sizeof mp[0]; i++) {
+        struct statvfs sv;
+        if (statvfs(mp[i], &sv) == 0 && sv.f_blocks > 0) {
+            double gb = 1024.0 * 1024.0 * 1024.0;
+            logf("    %-14s total=%.2fGB free=%.2fGB used=%llu%% inodes=%llu free_ino=%llu\n",
+                 mp[i], (double)sv.f_blocks * sv.f_frsize / gb,
+                 (double)sv.f_bfree * sv.f_frsize / gb,
+                 (unsigned long long)(100 - 100ULL * sv.f_bfree / sv.f_blocks),
+                 (unsigned long long)sv.f_files, (unsigned long long)sv.f_ffree);
+        } else logf("    %-14s statvfs failed: %s\n", mp[i], strerror(errno));
+    }
+    logf("--- /proc/sys/fs/file-nr ---\n");
+    sysfs_print_raw("/proc/sys/fs/file-nr");
+}
+
+/* ---- network ---- */
+static void net_deep(void) {
+    logf("--- /proc/net/dev ---\n");
+    cat_file("/proc/net/dev");
+    logf("--- /proc/net/sockstat ---\n");
+    sysfs_print_raw("/proc/net/sockstat");
+    logf("--- /proc/net/route (first 8) ---\n");
+    FILE *f = fopen("/proc/net/route", "r");
+    if (f) { char l[256]; int n = 0; while (fgets(l, sizeof l, f) && n < 8) { logf("    %s", l); n++; } fclose(f); }
+}
+
+/* ---- thermal ---- */
+static void thermal_deep(void) {
+    logf("--- thermal zones ---\n");
+    sys_class_list("/sys/class/thermal");
+    /* print temps */
+    DIR *d = opendir("/sys/class/thermal");
+    if (d) { struct dirent *e; while ((e = readdir(d))) {
+        if (strncmp(e->d_name, "thermal_zone", 12) == 0) {
+            char p[160]; snprintf(p, sizeof p, "/sys/class/thermal/%s/temp", e->d_name);
+            FILE *f = fopen(p, "r");
+            if (f) { char l[32]; if (fgets(l, sizeof l, f)) {
+                long mv = strtol(l, NULL, 10);
+                logf("    %s = %ld.%02ld°C\n", e->d_name, mv / 1000, labs(mv % 1000));
+            } fclose(f); }
+        }
+    } closedir(d); }
+}
+
+/* ---- IRQs of interest ---- */
+static void irq_deep(void) {
+    logf("--- /proc/interrupts (i2s/dma/eth) ---\n");
+    FILE *f = fopen("/proc/interrupts", "r");
+    if (f) { char l[256]; while (fgets(l, sizeof l, f)) {
+        if (strstr(l, "i2s") || strstr(l, "dma") || strstr(l, "eth") || strstr(l, "CPU0"))
+            logf("    %s", l);
+    } fclose(f); }
+}
+
+/* ---- kernel ring buffer (non-destructive) ---- */
+static void kmsg_capture(int max_bytes) {
+    logf("--- kernel log ring (/dev/kmsg, non-destructive, <=%dKB) ---\n", max_bytes / 1024);
+    FILE *f = fopen("/dev/kmsg", "r");
+    if (!f) { logf("    /dev/kmsg open failed: %s (need root)\n", strerror(errno)); return; }
+    int fd = fileno(f); int fl = fcntl(fd, F_GETFL, 0);
+    if (fl >= 0) fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+    char line[512]; int got = 0;
+    while (fgets(line, sizeof line, f)) {
+        if (max_bytes > 0 && got >= max_bytes) break;
+        char *msg = strchr(line, ';');
+        logf("    %s", (msg ? msg + 1 : line));
+        got += (int)strlen(msg ? msg + 1 : line);
+    }
+    if (got == 0) logf("    (ring empty or no permission)\n");
+    fclose(f);
+}
+
+/* ---- the snapshot ---- */
+static void cmd_sysdeep(void) {
+    g_fault_module = 20;
+    logf("=== sysdeep (full-system deep debug snapshot) ===\n");
+
+    logf("--- kernel / boot ---\n");
+    sysfs_print_raw("/proc/version");
+    sysfs_print_raw("/proc/cmdline");
+    sysfs_print_raw("/proc/uptime");
+
+    logf("--- CPU ---\n");
+    cat_file("/proc/cpuinfo");
+    cpu_usage_sample();
+    cpu_usage_sample();
+    logf("--- cpufreq cur (per core) ---\n");
+    sys_class_list("/sys/devices/system/cpu");
+    DIR *cf = opendir("/sys/devices/system/cpu");
+    if (cf) { struct dirent *e; while ((e = readdir(cf))) {
+        char p[160];
+        if (strncmp(e->d_name, "cpu", 3) == 0 && e->d_name[3] >= '0' && e->d_name[3] <= '9') {
+            snprintf(p, sizeof p, "/sys/devices/system/cpu/%s/cpufreq/scaling_cur_freq", e->d_name);
+            long cur = sysfs_read_int(p, -1);
+            if (cur > 0) {
+                snprintf(p, sizeof p, "/sys/devices/system/cpu/%s/cpufreq/scaling_governor", e->d_name);
+                FILE *fg = fopen(p, "r"); char gv[32] = "?";
+                if (fg) { if (fgets(gv, sizeof gv, fg)) gv[strcspn(gv,"\r\n")]=0; fclose(fg); }
+                logf("    %s cur=%ldkHz gov=%s\n", e->d_name, cur, gv);
+            }
+        }
+    } closedir(cf); }
+
+    mem_deep();
+    storage_deep();
+    net_deep();
+    thermal_deep();
+    irq_deep();
+    proc_ps();
+    kmsg_capture(16384);
+
+    logf("=== sysdeep done ===\n");
+}
+
+/* ===========================================================================
+ * P2 -- cmd_monitor: resident periodic full-system debug logger.
+ *
+ *   diag monitor [interval_sec] [max_minutes]
+ *   (default interval 30s; max_minutes 0 = run forever)
+ *
+ * Writes a separate /mnt/sdcard/diag_monitor.log (never touches the one-shot
+ * diag_report.txt).  Each tick appends a timestamped snapshot:
+ *   - pcm0p/pcm1p state + avail + xruns (audio liveliness; catches silent-drop
+ *     moments that a 45s probe cannot reach)
+ *   - key-process alive checks (retroarch / icube / diag / zhijack)
+ *   - cpu util delta, memory, loadavg, thermal, cpufreq
+ *   - kernel ring increments (since last tick) filtered to snd/i2s/dma/xrun
+ * Read-only on /proc//sys//dev.  Uses private FILE* m_out so main()'s g_out
+ * stays exactly as the one-shot report handle.
+ * ========================================================================== */
+
+#define MONITOR_LOG "/mnt/sdcard/diag_monitor.log"
+#define MONITOR_MAX_BYTES (2 * 1024 * 1024)
+
+static FILE *m_out = NULL;
+static void mlogf(const char *fmt, ...) {
+    va_list ap;
+    if (m_out) { va_start(ap, fmt); vfprintf(m_out, fmt, ap); va_end(ap); fflush(m_out); }
+    va_start(ap, fmt); vfprintf(stdout, fmt, ap); va_end(ap);
+}
+
+/* --- pcm /proc status: exact field-name parse (state is a string!) ------ */
+static void pcm_status_line(const char *sub0, const char *label) {
+    FILE *f = fopen(sub0, "r");
+    if (!f) { mlogf("  [%s] n/a\n", label); return; }
+    char l[256];
+    char state[16] = "?";
+    long owner = -1, xruns = -1, avail = -1, avail_max = -1, hw = -1, app = -1;
+    while (fgets(l, sizeof l, f)) {
+        char *colon = strchr(l, ':');
+        if (!colon) continue;
+        /* field name = leading token, trim trailing spaces */
+        char name[32];
+        size_t n = (size_t)(colon - l);
+        if (n > sizeof name - 2) n = sizeof name - 2;
+        memcpy(name, l, n);
+        name[n] = 0;
+        while (n && name[n-1] == ' ') name[--n] = 0;
+        /* value */
+        char *v = colon + 1; while (*v == ' ') v++;
+        if (strcmp(name, "state") == 0) {
+            size_t vn = 0; while (v[vn] && v[vn] >= 0x20 && v[vn] != '\n' && vn < sizeof state - 2) vn++;
+            memcpy(state, v, vn); state[vn] = 0;
+        } else {
+            char *end = NULL;
+            long val = strtol(v, &end, 10);
+            if (end != v) {
+                if      (strcmp(name, "owner_pid") == 0) owner = val;
+                else if (strcmp(name, "xruns")     == 0) xruns = val;
+                else if (strcmp(name, "avail")     == 0) avail = val;
+                else if (strcmp(name, "avail_max") == 0) avail_max = val;
+                else if (strcmp(name, "hw_ptr")    == 0) hw = val;
+                else if (strcmp(name, "app_ptr")   == 0) app = val;
+            }
+        }
+    }
+    fclose(f);
+    const char *alert = "";
+    if (strcmp(state, "RUNNING") != 0) alert = "  <<< NOT RUNNING!";
+    else if (avail > 4000) alert = "  <<< avail LARGE (buffer draining)";
+    mlogf("  [%s] state=%s owner=%ld xruns=%ld avail=%ld avail_max=%ld hw=%ld app=%ld%s\n",
+          label, state, owner, xruns, avail, avail_max, hw, app, alert);
+}
+
+static pid_t pid_of(const char *comm_name) {
+    DIR *d = opendir("/proc");
+    if (!d) return -1;
+    struct dirent *e; pid_t found = -1;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') continue;
+        char cmd[64]; snprintf(cmd, sizeof cmd, "/proc/%s/comm", e->d_name);
+        FILE *f = fopen(cmd, "r");
+        if (!f) continue;
+        char c[64]; if (fgets(c, sizeof c, f)) {
+            c[strcspn(c, "\r\n")] = 0;
+            if (strcmp(c, comm_name) == 0) { found = (pid_t)strtol(e->d_name, NULL, 10); fclose(f); break; }
+        }
+        fclose(f);
+    }
+    closedir(d);
+    return found;
+}
+
+static void monitor_tick(long *prev_total, long *prev_idle, FILE *kmsg) {
+    time_t now = time(NULL);
+    char ts[64];
+    strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", localtime(&now));
+    mlogf("\n===== tick @ %s uptime=", ts);
+    FILE *ut = fopen("/proc/uptime", "r");
+    if (ut) { char l[64]; if (fgets(l, sizeof l, ut)) mlogf("%s", l); fclose(ut); } else mlogf("?\n");
+    mlogf("=====\n");
+
+    mlogf("-- audio pcm status --\n");
+    pcm_status_line("/proc/asound/card0/pcm0p/sub0/status", "i2s-hifi 0,0");
+    pcm_status_line("/proc/asound/card0/pcm1p/sub0/status", "rk3036-voice 0,1");
+
+    mlogf("-- key processes --\n");
+    const char *watch[] = { "retroarch", "icube_replacement", "diag", "zhijack", NULL };
+    for (int i = 0; watch[i]; i++) {
+        pid_t p = pid_of(watch[i]);
+        mlogf("  %-16s %s\n", watch[i], p > 0 ? "ALIVE" : "not-running");
+    }
+
+    long total = 0, idle = 0;
+    FILE *st = fopen("/proc/stat", "r");
+    if (st) { char l[256];
+        if (fgets(l, sizeof l, st)) {
+            unsigned long a,b,c,d,e,g,h,i,j,k;
+            if (sscanf(l, "cpu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu", &a,&b,&c,&d,&e,&g,&h,&i,&j,&k) == 10) {
+                total = a+b+c+d+e+g+h+i+j+k; idle = d;
+            }
+        } fclose(st); }
+    if (*prev_total > 0) {
+        long dt = total - *prev_total, di = idle - *prev_idle;
+        long pct = (dt > 0) ? 100 * (dt - di) / dt : 0;
+        mlogf("-- cpu util since last tick: %ld%% --\n", pct < 0 ? 0 : pct);
+    }
+    *prev_total = total; *prev_idle = idle;
+
+    FILE *mi = fopen("/proc/meminfo", "r");
+    if (mi) { char l[128]; mlogf("-- memory --\n"); while (fgets(l, sizeof l, mi))
+        if (strstr(l,"MemFree")||strstr(l,"MemAvailable")||strstr(l,"Buffers")||strstr(l,"Cached")||strstr(l,"SwapTotal")||strstr(l,"SwapFree"))
+            mlogf("    %s", l);
+        fclose(mi); }
+    FILE *la = fopen("/proc/loadavg", "r");
+    if (la) { char l[64]; if (fgets(l, sizeof l, la)) mlogf("  loadavg: %s", l); fclose(la); }
+
+    mlogf("-- thermal / freq --\n");
+    DIR *td = opendir("/sys/class/thermal");
+    if (td) { struct dirent *e; while ((e = readdir(td))) {
+        if (strncmp(e->d_name, "thermal_zone", 12) == 0) {
+            char p[160]; snprintf(p, sizeof p, "/sys/class/thermal/%s/temp", e->d_name);
+            long mv = sysfs_read_int(p, -1);
+            if (mv >= 0) { long a = mv / 1000, b = mv % 1000; if (b < 0) b = -b; mlogf("    %s = %ld.%02ld C\n", e->d_name, a, b); }
+        }
+    } closedir(td); }
+    long cf = sysfs_read_int("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", -1);
+    if (cf > 0) mlogf("    cpu0 cur=%ldkHz\n", cf);
+
+    if (kmsg) {
+        mlogf("-- kernel ring delta --\n");
+        char line[512]; int got = 0;
+        int fl = fcntl(fileno(kmsg), F_GETFL, 0);
+        if (fl >= 0) fcntl(fileno(kmsg), F_SETFL, fl | O_NONBLOCK);
+        while (fgets(line, sizeof line, kmsg)) {
+            if (strstr(line, "snd") || strstr(line, "i2s") || strstr(line, "dma") ||
+                strstr(line, "xrun") || strstr(line, "underrun") || strstr(line, "frozen")) {
+                char *m = strchr(line, ';'); mlogf("    kw:%s", m ? m + 1 : line);
+                got++;
+            }
+        }
+        if (got == 0) mlogf("    (no snd/i2s/dma/xrun lines since last tick)\n");
+    }
+}
+
+static void cmd_monitor(int argc, char **argv) {
+    g_fault_module = 21;
+    int interval = 30, max_min = 0;
+    if (argc > 2) { int v = atoi(argv[2]); if (v > 0 && v <= 3600) interval = v; }
+    if (argc > 3) { int v = atoi(argv[3]); if (v > 0) max_min = v; }
+
+    m_out = fopen(MONITOR_LOG, "a");
+    time_t now = time(NULL);
+    mlogf("\n# CubeGM diag MONITOR started %s  interval=%ds max_min=%d\n", ctime(&now), interval, max_min);
+    if (!m_out) mlogf("# WARN: cannot open %s -- stdout only\n", MONITOR_LOG);
+
+    long prev_total = -1, prev_idle = -1;
+    FILE *kmsg = fopen("/dev/kmsg", "r");
+
+    long ticks = 0;
+    time_t start = time(NULL);
+    for (;;) {
+        monitor_tick(&prev_total, &prev_idle, kmsg);
+        if (m_out && ftell(m_out) > MONITOR_MAX_BYTES) {
+            fclose(m_out);
+            m_out = fopen(MONITOR_LOG, "w");
+            if (m_out) mlogf("# (log rolled >%dKB)\n", MONITOR_MAX_BYTES / 1024);
+        }
+        ticks++;
+        if (max_min > 0 && (time(NULL) - start) / 60 >= max_min) {
+            mlogf("# monitor finished after %ld min (%ld ticks)\n", (time(NULL)-start)/60, ticks);
+            break;
+        }
+        sleep(interval);
+    }
+    if (kmsg) fclose(kmsg);
+    if (m_out) { fclose(m_out); m_out = NULL; }
+}
+
 
 /* =========================================================================== */
 int main(int argc, char **argv) {
@@ -608,6 +1050,8 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "all") == 0 || strcmp(mod, "display") == 0) cmd_display();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "sysdeep") == 0)         cmd_sysdeep();
+    if (strcmp(mod, "monitor") == 0)                                    cmd_monitor(argc, argv);
     if (g_out) { logf("# diag finished OK\n"); fclose(g_out); }
     logf("REPORT -> %s\n", REPORT);
     return 0;
