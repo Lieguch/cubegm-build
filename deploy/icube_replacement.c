@@ -13,6 +13,11 @@
  *   - --menu 必须：官方文档确认「不加载 content 时必须显式 --menu，否则
  *     RetroArch 启动后立即退出」→ 缺它会变成 crash 重启循环。
  *     zhijack.sh 同路径已同步补上。
+ * release-1.0 (2026-09-14, 基于 478=c82e9c5)：去掉全部日志生成——
+ *   - hlog 静默（icube.log 不再写）；retroarch 子进程 stdout/stderr 重定向 /dev/null；
+ *   - 不再注入 --verbose / --log-file（retroarch_ra.log 不再生成）；
+ *   - 不再后台 fork diag（diag_report.txt / keylog.txt 不再生成）；
+ *   - diag 二进制仍随 payload 部署，仅作手动诊断（sh diag <module>）。
  *
  * 与原厂 icube 的区别：
  *   - 原厂 fork/execl rkgame（闭源，dlopen driver.so 显示/音频）
@@ -32,14 +37,14 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define LOG_PATH      "/mnt/sdcard/icube.log"
+#define LOG_PATH      "/dev/null"            /* release-1.0: 不写 icube.log */
 #define WORK_DIR      "/mnt/sdcard/cubegm"
 #define RETROARCH     "/mnt/sdcard/cubegm/retroarch"
 #define RETROARCH_CFG "/mnt/sdcard/cubegm/retroarch.cfg"
-#define RETROARCH_LOG "/mnt/sdcard/retroarch.log"
-#define DIAG_BIN      "/mnt/sdcard/cubegm/diag"
+/* release-1.0: RETROARCH_LOG / DIAG_BIN 已删（日志静默；diag 仅手动运行） */
 
 static void hlog(const char *msg) {
+    /* release-1.0: 启动器完全静默（LOG_PATH=/dev/null），hlog 保留仅为代码可读性 */
     FILE *f = fopen(LOG_PATH, "a");
     if (!f) return;
     fprintf(f, "%s", msg);
@@ -85,27 +90,7 @@ static void set_cpu_performance(void) {
  *   其中把 pcm.!default 定义为 plug->route->multi(hw:0,0 HDMI + hw:0,1 内置扬声器) 双输出
  *   （内联 type hw，禁字符串 "hw:0,0"）。本机 ALSA 模拟已验证合并与解析正确。 */
 
-/* v10.9 开机即 Debug（用户硬性指令 2026-08-27）：
- * 主路径「替换 icube」开机后立即在后台派生 diag：
- *   - diag all    -> /mnt/sdcard/diag_report.txt（sysinfo/input/display/audio/cores）
- *   - diag keylog -> /mnt/sdcard/keylog.txt（持续键位/轴事件日志，守护进程）
- * 父进程不 wait（避免阻塞 retroarch 启动）。fallback 路径 zhijack.sh 已有同款。
- * 若 diag 缺失（payload 异常）则不阻塞启动，仅记录。 */
-static void run_diag_bg(const char *arg) {
-    pid_t pid = fork();
-    if (pid < 0) { hlog("icube: fork diag failed\n"); return; }
-    if (pid == 0) {
-        /* 子进程：diag 输出重定向到 /dev/null（diag 自身写 report/keylog 文件） */
-        int fd = open("/dev/null", O_WRONLY);
-        if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
-        execl(DIAG_BIN, "diag", arg, (char *)NULL);
-        _exit(127);
-    }
-    /* 父进程不 wait —— diag 后台运行，retroarch 立即启动 */
-    char buf[128];
-    snprintf(buf, sizeof buf, "icube: diag %s forked (bg)\n", arg);
-    hlog(buf);
-}
+/* release-1.0：run_diag_bg 已删（不再开机 fork diag；diag 仅手动运行） */
 
 /* supervisor：循环 exec retroarch，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。 */
 static void run_supervisor(void) {
@@ -113,21 +98,15 @@ static void run_supervisor(void) {
     for (;;) {
         pid_t pid = fork();
         if (pid == 0) {
-            /* 子进程：把 retroarch 的 stdout/stderr 重定向到日志，便于诊断 */
-            int fd = open(RETROARCH_LOG, O_WRONLY | O_CREAT | O_APPEND, 0644);
+            /* release-1.0: retroarch 子进程 stdout/stderr 静默（不生成 retroarch.log） */
+            int fd = open("/dev/null", O_WRONLY);
             if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
             /* RetroArch 自带 RGUI 菜单。--menu 显式声明「无 content 也要驻留菜单」，
              * 缺它会启动后立即退出（崩溃重启循环）。
-             * v11.11 DEBUG 日志：--verbose --log-file 让 RetroArch 把 [INFO]/
-             * [udev]/[Autoconf] 全部写进独立文件。之前的坑：stdout 重定向到
-             * 文件后是全缓冲（4 KB），RetroArch 不退出就不 flush，导致
-             * retroarch.log 里只剩 stderr 的 ALSA 错误、[INFO] 全部丢失，
-             * 手柄 udev 枚举/autoconfig 匹配是否发生完全看不见。
+             * release-1.0：不再注入 --verbose / --log-file（retroarch_ra.log 不再生成）。
              * 注：本版不设 ALSA_CONFIG_PATH（397 基线音频机制，rootfs 官方链
              * + ~/.asoundrc），避免引入 399/400 疑似宕机变量。 */
-            execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu",
-                  "--verbose",
-                  "--log-file=/mnt/sdcard/retroarch_ra.log", (char *)NULL);
+            execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu", (char *)NULL);
             hlog("icube: exec retroarch FAILED\n");
             _exit(1);
         }
@@ -168,9 +147,8 @@ int main(int argc, char **argv) {
     set_cpu_performance();
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
 
-    /* 1.5 开机即 Debug（v10.9）：后台派 diag all + diag keylog，不阻塞 retroarch */
-    run_diag_bg("all");
-    run_diag_bg("keylog");
+    /* release-1.0：不再后台派 diag（diag_report.txt / keylog.txt 不再生成）。
+     * diag 二进制仍随 payload 部署，手动运行 sh diag <module> 仍可用。 */
 
     /* 2. supervisor：循环 exec retroarch（自带 RGUI 菜单 + libretro 核心加载） */
     run_supervisor();

@@ -290,6 +290,10 @@ log "STAGE 5 skipped: picoarch deprecated (RetroArch replaces it)"
 # 菜单：rgui（轻量文字菜单，244MB 内存足够）
 # 核心：复用现有 libretro 57 核（同一份 .so 文件）
 RETROARCH_REPO="https://github.com/libretro/RetroArch.git"
+# release-1.0 (2026-09-14): 478 实机 = Git 826219d / Built Sep 14（tinyalsa threaded
+# pipeline + video_threaded 全套行为）。master 已再前进 36+ commits（含 audio SRC
+# 改动），不锁则 CI 构建不可复现。全 SHA 锁定。
+RETROARCH_PIN="826219de14c63010d4e42331a71d3ec333833836"
 log "Building RetroArch (standalone libretro frontend)..."
 # 将 RetroArch 放入 WORKDIR 以便缓存复用（避免每次 CI 重新克隆 ~100MB）
 mkdir -p "$WORKDIR"
@@ -300,7 +304,7 @@ elif [ -d RetroArch ]; then
     log "Reusing existing RetroArch/ (moved to cache)"
     rm -rf "$WORKDIR/RetroArch"
     mv RetroArch "$WORKDIR/RetroArch"
-    ln -sf "$WORKDIR/RetroArch" RetroArch
+    ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
 else
     log "Cloning RetroArch (shallow, to save time; submodules init later)..."
     git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
@@ -310,6 +314,19 @@ else
         die "RetroArch submodule init failed."
     cd "$HERE"
     ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
+fi
+# release-1.0: 无论克隆或缓存复用，强制锁定 478 实测的 RA 版本 826219d
+# （缓存可能是新 master；shallow clone 后 fetch 特定 SHA 由 GitHub 支持）。
+if [ -d RetroArch/.git ]; then
+    git -C RetroArch checkout -q "$RETROARCH_PIN" 2>/dev/null || {
+        git -C RetroArch fetch --depth 1 origin "$RETROARCH_PIN" 2>/dev/null || \
+            git -C RetroArch fetch origin 2>/dev/null
+        git -C RetroArch checkout -q "$RETROARCH_PIN" || \
+            die "RetroArch pin checkout $RETROARCH_PIN failed."
+    }
+    git -C RetroArch submodule update --init --recursive 2>&1 || \
+        die "RetroArch submodule update (pinned) failed."
+    log "RetroArch pinned to $RETROARCH_PIN ($(git -C RetroArch log -1 --format=%s 2>/dev/null))"
 fi
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
