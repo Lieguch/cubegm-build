@@ -28,12 +28,12 @@ COVER_US = 307200          # 480*320*2
 COVER_W, COVER_H = 480, 320
 THUMB_W, THUMB_H = 160, 107
 
-# 分类 → (Playlist 名, 默认 core 名)。000 街机按 filelist.xml 逐游戏覆盖（见 load_filelist）。
+# 分类 → (Playlist 名, default core)。全部 core='DETECT' —— 官方自适应（可选核心）。
 PLATFORM = {
-    # 000 街机：filelist.xml 逐游戏精确映射 + 默认 fbneo（zip 无扩展名特征，DETECT 无法识别）
-    # 001-008 家用机/掌机：core=DETECT —— 官方自适应（RA 按扩展名 + core 列表选择，多核心弹列表）
+    # 000-008 全部 DETECT：RA 加载时按 .info 的 supported_extensions 列出该平台支持的全部核心供选择
+    #   （有几个核心弹几个：MD .bin→genesis_plus_gx+picodrive / 街机 .zip→fbneo+fbalpha2012系+mame系）。
     #   003 修正：实机实证为 SEGA Mega Drive（ROM 头 00FF0DC0 初始 SSP + 魂斗罗铁血兵团等 MD 独占游戏），非 NES
-    0: ('000-Arcade',      'fbneo_libretro.so'),
+    0: ('000-Arcade',      'DETECT'),
     1: ('001-NES',         'DETECT'),
     2: ('002-SNES',        'DETECT'),
     3: ('003-MegaDrive',   'DETECT'),
@@ -214,16 +214,11 @@ def build_playlist(playlist_name, games, idx2core):
     """官方 JSON 1.0 playlist。path 指向原厂 000-008 目录，core_path 为绝对路径。"""
     items = []
     for g in games:
-        core = g['core'] or idx2core.get(g['idx'])
         label = g['cn'] or g['en'] or g['base']
         cat = playlist_name.split('-')[0]  # '000'
-        # core=DETECT → 官方自适应（RA 加载时 core 检测/多核心弹列表）；否则绝对路径
-        if core and core != 'DETECT':
-            core_path = '/mnt/sdcard/cubegm/cores/' + core
-            core_name = core.rsplit('_libretro.so', 1)[0]
-        else:
-            core_path = 'DETECT'
-            core_name = 'DETECT'
+        # 全部 DETECT：官方自适应（RA 按 .info supported_extensions 列出该平台全部核心供选）
+        core_path = 'DETECT'
+        core_name = 'DETECT'
         items.append({
             'path': '/mnt/sdcard/%s/%s' % (cat, g['rom']),
             'label': label,
@@ -268,11 +263,8 @@ def main():
                 seen[base.lower()] = (base, frame, raw)
         covers = [v for _, v in sorted(seen.items())]
         cover_roms = {c[0].lower() for c in covers}
-        # 建立 idx → core（街机按 filelist 逐游戏）
-        if cat == 0:
-            idx2core = {g['idx']: flmap.get(cat, {}).get(g['rom']) or def_core for g in games}
-        else:
-            idx2core = {g['idx']: def_core for g in games}
+        # 全部 DETECT（官方自适应，idx2core 值恒为 DETECT，仅保留结构兼容）
+        idx2core = {g['idx']: def_core for g in games}
 
         # 1) playlist JSON
         pl = build_playlist(pname, games, idx2core)
