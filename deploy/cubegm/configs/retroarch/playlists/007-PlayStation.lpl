@@ -1,0 +1,232 @@
+{
+  "version": "1.0",
+  "default_core_path": "",
+  "default_core_name": "",
+  "label_display_mode": 0,
+  "items": [
+    {
+      "path": "/mnt/sdcard/007/Alundra.iso",
+      "label": "阿兰多拉",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Hyakujuu Sentai Gaoranger.img",
+      "label": "百兽战队",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Blade.img",
+      "label": "刀锋战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Wipeout.img",
+      "label": "反重力赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/KazenoKlonoa-DoortoPhantomile.img",
+      "label": "风之克罗诺亚",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/GundamBattleAssault.img",
+      "label": "机动战士高达",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/League Jikkyou Winning Eleven 2000.img",
+      "label": "实况足球甲A联赛",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Poitters Point 2.img",
+      "label": "箱子大战2-SODOM的阴谋",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Sword of soul.img",
+      "label": "刀魂",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/BioHazard3-LasfEscape.img",
+      "label": "生化危机3-最后的逃亡",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/tekken.img",
+      "label": "铁拳",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/tekken2.img",
+      "label": "铁拳 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/tekken3.img",
+      "label": "铁拳 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Command & Conquer Red alert.img",
+      "label": "命令与征服-红色警戒",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/DeltaForce-UrbanWarfare.img",
+      "label": "三角洲特种部队",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Dino Crisis 2.img",
+      "label": "恐龙危机2",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Dragon Ball GT Final Bout.img",
+      "label": "龙珠GT:决战最终回合",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/G-Darius.img",
+      "label": "变型战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Kamen Rider Ryuki.img",
+      "label": "假面骑士",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Resident Evil Survivor.img",
+      "label": "生化危机枪下游魂",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Silent Hill.img",
+      "label": "寂静岭",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Tomand Jerry-House Trap.img",
+      "label": "猫和鼠-屋中陷阱",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Ultraman evolved fighting.img",
+      "label": "奥特曼进化格斗",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Dragon Ball Fighter.iso",
+      "label": "龙珠格斗",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Chariots of Fire II.iso",
+      "label": "烈火战车2",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/dune 2000.img",
+      "label": "沙丘2000",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/Toy Story 2 Action Game.iso",
+      "label": "玩具总动员2",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/007/World Soccer Winning Eleven 3 Final Version (J) (SPG) (Konami).iso",
+      "label": "世界足球胜利十一人 3 最终版",
+      "core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+      "core_name": "pcsx_rearmed",
+      "crc32": "",
+      "db_name": "007-PlayStation.lpl"
+    }
+  ]
+}

@@ -1,0 +1,1208 @@
+{
+  "version": "1.0",
+  "default_core_path": "",
+  "default_core_name": "",
+  "label_display_mode": 0,
+  "items": [
+    {
+      "path": "/mnt/sdcard/006/Super King Kong 1.zip",
+      "label": "超级大金刚 1",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dragon Quest 1+2.zip",
+      "label": "勇者斗恶龙 1+2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dragon Quest 3.zip",
+      "label": "勇者斗恶龙 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dragon Quest - Monster Wonderland.zip",
+      "label": "勇者斗恶龙-怪兽仙境",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dragon Quest - Monster Wonderland 2 - Il's Adventure.zip",
+      "label": "勇者斗恶龙-怪兽仙境2-伊尔的冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Ranch boy 2.zip",
+      "label": "牧场男孩 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Ranch boy 3.zip",
+      "label": "牧场男孩 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Wario Continental 2.zip",
+      "label": "瓦里奥大陆 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Wario Continental 3.zip",
+      "label": "瓦里奥大陆 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/The legend of Salda - the chapter of time and space.zip",
+      "label": "萨尔达传说-时空之章",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/The Legend of Salda - The Chapter of the Earth.zip",
+      "label": "萨尔达传说-大地之章",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Fingerwheel magic.zip",
+      "label": "指轮魔境传",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Rockman.zip",
+      "label": "洛克人",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Rockman 2.zip",
+      "label": "洛克人 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Biochemical Commander - Ultimate Force.zip",
+      "label": "生化指挥官-究极武力",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/FIFA Football 2000.zip",
+      "label": "FIFA足球 2000",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Metal Gear.zip",
+      "label": "合金装备",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/X-Men-Special Function Group.zip",
+      "label": "X战警-特异功能组",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/X-Men - Wolverine.zip",
+      "label": "X战警-金刚狼",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Off-road locomotive.zip",
+      "label": "越野机车",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Toy Story 2.zip",
+      "label": "玩具总动员2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bombing Superman MAX-Light Brave.zip",
+      "label": "轰炸超人MAX-光之勇者",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bomb Superman MAX-Ain Edition.zip",
+      "label": "炸弹超人MAX-艾因版",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bomber legend.zip",
+      "label": "炸弹人传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Crazy locomotive race 2.zip",
+      "label": "疯狂机车赛 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Tetris DX.zip",
+      "label": "俄罗斯方块DX",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Disney Star Suite.zip",
+      "label": "迪斯尼明星组曲",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Warner Star Suite - Martian Elba.zip",
+      "label": "华纳明星组曲-火星人艾尔巴",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Warner Star Grand Prix.zip",
+      "label": "华纳明星大赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dinosaur Hunter 1 - Battle of Fury.zip",
+      "label": "恐龙猎人1-愤怒之战",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dinosaur Hunter 2 - Evil Seeds.zip",
+      "label": "恐龙猎人2-邪恶的种子",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dinosaur Hunter 3 - Shadow in the dark.zip",
+      "label": "恐龙猎人3-在暗处的影子",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bugs crisis.zip",
+      "label": "虫虫危机",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Mobile unit.zip",
+      "label": "机动部队",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Alice in Wonderland.zip",
+      "label": "爱丽丝梦游仙境",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Alien encounter.zip",
+      "label": "异形遭遇战",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/National Star Baseball 2001.zip",
+      "label": "全美明星棒球2001",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/National Star Tennis Tournament 2000.zip",
+      "label": "全美明星网球赛2000",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Haunted House Shadow 4.zip",
+      "label": "鬼屋魔影4",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Transfiguration.zip",
+      "label": "变身战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Toy soldier 2.zip",
+      "label": "玩具军人 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Toy Soldier - Air Combat.zip",
+      "label": "玩具军人-空战追击",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Toy Soldier - Heroes Invincible 2.zip",
+      "label": "玩具军人-英雄无敌 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Beautiful New World - Seeking Independence.zip",
+      "label": "美丽新世界-寻求独立",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Atlantis - The Lost Empire.zip",
+      "label": "亚特兰帝斯-失落的帝国",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Tower of the Magic 3.zip",
+      "label": "魔物之塔 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Barbie - Pet Rescue.zip",
+      "label": "芭比-宠物大营救",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Batman in New York.zip",
+      "label": "蝙蝠侠在纽约",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Batman - The Return of the Clown.zip",
+      "label": "蝙蝠侠-小丑的回归",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Battle of Midway 1942.zip",
+      "label": "中途岛战役1942",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Tank battle.zip",
+      "label": "坦克大战",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Gyro War.zip",
+      "label": "陀螺战记",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Steel knife ice hockey.zip",
+      "label": "钢刀冰上曲棍球",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Super confusing star war.zip",
+      "label": "超惑星战记",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Hunting Ghost Buffy - Magic Raiders.zip",
+      "label": "猎鬼少女巴菲-魔法奇兵",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bunny Rabbit - Crazy Castle 3.zip",
+      "label": "宾尼兔-疯狂城堡 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bunny Rabbit - Crazy Castle 4.zip",
+      "label": "宾尼兔-疯狂城堡 4",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Buzz Lightyear Interstellar Mission.zip",
+      "label": "巴兹光年星际使命",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Crazy Speed 4.zip",
+      "label": "疯狂飞车 4",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Agile commander.zip",
+      "label": "敏捷指挥官",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Squirrel adventure.zip",
+      "label": "松鼠大冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Guagualong 1.zip",
+      "label": "瓜瓜龙 1",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Magic sword.zip",
+      "label": "魔法剑",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Daffy Crow - Get Rich.zip",
+      "label": "达菲鸦-致富记",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Elevator Wars Robot Edition.zip",
+      "label": "电梯大战机器人版",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/dinosaur.zip",
+      "label": "恐龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Car god - professional driving.zip",
+      "label": "车神-职业驾驶",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Destroy the Duke 5.zip",
+      "label": "毁灭公爵 5",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Warrior 2.zip",
+      "label": "蚯蚓战士2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/F1 Championship 2000.zip",
+      "label": "F1 冠军赛2000",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Frog crossing the street.zip",
+      "label": "青蛙过街",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/WWF Fighting Wrestling 2000.zip",
+      "label": "WWF激斗摔角2000",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Space bee.zip",
+      "label": "太空小蜜蜂",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Jack Long.zip",
+      "label": "杰克龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Devils Village.zip",
+      "label": "魔界村",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Godzilla.zip",
+      "label": "哥斯拉",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Grand Theft Auto 1.zip",
+      "label": "侠盗车手 1",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Grand Theft Auto 2.zip",
+      "label": "侠盗车手 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Harry Potter and the Sorcerer's Stone.zip",
+      "label": "哈利波特与魔法石",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Heroes invincible 1.zip",
+      "label": "英雄无敌 1",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Heroes invincible 2.zip",
+      "label": "英雄无敌 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Invincible Hot Wheel Racing.zip",
+      "label": "无敌烽火轮赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Demon machine.zip",
+      "label": "恶魔机器",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Fishing Taro 2.zip",
+      "label": "钓鱼太郎 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/LEGO Game World.zip",
+      "label": "乐高游戏世界",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/LEGO Block Island 2.zip",
+      "label": "乐高积木岛 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Lego Grand Prix.zip",
+      "label": "乐高大赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Four mad wars - legendary reproduction.zip",
+      "label": "四狂神战记-传说再现",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/John Marton American Football 2000.zip",
+      "label": "约翰马吨美式足球2000",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Black Star Wars 2.zip",
+      "label": "黑衣星际战警 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Violent battle.zip",
+      "label": "暴走战记",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Mickey Mouse Racing USA Challenge.zip",
+      "label": "米老鼠赛车美国挑战赛",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Micromachine 3.zip",
+      "label": "微型机器 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Mission impossible.zip",
+      "label": "不可能完成的任务",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Monopoly.zip",
+      "label": "大富翁",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Monster Farm Battle Card.zip",
+      "label": "怪兽农场之战斗卡片",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Key to Solomon.zip",
+      "label": "所罗门之钥",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Monsters Inc.zip",
+      "label": "怪物公司",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Mortal Kombat 4.zip",
+      "label": "真人快打4",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/New Yunston Racing.zip",
+      "label": "新云斯顿赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/NBA Brian 3 vs 3 Basketball.zip",
+      "label": "NBA 布莱恩 3对3篮球",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Madden NBA 2001.zip",
+      "label": "劲爆NBA 2001",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/One Piece - the birth of the dream road fly pirate.zip",
+      "label": "海贼王-梦想的路飞海贼团诞生",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bit Buddha Adventure.zip",
+      "label": "比特佛冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Power legend.zip",
+      "label": "力量传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dinosaurs Team - Lightspeed Rescue.zip",
+      "label": "恐龙战队-光速救援",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dinosaurs - Powerful Commandos.zip",
+      "label": "恐龙战队-强力突击队员",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Alien fighter DX.zip",
+      "label": "异形战机DX",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Rainbow Island.zip",
+      "label": "彩虹岛",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Monster Demolition - World Tour.zip",
+      "label": "怪兽拆楼-世界之旅",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Destroy Jin Gang 2 - US Tour.zip",
+      "label": "毁灭金钢2-美国巡回战",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Laser superman.zip",
+      "label": "雷射超人",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Little naughty Paris.zip",
+      "label": "小淘气巴黎行",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Frontline war.zip",
+      "label": "前线战争",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Shrek.zip",
+      "label": "史瑞克",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/The Simpsons.zip",
+      "label": "辛普森一家",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Football manager.zip",
+      "label": "足球经理",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Space invader.zip",
+      "label": "太空侵略者",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Shining.zip",
+      "label": "闪灵悍将",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Spiderman 2.zip",
+      "label": "蜘蛛侠 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Spiderman.zip",
+      "label": "蜘蛛侠",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Mission.zip",
+      "label": "谍对谍",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Quick whirlwind.zip",
+      "label": "快打旋风",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Elf Mouse Brother - Home Tour.zip",
+      "label": "精灵鼠小弟-家之旅",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Yoga balloon.zip",
+      "label": "瑜珈汽球",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/James Bond - Black Crisis.zip",
+      "label": "占士邦-黑日危机",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Smurf adventure.zip",
+      "label": "蓝精灵的冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Forest Xiaotaishan.zip",
+      "label": "森林小泰山",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Lion king.zip",
+      "label": "狮子王",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Flying girl.zip",
+      "label": "飞天小女警",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Naughty soldier.zip",
+      "label": "淘气小兵兵",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/The Simpsons - Halloween Horror Tree House.zip",
+      "label": "辛普森一家-万圣节恐怖树屋",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Smurf's nightmare.zip",
+      "label": "蓝精灵的恶梦",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bunny - Jedi Counterattack.zip",
+      "label": "兔宝宝-绝地反击",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Cat and mouse - group of mice in hell.zip",
+      "label": "猫和老鼠-群鼠地狱",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Cat and mouse - trapping.zip",
+      "label": "猫和老鼠-捕鼠记",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/tomb Raider.zip",
+      "label": "古墓丽影",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Professional skateboarder 1.zip",
+      "label": "职业滑板高手 1",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Professional skateboarder 2.zip",
+      "label": "职业滑板高手 2",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Professional skateboarder 3.zip",
+      "label": "职业滑板高手 3",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Bad boy - Didoff.zip",
+      "label": "坏小子-迪德夫",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/10 shot bowling.zip",
+      "label": "10杆保龄球",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Fierce skiing.zip",
+      "label": "烈战滑雪",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/3D billiards.zip",
+      "label": "3D台球",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Dalmatian.zip",
+      "label": "斑点狗",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Wizard.zip",
+      "label": "法术师",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Pig big action.zip",
+      "label": "小猪大行动",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Woodpecker.zip",
+      "label": "啄木鸟赛",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/Destroy the world.zip",
+      "label": "毁灭世界",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/006/WWF wrestling.zip",
+      "label": "WWF摔角",
+      "core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+      "core_name": "gambatte",
+      "crc32": "",
+      "db_name": "006-GBC.lpl"
+    }
+  ]
+}

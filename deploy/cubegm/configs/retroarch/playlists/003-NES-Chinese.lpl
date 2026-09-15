@@ -1,0 +1,2728 @@
+{
+  "version": "1.0",
+  "default_core_path": "",
+  "default_core_name": "",
+  "label_display_mode": 0,
+  "items": [
+    {
+      "path": "/mnt/sdcard/003/Island adventure.zip",
+      "label": "冒险岛",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mountain Island Adventure.zip",
+      "label": "冒险岛 山岛冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Contra Iron Corps.zip",
+      "label": "魂斗罗铁血兵团",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Flying bat 2.zip",
+      "label": "飞翔蝙蝠2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Destruction of the army's alien war.zip",
+      "label": "毁灭部队之异型战争",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Destroyer.zip",
+      "label": "毁灭战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/karate.zip",
+      "label": "空手道",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/The descendant of the dragon - the legend of Bruce Lee.zip",
+      "label": "龙的传人-李小龙传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Devil buster.zip",
+      "label": "魔鬼克星",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Cat and Mouse (Simpson Edition).zip",
+      "label": "猫和老鼠(辛普森版)",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magic bubble.zip",
+      "label": "魔法气泡",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magic bubble 2.zip",
+      "label": "魔法气泡2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magic bubble rumor.zip",
+      "label": "魔法气泡外传",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Death Pinball MD.zip",
+      "label": "死亡弹珠台MD",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Winged warrior.zip",
+      "label": "翼人战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Deadly killer 1.zip",
+      "label": "致命杀手1",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Deadly killer 2.zip",
+      "label": "致命杀手2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/92 Barcelona Olympics.zip",
+      "label": "92巴塞罗那奥运会",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/96 Atlanta Summer Olympics.zip",
+      "label": "96亚特兰大夏季奥运",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/BB bird and big wolf.zip",
+      "label": "BB鸟与大野狼",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/DJ boy.zip",
+      "label": "DJ男孩",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/EL Weiente.zip",
+      "label": "EL维恩特",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/EX-heterogeneous.zip",
+      "label": "EX-异种",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/EX Bird Fighter.zip",
+      "label": "EX鸟人战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/F15 Falcon Action.zip",
+      "label": "F15猎鹰行动",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/F1 World Championship.zip",
+      "label": "F1世界锦标赛",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/F1 racing car.zip",
+      "label": "F1赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/FIFA Football 96.zip",
+      "label": "FIFA足球96",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/FIFA Football 97 Gold Edition.zip",
+      "label": "FIFA足球97黄金版",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/JUJU legend - violently thunderous.zip",
+      "label": "JUJU传说-暴跳如雷",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/NBA Bull Vs Lakers.zip",
+      "label": "NBA公牛Vs湖人",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/NBA Basketball 98.zip",
+      "label": "NBA篮球98",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/NHL Hockey 94.zip",
+      "label": "NHL曲棍球94",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Q version super power beautiful girl.zip",
+      "label": "Q版超能力美少女",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Tecmo Super Cricket.zip",
+      "label": "Tecmo超级板球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Tecmo Super Cricket Final 3.zip",
+      "label": "Tecmo超级板球最终版3",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/The Adventures of Tintin.zip",
+      "label": "丁丁历险记",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dragon Ball - Dance Tour.zip",
+      "label": "七龙珠-舞游列传",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Sega five strong one.zip",
+      "label": "世嘉五强合一",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/World hero.zip",
+      "label": "世界英雄",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Two fools.zip",
+      "label": "两个傻瓜",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/theme park.zip",
+      "label": "主题公园",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Corporate organization.zip",
+      "label": "企业联合组织",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bright power 2.zip",
+      "label": "光明力量2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Cut throat.zip",
+      "label": "割喉岛",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Garfield.zip",
+      "label": "加菲猫",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Action 52 in 1.zip",
+      "label": "动作52合1",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Action NBA.zip",
+      "label": "动作NBA",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Animal fast.zip",
+      "label": "动物快打",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Snoopy Haunted House Adventure.zip",
+      "label": "史诺比鬼屋历险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Nightmare circus.zip",
+      "label": "噩梦马戏团",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Alien double stupid 2.zip",
+      "label": "外星双傻2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Alien prince.zip",
+      "label": "外星王子",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Big boy.zip",
+      "label": "大头小子",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Tecmore Football World Cup 93.zip",
+      "label": "特克摩足球世界杯93",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bunny Rabbit - Crisis.zip",
+      "label": "宾尼兔-危机重重",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Little Witch Coton.zip",
+      "label": "小魔女科顿",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Cui Di and Big Stupid Cat.zip",
+      "label": "崔弟与大笨猫",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Phantom 2040.zip",
+      "label": "幻影2040",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/ghost.zip",
+      "label": "幽灵",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Pinball.zip",
+      "label": "弹球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Ninja kill threesome.zip",
+      "label": "忍杀三人组",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Outdoor Big Car - Arcade Edition.zip",
+      "label": "户外大飙车-街机版",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Broadcasting beach sumo.zip",
+      "label": "播磨滩相扑",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Lemming Story 2.zip",
+      "label": "旅鼠总动员2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Time killer.zip",
+      "label": "时间杀手",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dark pursuer.zip",
+      "label": "暗之追迹者",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mummy hockey.zip",
+      "label": "木乃伊曲棍球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mech.zip",
+      "label": "机甲争霸",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Game big challenge 1.zip",
+      "label": "游戏大挑战1",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Slam dunk.zip",
+      "label": "灌篮高手",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mars Escaper.zip",
+      "label": "火星逃脱者",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/ball.zip",
+      "label": "球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Crazy Mickey Mouse.zip",
+      "label": "疯狂米老鼠",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Crazy event (Q version).zip",
+      "label": "疯狂赛事(Q版)",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Real monster.zip",
+      "label": "真实怪物",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/True lie (Devil's Emperor).zip",
+      "label": "真实谎言(魔鬼大帝)",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Clay warrior.zip",
+      "label": "粘土战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/John Madden Football 98.zip",
+      "label": "约翰麦登橄榄球98",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Virtual Bart Simpson.zip",
+      "label": "虚拟巴特",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Crayon Shinchan.zip",
+      "label": "蜡笔小新",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Observation Point.zip",
+      "label": "观察点",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Time warrior.zip",
+      "label": "超时空战警",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Super King Kong 99.zip",
+      "label": "超级大金刚99",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/The more the mad dragon.zip",
+      "label": "越空狂龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Urban attack.zip",
+      "label": "都市攻击",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Asterix - Big Rescue.zip",
+      "label": "阿斯特瑞克斯-大救援",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Adams family.zip",
+      "label": "阿达姆斯家庭",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Trap - Mayan Adventure.zip",
+      "label": "陷阱-玛雅冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/No. 0 special police.zip",
+      "label": "零号特警",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Humerus.zip",
+      "label": "骸骨",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Demon Master.zip",
+      "label": "魔界大法师",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rugby World Football 95.zip",
+      "label": "鲁格比世界足球95",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Black water pirate.zip",
+      "label": "黑水海盗",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Seven-up kid.zip",
+      "label": "七喜小子",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Warehouse.zip",
+      "label": "仓库番",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/World Brave - Shuangliner.zip",
+      "label": "世界勇者-双麟儿",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Main point racing.zip",
+      "label": "主视点赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/King Arthur.zip",
+      "label": "亚瑟王",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Desperate.zip",
+      "label": "亡命之徒",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Iso Country 3.zip",
+      "label": "伊苏国3",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Zombie neighbor.zip",
+      "label": "僵尸邻居",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Zombie college.zip",
+      "label": "僵尸高校",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Light and darkness.zip",
+      "label": "光明与黑暗",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bright power 1.zip",
+      "label": "光明力量1",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Glorious legend.zip",
+      "label": "光辉传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rabbit Adventures.zip",
+      "label": "兔兔历险记",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Shadow of the Beast 1.zip",
+      "label": "兽之影1",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Adventure experience.zip",
+      "label": "冒险经历",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Buick Roger final trial.zip",
+      "label": "别克罗杰最终审判",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Power racing.zip",
+      "label": "动力赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Carl 50.zip",
+      "label": "卡尔50",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Indiana Jones.zip",
+      "label": "印第安那琼斯",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Atomic warrior.zip",
+      "label": "原子战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/chameleon.zip",
+      "label": "变色龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Weird world.zip",
+      "label": "古怪世界",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Stallone.zip",
+      "label": "史泰龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Vengeful Blade.zip",
+      "label": "复仇之刃",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Alien double stupid.zip",
+      "label": "外星双傻",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/The Sea Roar - Rocket Knight.zip",
+      "label": "大海哮--火箭骑士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Big melee.zip",
+      "label": "大混战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Big bucket.zip",
+      "label": "大混斗",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Great sailing era.zip",
+      "label": "大航海时代",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Genius walks forward.zip",
+      "label": "天才向前走",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Taige Zhizhi.zip",
+      "label": "太阁立志传",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Lost Vikings.zip",
+      "label": "失落的维京人",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Exotic island.zip",
+      "label": "奇异岛",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Goddess birth.zip",
+      "label": "女神诞生",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Cosmic cruiser.zip",
+      "label": "宇宙巡航机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Space battleship.zip",
+      "label": "宇宙战舰",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Cosmic leader.zip",
+      "label": "宇宙首领",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Little Penguin.zip",
+      "label": "小企鹅",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Peter Pan.zip",
+      "label": "小飞侠",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Kawasaki Motorsports.zip",
+      "label": "川崎机车赛",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Alien warrior.zip",
+      "label": "异神战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Micromachine 2.zip",
+      "label": "微型机器2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Micromachine 96.zip",
+      "label": "微型机器96",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Ninja rumor.zip",
+      "label": "忍者外传",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Monster wrestling.zip",
+      "label": "怪兽摔角",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fighting primitive.zip",
+      "label": "战斗原始人",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Combat racing.zip",
+      "label": "战斗赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Outdoor Big Car - 2019 Future Edition.zip",
+      "label": "户外大飙车-2019未来版",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Outdoor big car.zip",
+      "label": "户外大飙车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dot baseball 4.zip",
+      "label": "打点棒球4",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Boxing - the king of new legends.zip",
+      "label": "拳击-新传说之王",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Catching the death squad -18 forbidden aircraft.zip",
+      "label": "捉虫敢死队-18禁飞机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Catching a hero.zip",
+      "label": "捉虫英雄",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Monaco GP Racing II.zip",
+      "label": "摩纳哥GP赛车II",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Star power 2.zip",
+      "label": "星际力量2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Interstellar shooting.zip",
+      "label": "星际射击",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Star gun cavalry.zip",
+      "label": "星际枪骑兵",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Interstellar management.zip",
+      "label": "星际管理",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mech.zip",
+      "label": "机甲神兵",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Squirrel fight.zip",
+      "label": "松鼠大作战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Squirrel Lutz.zip",
+      "label": "松鼠鲁兹",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fruit Philippine dog.zip",
+      "label": "果菲狗",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Chaco - the eternal.zip",
+      "label": "查可-永恒之人",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Campus female warrior 3.zip",
+      "label": "校园女战士3",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rubber gun.zip",
+      "label": "橡胶枪",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Armed predator.zip",
+      "label": "武装掠夺者",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/military helicopter.zip",
+      "label": "武装直升机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Legend of death.zip",
+      "label": "死神传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Crystal pony.zip",
+      "label": "水晶小马",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dune Magic Fort 1.zip",
+      "label": "沙丘魔堡1",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dune Fort 2.zip",
+      "label": "沙丘魔堡2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Exile.zip",
+      "label": "流放者",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/catastrophe.zip",
+      "label": "浩劫",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fighting at sea.zip",
+      "label": "海上争雄",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Haunted house 2.zip",
+      "label": "海岛冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Pirate's treasure.zip",
+      "label": "海盗的宝藏",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Chaotic locomotive.zip",
+      "label": "混乱机车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Flamingo.zip",
+      "label": "火烈鸟",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rocket knight.zip",
+      "label": "火箭骑士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Wolf child.zip",
+      "label": "狼孩",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Raptors mercenary.zip",
+      "label": "猛龙雇佣兵",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Kingdom wizard.zip",
+      "label": "王国巫师",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Yujia Bear.zip",
+      "label": "瑜加熊",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Biochemical fighter.zip",
+      "label": "生化战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Elevator manager.zip",
+      "label": "电梯管理员",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/True treasure beads kid.zip",
+      "label": "真宝珠小子",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Milling storm.zip",
+      "label": "碾磨暴风雨",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Air combat.zip",
+      "label": "空战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Second World War.zip",
+      "label": "第二次世界大战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fifth movement.zip",
+      "label": "第五乐章",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Pink Silly Leopard Hollywood Adventures.zip",
+      "label": "粉红傻豹好莱坞历险记",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Roman Warrior 1.zip",
+      "label": "罗马勇士1",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Roman Warrior 2.zip",
+      "label": "罗马勇士2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/US Captain and Avengers.zip",
+      "label": "美军上尉与复仇者",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/American winning.zip",
+      "label": "美国夺标",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Beauty and the beast.zip",
+      "label": "美女与野兽",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Free blog.zip",
+      "label": "自由博击",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Blue age.zip",
+      "label": "蓝色年代",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bugs.zip",
+      "label": "虫虫特攻队",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Super volleyball.zip",
+      "label": "超级排球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fast racing.zip",
+      "label": "迅猛赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Street racing.zip",
+      "label": "街头赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Test driver 2 - duel.zip",
+      "label": "试车员2-决斗",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Super Fantasy Zone.zip",
+      "label": "超级幻想地带",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Super Barbie model.zip",
+      "label": "超级芭比模特",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Simpsons battle the space monster.zip",
+      "label": "辛普生一族决战太空怪",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bangka Cat Adventure.zip",
+      "label": "邦卡猫大冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Reloading Nova.zip",
+      "label": "重装诺瓦",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Iron man rushing.zip",
+      "label": "铁人狂奔",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Iron warrior.zip",
+      "label": "铁腕战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Galaxy Warrior.zip",
+      "label": "银河战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Lightning Attack Special Edition.zip",
+      "label": "闪电出击特别版",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Lightning Returns - Eternal Pursuit.zip",
+      "label": "闪电归来-永恒的追寻",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Akas Adventure.zip",
+      "label": "阿卡斯冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Zero wind fighter.zip",
+      "label": "零风战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rexron.zip",
+      "label": "雷克斯龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Thunder.zip",
+      "label": "雷电",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Top off-road racing 2.zip",
+      "label": "顶级越野赛车2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Scenery.zip",
+      "label": "风光观赏",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/aircraft.zip",
+      "label": "飞机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magic school bus.zip",
+      "label": "魔术校车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bird man fighter.zip",
+      "label": "鸟人战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Uncle McDonald's Adventures.zip",
+      "label": "麦当劳大叔历险记",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dragon and dungeon.zip",
+      "label": "龙与地下城",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dragon's Pinball - Revolutionary Edition.zip",
+      "label": "龙之弹珠台-革命版",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dragon knight.zip",
+      "label": "龙骑士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/World cup football.zip",
+      "label": "世界杯足球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Chinese chess.zip",
+      "label": "中国象棋",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Master's monster.zip",
+      "label": "主人的怪物",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Ixdas.zip",
+      "label": "依克斯达斯",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Zombie big attack.zip",
+      "label": "僵尸大进击",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Element dominator.zip",
+      "label": "元素支配者",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Soldier Bee X.zip",
+      "label": "兵蜂X",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Beastmaster.zip",
+      "label": "兽王记",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Caesars Palace.zip",
+      "label": "凯撒皇宫",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Crusades.zip",
+      "label": "十字军东征",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Legend of Kadaxu.zip",
+      "label": "卡达叙传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Kind of crisis.zip",
+      "label": "危机之种",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Deformation fighter.zip",
+      "label": "变形战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Coquettish wolf.zip",
+      "label": "古惑狼",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Roaring like thunder.zip",
+      "label": "咆哮如雷",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Four days Ming Wang.zip",
+      "label": "四天明王",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/King's grace.zip",
+      "label": "国王之恩典",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Holy sword.zip",
+      "label": "圣剑",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bible adventure.zip",
+      "label": "圣经冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Hellfire.zip",
+      "label": "地狱火",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Earth Superman.zip",
+      "label": "地球超人",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Tank battle.zip",
+      "label": "坦克大战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Doraemon.zip",
+      "label": "多啦A梦",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dominos.zip",
+      "label": "多米诺斯",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Big tank.zip",
+      "label": "大坦克",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Monopoly.zip",
+      "label": "大富翁",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Big whirlwind.zip",
+      "label": "大旋风",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Grand car.zip",
+      "label": "大赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Sledgehammer.zip",
+      "label": "大锤恐龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Great Devils Village.zip",
+      "label": "大魔界村",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Space Harry 2.zip",
+      "label": "太空哈利2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Altman.zip",
+      "label": "奥特曼",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Peacock King 2.zip",
+      "label": "孔雀王2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Space fighter.zip",
+      "label": "宇宙战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Gemstones 3.zip",
+      "label": "宝石方块3",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Family competition.zip",
+      "label": "家庭竞赛",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Small car challenge.zip",
+      "label": "小型赛车挑战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mountain Island Adventure.zip",
+      "label": "山乐岛大冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Pat hot basketball.zip",
+      "label": "帕特火爆篮球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magic legend.zip",
+      "label": "幻境传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magical magic star.zip",
+      "label": "幻法小魔星",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Strong tracking speed.zip",
+      "label": "强力追踪飞车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rainbow Island.zip",
+      "label": "彩虹岛",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Shadow Warrior - The Secret of Ninja.zip",
+      "label": "影武者-忍者之秘",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fast ball 2.zip",
+      "label": "快速球2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Headquarters chase 2.zip",
+      "label": "总部追击2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dinosaur continent.zip",
+      "label": "恐龙大陆",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Demon wave machine.zip",
+      "label": "恶魔波子机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Combat formation.zip",
+      "label": "战斗编队",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/God of war.zip",
+      "label": "战神",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Playing marble machine.zip",
+      "label": "打弹子机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Playing duck.zip",
+      "label": "打鸭子",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Ghost master.zip",
+      "label": "捉鬼大师",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Wrestling.zip",
+      "label": "摔跤",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/New Zealand Island Legend.zip",
+      "label": "新西兰岛传说",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Sunset knight.zip",
+      "label": "日落骑士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Star master.zip",
+      "label": "星际主人",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Star cruiser.zip",
+      "label": "星际巡洋舰",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Suggest.zip",
+      "label": "暗示",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mobile police.zip",
+      "label": "机动警察",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Granda War.zip",
+      "label": "格兰达战记",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fantasy simulation.zip",
+      "label": "梦幻模拟战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Justice trial.zip",
+      "label": "正义审判",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Armed police.zip",
+      "label": "武装行警",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Budokan - Yamato Spirit.zip",
+      "label": "武道馆-大和魂",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Game California.zip",
+      "label": "游戏加州",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Hot wrestling.zip",
+      "label": "火爆摔角列传",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Bloody college football.zip",
+      "label": "热血高校足球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Burning soul.zip",
+      "label": "燃烧之魂",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Crack Down.zip",
+      "label": "爆裂激战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/pastoral.zip",
+      "label": "田园",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/TV fighter.zip",
+      "label": "电视斗士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Crazy ball.zip",
+      "label": "疯狂小球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Blast racing.zip",
+      "label": "疾风赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Goal Earth.zip",
+      "label": "目标：地球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Real boxing.zip",
+      "label": "真实拳击",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Sword in the Stone.zip",
+      "label": "石中剑",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dark castle.zip",
+      "label": "黑暗城堡",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Excalibur Legend 2.zip",
+      "label": "神剑传说2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magic boy.zip",
+      "label": "神奇小子",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Magic boy 3.zip",
+      "label": "神奇小子3",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Anti-drug guard.zip",
+      "label": "禁毒卫士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Ion fighter.zip",
+      "label": "离子战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Airmaster.zip",
+      "label": "空中霸王",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/assault.zip",
+      "label": "突击",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Assault armor.zip",
+      "label": "突击装甲",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Assault fighter.zip",
+      "label": "突袭战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Space Invaders 91.zip",
+      "label": "太空侵略者91",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Green dog.zip",
+      "label": "绿狗",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rome defending.zip",
+      "label": "罗马保卫战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Match remote control car.zip",
+      "label": "火柴遥控车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Sky Magic City.zip",
+      "label": "天空魔城",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Deadly maze.zip",
+      "label": "致命迷宫",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Arcade classic collection.zip",
+      "label": "街机经典合集",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Snake.zip",
+      "label": "贪吃蛇",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Superbike.zip",
+      "label": "超级摩托车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Super Monaco Racing.zip",
+      "label": "超级摩纳哥赛车",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Super turret.zip",
+      "label": "超级炮塔",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Super table tennis.zip",
+      "label": "超级乒乓球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dragon and phoenix.zip",
+      "label": "龙凤神偷",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Three-dimensional line game.zip",
+      "label": "立体划线游戏",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Darwin 4081.zip",
+      "label": "达尔文4081",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Little bird.zip",
+      "label": "小鸟雀弟",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Dickert Lanxi.zip",
+      "label": "迪克特蓝西",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Douglas Boxing.zip",
+      "label": "道格拉斯拳击",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/tribe.zip",
+      "label": "部落",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Heavy pressure.zip",
+      "label": "重兵压境",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Heavy metal marble.zip",
+      "label": "重金属弹球",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Rotating square.zip",
+      "label": "旋转方块",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Lightning Strike 2.zip",
+      "label": "闪电出击2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mysterious Pyramid 2.zip",
+      "label": "神秘金字塔2",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Solitaire.zip",
+      "label": "接龙",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Pegasus Knight.zip",
+      "label": "飞马骑士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Fighter.zip",
+      "label": "骷髅战机",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Devil with Lion.zip",
+      "label": "魔王连狮子",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Devil's Forest.zip",
+      "label": "魔界之森",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Mahjong Dojo.zip",
+      "label": "麻将道场",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Egg adventure.zip",
+      "label": "鸡蛋冒险",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Space warrior.zip",
+      "label": "太空战士",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    },
+    {
+      "path": "/mnt/sdcard/003/Yuyou White Book - Devil's Unity.zip",
+      "label": "幽游白书-魔强统一战",
+      "core_path": "/mnt/sdcard/cubegm/cores/fceumm_libretro.so",
+      "core_name": "fceumm",
+      "crc32": "",
+      "db_name": "003-NES-Chinese.lpl"
+    }
+  ]
+}
