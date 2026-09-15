@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "default_core_path": "",
-  "default_core_name": "",
+  "default_core_path": "/mnt/sdcard/cubegm/cores/gambatte_libretro.so",
+  "default_core_name": "gambatte",
   "label_display_mode": 0,
   "items": [
     {
@@ -10,7 +10,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dragon Quest 1+2.zip",
@@ -18,7 +18,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dragon Quest 3.zip",
@@ -26,7 +26,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dragon Quest - Monster Wonderland.zip",
@@ -34,7 +34,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dragon Quest - Monster Wonderland 2 - Il's Adventure.zip",
@@ -42,7 +42,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Ranch boy 2.zip",
@@ -50,7 +50,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Ranch boy 3.zip",
@@ -58,7 +58,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Wario Continental 2.zip",
@@ -66,7 +66,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Wario Continental 3.zip",
@@ -74,7 +74,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/The legend of Salda - the chapter of time and space.zip",
@@ -82,7 +82,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/The Legend of Salda - The Chapter of the Earth.zip",
@@ -90,7 +90,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Fingerwheel magic.zip",
@@ -98,7 +98,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Rockman.zip",
@@ -106,7 +106,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Rockman 2.zip",
@@ -114,7 +114,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Biochemical Commander - Ultimate Force.zip",
@@ -122,7 +122,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/FIFA Football 2000.zip",
@@ -130,7 +130,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Metal Gear.zip",
@@ -138,7 +138,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/X-Men-Special Function Group.zip",
@@ -146,7 +146,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/X-Men - Wolverine.zip",
@@ -154,7 +154,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Off-road locomotive.zip",
@@ -162,7 +162,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Toy Story 2.zip",
@@ -170,7 +170,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bombing Superman MAX-Light Brave.zip",
@@ -178,7 +178,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bomb Superman MAX-Ain Edition.zip",
@@ -186,7 +186,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bomber legend.zip",
@@ -194,7 +194,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Crazy locomotive race 2.zip",
@@ -202,7 +202,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Tetris DX.zip",
@@ -210,7 +210,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Disney Star Suite.zip",
@@ -218,7 +218,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Warner Star Suite - Martian Elba.zip",
@@ -226,7 +226,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Warner Star Grand Prix.zip",
@@ -234,7 +234,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dinosaur Hunter 1 - Battle of Fury.zip",
@@ -242,7 +242,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dinosaur Hunter 2 - Evil Seeds.zip",
@@ -250,7 +250,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dinosaur Hunter 3 - Shadow in the dark.zip",
@@ -258,7 +258,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bugs crisis.zip",
@@ -266,7 +266,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Mobile unit.zip",
@@ -274,7 +274,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Alice in Wonderland.zip",
@@ -282,7 +282,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Alien encounter.zip",
@@ -290,7 +290,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/National Star Baseball 2001.zip",
@@ -298,7 +298,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/National Star Tennis Tournament 2000.zip",
@@ -306,7 +306,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Haunted House Shadow 4.zip",
@@ -314,7 +314,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Transfiguration.zip",
@@ -322,7 +322,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Toy soldier 2.zip",
@@ -330,7 +330,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Toy Soldier - Air Combat.zip",
@@ -338,7 +338,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Toy Soldier - Heroes Invincible 2.zip",
@@ -346,7 +346,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Beautiful New World - Seeking Independence.zip",
@@ -354,7 +354,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Atlantis - The Lost Empire.zip",
@@ -362,7 +362,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Tower of the Magic 3.zip",
@@ -370,7 +370,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Barbie - Pet Rescue.zip",
@@ -378,7 +378,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Batman in New York.zip",
@@ -386,7 +386,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Batman - The Return of the Clown.zip",
@@ -394,7 +394,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Battle of Midway 1942.zip",
@@ -402,7 +402,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Tank battle.zip",
@@ -410,7 +410,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Gyro War.zip",
@@ -418,7 +418,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Steel knife ice hockey.zip",
@@ -426,7 +426,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Super confusing star war.zip",
@@ -434,7 +434,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Hunting Ghost Buffy - Magic Raiders.zip",
@@ -442,7 +442,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bunny Rabbit - Crazy Castle 3.zip",
@@ -450,7 +450,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bunny Rabbit - Crazy Castle 4.zip",
@@ -458,7 +458,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Buzz Lightyear Interstellar Mission.zip",
@@ -466,7 +466,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Crazy Speed 4.zip",
@@ -474,7 +474,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Agile commander.zip",
@@ -482,7 +482,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Squirrel adventure.zip",
@@ -490,7 +490,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Guagualong 1.zip",
@@ -498,7 +498,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Magic sword.zip",
@@ -506,7 +506,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Daffy Crow - Get Rich.zip",
@@ -514,7 +514,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Elevator Wars Robot Edition.zip",
@@ -522,7 +522,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/dinosaur.zip",
@@ -530,7 +530,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Car god - professional driving.zip",
@@ -538,7 +538,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Destroy the Duke 5.zip",
@@ -546,7 +546,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Warrior 2.zip",
@@ -554,7 +554,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/F1 Championship 2000.zip",
@@ -562,7 +562,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Frog crossing the street.zip",
@@ -570,7 +570,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/WWF Fighting Wrestling 2000.zip",
@@ -578,7 +578,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Space bee.zip",
@@ -586,7 +586,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Jack Long.zip",
@@ -594,7 +594,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Devils Village.zip",
@@ -602,7 +602,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Godzilla.zip",
@@ -610,7 +610,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Grand Theft Auto 1.zip",
@@ -618,7 +618,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Grand Theft Auto 2.zip",
@@ -626,7 +626,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Harry Potter and the Sorcerer's Stone.zip",
@@ -634,7 +634,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Heroes invincible 1.zip",
@@ -642,7 +642,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Heroes invincible 2.zip",
@@ -650,7 +650,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Invincible Hot Wheel Racing.zip",
@@ -658,7 +658,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Demon machine.zip",
@@ -666,7 +666,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Fishing Taro 2.zip",
@@ -674,7 +674,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/LEGO Game World.zip",
@@ -682,7 +682,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/LEGO Block Island 2.zip",
@@ -690,7 +690,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Lego Grand Prix.zip",
@@ -698,7 +698,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Four mad wars - legendary reproduction.zip",
@@ -706,7 +706,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/John Marton American Football 2000.zip",
@@ -714,7 +714,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Black Star Wars 2.zip",
@@ -722,7 +722,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Violent battle.zip",
@@ -730,7 +730,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Mickey Mouse Racing USA Challenge.zip",
@@ -738,7 +738,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Micromachine 3.zip",
@@ -746,7 +746,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Mission impossible.zip",
@@ -754,7 +754,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Monopoly.zip",
@@ -762,7 +762,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Monster Farm Battle Card.zip",
@@ -770,7 +770,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Key to Solomon.zip",
@@ -778,7 +778,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Monsters Inc.zip",
@@ -786,7 +786,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Mortal Kombat 4.zip",
@@ -794,7 +794,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/New Yunston Racing.zip",
@@ -802,7 +802,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/NBA Brian 3 vs 3 Basketball.zip",
@@ -810,7 +810,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Madden NBA 2001.zip",
@@ -818,7 +818,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/One Piece - the birth of the dream road fly pirate.zip",
@@ -826,7 +826,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bit Buddha Adventure.zip",
@@ -834,7 +834,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Power legend.zip",
@@ -842,7 +842,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dinosaurs Team - Lightspeed Rescue.zip",
@@ -850,7 +850,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dinosaurs - Powerful Commandos.zip",
@@ -858,7 +858,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Alien fighter DX.zip",
@@ -866,7 +866,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Rainbow Island.zip",
@@ -874,7 +874,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Monster Demolition - World Tour.zip",
@@ -882,7 +882,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Destroy Jin Gang 2 - US Tour.zip",
@@ -890,7 +890,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Laser superman.zip",
@@ -898,7 +898,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Little naughty Paris.zip",
@@ -906,7 +906,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Frontline war.zip",
@@ -914,7 +914,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Shrek.zip",
@@ -922,7 +922,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/The Simpsons.zip",
@@ -930,7 +930,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Football manager.zip",
@@ -938,7 +938,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Space invader.zip",
@@ -946,7 +946,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Shining.zip",
@@ -954,7 +954,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Spiderman 2.zip",
@@ -962,7 +962,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Spiderman.zip",
@@ -970,7 +970,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Mission.zip",
@@ -978,7 +978,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Quick whirlwind.zip",
@@ -986,7 +986,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Elf Mouse Brother - Home Tour.zip",
@@ -994,7 +994,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Yoga balloon.zip",
@@ -1002,7 +1002,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/James Bond - Black Crisis.zip",
@@ -1010,7 +1010,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Smurf adventure.zip",
@@ -1018,7 +1018,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Forest Xiaotaishan.zip",
@@ -1026,7 +1026,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Lion king.zip",
@@ -1034,7 +1034,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Flying girl.zip",
@@ -1042,7 +1042,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Naughty soldier.zip",
@@ -1050,7 +1050,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/The Simpsons - Halloween Horror Tree House.zip",
@@ -1058,7 +1058,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Smurf's nightmare.zip",
@@ -1066,7 +1066,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bunny - Jedi Counterattack.zip",
@@ -1074,7 +1074,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Cat and mouse - group of mice in hell.zip",
@@ -1082,7 +1082,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Cat and mouse - trapping.zip",
@@ -1090,7 +1090,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/tomb Raider.zip",
@@ -1098,7 +1098,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Professional skateboarder 1.zip",
@@ -1106,7 +1106,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Professional skateboarder 2.zip",
@@ -1114,7 +1114,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Professional skateboarder 3.zip",
@@ -1122,7 +1122,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Bad boy - Didoff.zip",
@@ -1130,7 +1130,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/10 shot bowling.zip",
@@ -1138,7 +1138,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Fierce skiing.zip",
@@ -1146,7 +1146,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/3D billiards.zip",
@@ -1154,7 +1154,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Dalmatian.zip",
@@ -1162,7 +1162,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Wizard.zip",
@@ -1170,7 +1170,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Pig big action.zip",
@@ -1178,7 +1178,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Woodpecker.zip",
@@ -1186,7 +1186,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/Destroy the world.zip",
@@ -1194,7 +1194,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     },
     {
       "path": "/mnt/sdcard/006/WWF wrestling.zip",
@@ -1202,7 +1202,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "006-GBC.lpl"
+      "db_name": "Nintendo - Game Boy Color"
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "default_core_path": "",
-  "default_core_name": "",
+  "default_core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
+  "default_core_name": "stella2014",
   "label_display_mode": 0,
   "items": [
     {
@@ -10,7 +10,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Journey - Escape.A26",
@@ -18,7 +18,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Outlaw - GunSlinger.A26",
@@ -26,7 +26,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Pac-Man.A26",
@@ -34,7 +34,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Pole Position.A26",
@@ -42,7 +42,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Porky's.A26",
@@ -50,7 +50,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Seaquest.A26",
@@ -58,7 +58,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Shark Attack.A26",
@@ -66,7 +66,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     },
     {
       "path": "/mnt/sdcard/008/Tempest (Prototype).A26",
@@ -74,7 +74,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "008-Atari2600.lpl"
+      "db_name": "Atari - 2600"
     }
   ]
 }

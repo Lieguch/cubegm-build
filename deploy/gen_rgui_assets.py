@@ -28,20 +28,20 @@ COVER_US = 307200          # 480*320*2
 COVER_W, COVER_H = 480, 320
 THUMB_W, THUMB_H = 160, 107
 
-# 分类 → (Playlist 名, default core)。全部 core='DETECT' —— 官方自适应（可选核心）。
+# 分类 → (Playlist 名, default core, RDB 官方数据库名, 默认核心 .so, 默认核心显示名)。
+# 方案甲（RDB 官网标准）：db_name=官方数据库名（驱动内容扫描精确识别 + 缩略图目录），
+#   default_core_path 预设首选核心（加载直接用；可切）。
+RDB_BASE = '/mnt/sdcard/cubegm/cores/'
 PLATFORM = {
-    # 000-008 全部 DETECT：RA 加载时按 .info 的 supported_extensions 列出该平台支持的全部核心供选择
-    #   （有几个核心弹几个：MD .bin→genesis_plus_gx+picodrive / 街机 .zip→fbneo+fbalpha2012系+mame系）。
-    #   003 修正：实机实证为 SEGA Mega Drive（ROM 头 00FF0DC0 初始 SSP + 魂斗罗铁血兵团等 MD 独占游戏），非 NES
-    0: ('000-Arcade',      'DETECT'),
-    1: ('001-NES',         'DETECT'),
-    2: ('002-SNES',        'DETECT'),
-    3: ('003-MegaDrive',   'DETECT'),
-    4: ('004-GBA',         'DETECT'),
-    5: ('005-GB',          'DETECT'),
-    6: ('006-GBC',         'DETECT'),
-    7: ('007-PlayStation', 'DETECT'),
-    8: ('008-Atari2600',   'DETECT'),
+    0: ('000-Arcade',       'DETECT', 'FBNeo - Arcade Games',                        'fbneo_libretro.so',            'fbneo'),
+    1: ('001-NES',          'DETECT', 'Nintendo - Nintendo Entertainment System',    'fceumm_libretro.so',           'fceumm'),
+    2: ('002-SNES',         'DETECT', 'Nintendo - Super Nintendo Entertainment System', 'snes9x2005_libretro.so',   'snes9x2005'),
+    3: ('003-MegaDrive',    'DETECT', 'Sega - Mega Drive - Genesis',                 'genesis_plus_gx_libretro.so',  'genesis_plus_gx'),
+    4: ('004-GBA',          'DETECT', 'Nintendo - Game Boy Advance',                 'mgba_libretro.so',             'mgba'),
+    5: ('005-GB',           'DETECT', 'Nintendo - Game Boy',                         'gambatte_libretro.so',         'gambatte'),
+    6: ('006-GBC',          'DETECT', 'Nintendo - Game Boy Color',                   'gambatte_libretro.so',         'gambatte'),
+    7: ('007-PlayStation',  'DETECT', 'Sony - PlayStation',                          'pcsx_rearmed_libretro.so',     'pcsx_rearmed'),
+    8: ('008-Atari2600',    'DETECT', 'Atari - 2600',                                'stella2014_libretro.so',       'stella2014'),
 }
 
 # 原厂 libemu_*.so → 478 已部署 libretro core 名（filelist.xml 例外核心转换表）
@@ -210,25 +210,27 @@ def make_palette_png(raw, dw=THUMB_W, dh=THUMB_H):
             chunk(b'PLTE', bytes(pal)) + chunk(b'IDAT', comp) + chunk(b'IEND', b''))
 
 
-def build_playlist(playlist_name, games, idx2core):
-    """官方 JSON 1.0 playlist。path 指向原厂 000-008 目录，core_path 为绝对路径。"""
+def build_playlist(playlist_name, games, idx2core, rdb_name, def_core_so, def_core_name):
+    """官方 JSON 1.0 playlist（方案甲 RDB 官网标准）。
+    path 指向原厂 000-008 目录；core_path=DETECT（官方自适应可选核心）；
+    db_name=官方 RDB 数据库名（内容扫描精确识别 + 缩略图目录 system_name）；
+    default_core_path/name 预设首选核心（加载即用，可切）。"""
     items = []
     for g in games:
         label = g['cn'] or g['en'] or g['base']
         cat = playlist_name.split('-')[0]  # '000'
-        # 全部 DETECT：官方自适应（RA 按 .info supported_extensions 列出该平台全部核心供选）
-        core_path = 'DETECT'
-        core_name = 'DETECT'
         items.append({
             'path': '/mnt/sdcard/%s/%s' % (cat, g['rom']),
             'label': label,
-            'core_path': core_path,
-            'core_name': core_name,
+            'core_path': 'DETECT',
+            'core_name': 'DETECT',
             'crc32': '',
-            'db_name': playlist_name + '.lpl',
+            'db_name': rdb_name,          # 官方数据库名（如 "Sega - Mega Drive - Genesis"）
         })
-    return {'version': '1.0', 'default_core_path': '',
-            'default_core_name': '', 'label_display_mode': 0, 'items': items}
+    return {'version': '1.0',
+            'default_core_path': RDB_BASE + def_core_so,   # /mnt/sdcard/cubegm/cores/xxx.so
+            'default_core_name': def_core_name,
+            'label_display_mode': 0, 'items': items}
 
 
 def main():
@@ -253,7 +255,7 @@ def main():
         if not os.path.exists(datp):
             print(f'[{cat:03d}] dat 缺失，跳过')
             continue
-        pname, def_core = PLATFORM[cat]
+        pname, def_core, rdb_name, def_so, def_dn = PLATFORM[cat]
         covers, games = parse_dat(datp, flmap.get(cat))
         # 封面 rom 名集合（label 用于缩略图文件名）
         # 封面去重：同一 rom 多帧时保留最小帧号（_000 首帧）
@@ -266,15 +268,14 @@ def main():
         # 全部 DETECT（官方自适应，idx2core 值恒为 DETECT，仅保留结构兼容）
         idx2core = {g['idx']: def_core for g in games}
 
-        # 1) playlist JSON
-        pl = build_playlist(pname, games, idx2core)
-        # db_name：官方 thumbnails 目录名 = playlist 名
+        # 1) playlist JSON（方案甲：RDB db_name + default_core）
+        pl = build_playlist(pname, games, idx2core, rdb_name, def_so, def_dn)
         pl_path = os.path.join(play_dir, pname + '.lpl')
         with open(pl_path, 'w', encoding='utf-8') as f:
             json.dump(pl, f, ensure_ascii=False, indent=2)
 
-        # 2) 缩略图 PNG
-        thumb_cat = os.path.join(thumb_root, pname, 'Named_Boxarts')
+        # 2) 缩略图 PNG（目录用官方 RDB 数据库名 = RA 的 system_name）
+        thumb_cat = os.path.join(thumb_root, rdb_name, 'Named_Boxarts')
         os.makedirs(thumb_cat, exist_ok=True)
         n_png = 0
         for base, _frame, raw in covers:

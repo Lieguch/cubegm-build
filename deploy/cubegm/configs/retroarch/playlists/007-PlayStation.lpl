@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "default_core_path": "",
-  "default_core_name": "",
+  "default_core_path": "/mnt/sdcard/cubegm/cores/pcsx_rearmed_libretro.so",
+  "default_core_name": "pcsx_rearmed",
   "label_display_mode": 0,
   "items": [
     {
@@ -10,7 +10,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Hyakujuu Sentai Gaoranger.img",
@@ -18,7 +18,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Blade.img",
@@ -26,7 +26,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Wipeout.img",
@@ -34,7 +34,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/KazenoKlonoa-DoortoPhantomile.img",
@@ -42,7 +42,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/GundamBattleAssault.img",
@@ -50,7 +50,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/League Jikkyou Winning Eleven 2000.img",
@@ -58,7 +58,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Poitters Point 2.img",
@@ -66,7 +66,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Sword of soul.img",
@@ -74,7 +74,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/BioHazard3-LasfEscape.img",
@@ -82,7 +82,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/tekken.img",
@@ -90,7 +90,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/tekken2.img",
@@ -98,7 +98,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/tekken3.img",
@@ -106,7 +106,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Command & Conquer Red alert.img",
@@ -114,7 +114,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/DeltaForce-UrbanWarfare.img",
@@ -122,7 +122,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Dino Crisis 2.img",
@@ -130,7 +130,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Dragon Ball GT Final Bout.img",
@@ -138,7 +138,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/G-Darius.img",
@@ -146,7 +146,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Kamen Rider Ryuki.img",
@@ -154,7 +154,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Resident Evil Survivor.img",
@@ -162,7 +162,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Silent Hill.img",
@@ -170,7 +170,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Tomand Jerry-House Trap.img",
@@ -178,7 +178,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Ultraman evolved fighting.img",
@@ -186,7 +186,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Dragon Ball Fighter.iso",
@@ -194,7 +194,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Chariots of Fire II.iso",
@@ -202,7 +202,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/dune 2000.img",
@@ -210,7 +210,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/Toy Story 2 Action Game.iso",
@@ -218,7 +218,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     },
     {
       "path": "/mnt/sdcard/007/World Soccer Winning Eleven 3 Final Version (J) (SPG) (Konami).iso",
@@ -226,7 +226,7 @@
       "core_path": "DETECT",
       "core_name": "DETECT",
       "crc32": "",
-      "db_name": "007-PlayStation.lpl"
+      "db_name": "Sony - PlayStation"
     }
   ]
 }
