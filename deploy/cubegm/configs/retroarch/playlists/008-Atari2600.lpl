@@ -7,72 +7,72 @@
     {
       "path": "/mnt/sdcard/008/Frankenstein's Monster.A26",
       "label": "弗兰肯斯坦的怪物",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Journey - Escape.A26",
       "label": "闪躲",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Outlaw - GunSlinger.A26",
       "label": "持枪歹徒",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Pac-Man.A26",
       "label": "吃豆人",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Pole Position.A26",
       "label": "赛车",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Porky's.A26",
       "label": "波基历险",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Seaquest.A26",
       "label": "深海潜舰",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Shark Attack.A26",
       "label": "鲨鱼攻击",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     },
     {
       "path": "/mnt/sdcard/008/Tempest (Prototype).A26",
       "label": "海战",
-      "core_path": "/mnt/sdcard/cubegm/cores/stella2014_libretro.so",
-      "core_name": "stella2014",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
       "crc32": "",
       "db_name": "008-Atari2600.lpl"
     }

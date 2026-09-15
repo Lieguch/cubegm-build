@@ -30,15 +30,18 @@ THUMB_W, THUMB_H = 160, 107
 
 # 分类 → (Playlist 名, 默认 core 名)。000 街机按 filelist.xml 逐游戏覆盖（见 load_filelist）。
 PLATFORM = {
+    # 000 街机：filelist.xml 逐游戏精确映射 + 默认 fbneo（zip 无扩展名特征，DETECT 无法识别）
+    # 001-008 家用机/掌机：core=DETECT —— 官方自适应（RA 按扩展名 + core 列表选择，多核心弹列表）
+    #   003 修正：实机实证为 SEGA Mega Drive（ROM 头 00FF0DC0 初始 SSP + 魂斗罗铁血兵团等 MD 独占游戏），非 NES
     0: ('000-Arcade',      'fbneo_libretro.so'),
-    1: ('001-NES',         'fceumm_libretro.so'),
-    2: ('002-SNES',        'snes9x2005_libretro.so'),
-    3: ('003-NES-Chinese', 'fceumm_libretro.so'),
-    4: ('004-GBA',         'mgba_libretro.so'),
-    5: ('005-GB',          'gambatte_libretro.so'),
-    6: ('006-GBC',         'gambatte_libretro.so'),
-    7: ('007-PlayStation', 'pcsx_rearmed_libretro.so'),
-    8: ('008-Atari2600',   'stella2014_libretro.so'),
+    1: ('001-NES',         'DETECT'),
+    2: ('002-SNES',        'DETECT'),
+    3: ('003-MegaDrive',   'DETECT'),
+    4: ('004-GBA',         'DETECT'),
+    5: ('005-GB',          'DETECT'),
+    6: ('006-GBC',         'DETECT'),
+    7: ('007-PlayStation', 'DETECT'),
+    8: ('008-Atari2600',   'DETECT'),
 }
 
 # 原厂 libemu_*.so → 478 已部署 libretro core 名（filelist.xml 例外核心转换表）
@@ -214,12 +217,18 @@ def build_playlist(playlist_name, games, idx2core):
         core = g['core'] or idx2core.get(g['idx'])
         label = g['cn'] or g['en'] or g['base']
         cat = playlist_name.split('-')[0]  # '000'
-        core_path = ('/mnt/sdcard/cubegm/cores/' + core) if core else 'DETECT'
+        # core=DETECT → 官方自适应（RA 加载时 core 检测/多核心弹列表）；否则绝对路径
+        if core and core != 'DETECT':
+            core_path = '/mnt/sdcard/cubegm/cores/' + core
+            core_name = core.rsplit('_libretro.so', 1)[0]
+        else:
+            core_path = 'DETECT'
+            core_name = 'DETECT'
         items.append({
             'path': '/mnt/sdcard/%s/%s' % (cat, g['rom']),
             'label': label,
             'core_path': core_path,
-            'core_name': (core.rsplit('_libretro.so', 1)[0] if core else 'DETECT'),
+            'core_name': core_name,
             'crc32': '',
             'db_name': playlist_name + '.lpl',
         })
