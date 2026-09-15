@@ -656,6 +656,9 @@ if [ -f "$CORE_OUT/snes9x2005_plus_libretro.so" ]; then
         && log "  snes9x2005_libretro.so <- snes9x2005_plus (optimised alias)"
 fi
 cp -f "$HERE/cubegm/cores/config.xml"   "$DST/cores/" 2>/dev/null || true
+# core info (.info)：RA 自适应核心检测（DETECT）用 supported_extensions 过滤核心列表
+# 全量覆盖原厂系统 + 478 部署的 libretro core（libretro-super dist/info 官方文件）
+cp -f "$HERE/cubegm/cores/"*.info      "$DST/cores/" 2>/dev/null || true
 cp -f "$HERE/cubegm/zhijack.sh"         "$DST/" 2>/dev/null || true
 cp -f "$HERE/cubegm/autorun"            "$DST/" 2>/dev/null || true
 cp -f "$HERE/retroarch.cfg"              "$DST/" 2>/dev/null || true
