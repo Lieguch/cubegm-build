@@ -368,7 +368,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-vulkan --disable-x11 --disable-wayland \
         --disable-ffmpeg --disable-networking --disable-cheevos \
         --disable-discord --disable-7zip --disable-freetype \
-        --disable-rpng --disable-flac --disable-jack --disable-pulse \
+        --enable-rpng --disable-flac --disable-jack --disable-pulse \
         --disable-ssl \
         --disable-builtinmbedtls \
         --disable-videoprocessor --disable-qt --disable-cg \
