@@ -1,6 +1,7 @@
 --- a/gfx/drivers/sdl_gfx.c
 +++ b/gfx/drivers/sdl_gfx.c
-@@ -61,6 +61,9 @@    uint8_t font_g;
+@@ -61,6 +61,9 @@
+    uint8_t font_g;
     uint8_t font_b;
     bool quitting;
 +   unsigned rotation;
@@ -9,7 +10,8 @@
  } sdl_video_t;
  
  static void sdl_gfx_free(void *data)
-@@ -78,6 +81,11 @@    scaler_ctx_gen_reset(&vid->scaler);
+@@ -78,6 +81,11 @@
+    scaler_ctx_gen_reset(&vid->scaler);
     scaler_ctx_gen_reset(&vid->menu.scaler);
  
 +   if (vid->rotate_buf) {
@@ -20,7 +22,8 @@
     free(vid);
  }
  
-@@ -294,6 +302,9 @@    if (video->fullscreen)
+@@ -294,6 +302,9 @@
+    if (video->fullscreen)
        SDL_ShowCursor(SDL_DISABLE);
  
 +   vid->rotation = 0;
@@ -29,7 +32,8 @@
     sdl_gfx_set_handles();
  
     if (input && input_data)
-@@ -358,6 +369,14 @@    }
+@@ -358,6 +369,14 @@
+    }
  }
  
 +static void sdl_gfx_set_rotation(void *data, unsigned rotation)
@@ -43,7 +47,8 @@
  static bool sdl_gfx_frame(void *data, const void *frame, unsigned width,
        unsigned height, uint64_t frame_count,
        unsigned pitch, const char *msg, video_frame_info_t *video_info)
-@@ -369,6 +388,114 @@ #endif
+@@ -369,6 +388,114 @@
+ #endif
  
     if (!frame)
 +   {
@@ -157,7 +162,8 @@
        return true;
  
     title[0] = '\0';
-@@ -381,14 +508,14 @@    video_frame_scale(
+@@ -381,14 +508,14 @@
+    video_frame_scale(
           &vid->scaler,
           vid->screen->pixels,
 -         frame,
@@ -175,7 +181,8 @@
  
  #ifdef HAVE_MENU
     menu_driver_frame(menu_is_alive, video_info);
-@@ -571,7 +698,7 @@    sdl_gfx_free,
+@@ -571,7 +698,7 @@
+    sdl_gfx_free,
     "sdl",
     NULL, /* set_viewport */
 -   NULL, /* set_rotation */
