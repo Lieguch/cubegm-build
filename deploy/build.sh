@@ -327,6 +327,22 @@ if [ -d RetroArch/.git ]; then
     git -C RetroArch submodule update --init --recursive 2>&1 || \
         die "RetroArch submodule update (pinned) failed."
     log "RetroArch pinned to $RETROARCH_PIN ($(git -C RetroArch log -1 --format=%s 2>/dev/null))"
+
+# Apply RetroArch SDL1 soft rotation patch (for 000 vertical games)
+RETROARCH_SDL_ROT_PATCH="$HERE/../patches/retroarch-sdl1-soft-rotation.patch"
+if [ -f "$RETROARCH_SDL_ROT_PATCH" ]; then
+    if git -C RetroArch apply --ignore-whitespace --check "$RETROARCH_SDL_ROT_PATCH" 2>/dev/null; then
+        log "Applying RetroArch SDL1 soft rotation patch..."
+        git -C RetroArch apply --ignore-whitespace "$RETROARCH_SDL_ROT_PATCH"
+    elif git -C RetroArch apply --ignore-whitespace -R --check "$RETROARCH_SDL_ROT_PATCH" 2>/dev/null; then
+        log "RetroArch SDL1 soft rotation patch already applied -- skipping."
+    else
+        die "RetroArch SDL1 soft rotation patch NOT applicable."
+    fi
+else
+    die "RetroArch SDL1 soft rotation patch missing."
+fi
+
 fi
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
