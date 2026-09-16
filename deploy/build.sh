@@ -329,7 +329,7 @@ if [ -d RetroArch/.git ]; then
     log "RetroArch pinned to $RETROARCH_PIN ($(git -C RetroArch log -1 --format=%s 2>/dev/null))"
 
 # Apply RetroArch SDL1 soft rotation patch (for 000 vertical games)
-RETROARCH_SDL_ROT_PATCH="$HERE/../patches/retroarch-sdl1-soft-rotation.patch"
+RETROARCH_SDL_ROT_PATCH="$HERE/patches/retroarch-sdl1-soft-rotation.patch"
 if [ -f "$RETROARCH_SDL_ROT_PATCH" ]; then
     if git -C RetroArch apply --ignore-whitespace --check "$RETROARCH_SDL_ROT_PATCH" 2>/dev/null; then
         log "Applying RetroArch SDL1 soft rotation patch..."
