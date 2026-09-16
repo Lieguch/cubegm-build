@@ -47,12 +47,10 @@
  static bool sdl_gfx_frame(void *data, const void *frame, unsigned width,
        unsigned height, uint64_t frame_count,
        unsigned pitch, const char *msg, video_frame_info_t *video_info)
-@@ -369,6 +388,114 @@
+@@ -369,6 +388,110 @@
  #endif
  
     if (!frame)
-+   {
-+
 +   /* handle rotation */
 +
 +   unsigned rot = vid->rotation;
@@ -157,12 +155,10 @@
 +
 +   }
 +
-+   }
-+
        return true;
  
     title[0] = '\0';
-@@ -381,14 +508,14 @@
+@@ -381,14 +504,14 @@
     video_frame_scale(
           &vid->scaler,
           vid->screen->pixels,
@@ -181,7 +177,7 @@
  
  #ifdef HAVE_MENU
     menu_driver_frame(menu_is_alive, video_info);
-@@ -571,7 +698,7 @@
+@@ -571,7 +694,7 @@
     sdl_gfx_free,
     "sdl",
     NULL, /* set_viewport */
