@@ -1,4 +1,6 @@
---- a/gfx/drivers/sdl_gfx.c+++ b/gfx/drivers/sdl_gfx.c@@ -61,6 +61,9 @@    uint8_t font_g;
+--- a/gfx/drivers/sdl_gfx.c
++++ b/gfx/drivers/sdl_gfx.c
+@@ -61,6 +61,9 @@    uint8_t font_g;
     uint8_t font_b;
     bool quitting;
 +   unsigned rotation;
