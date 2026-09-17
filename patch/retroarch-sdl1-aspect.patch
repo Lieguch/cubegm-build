@@ -1,0 +1,136 @@
+--- a/gfx/drivers/sdl_gfx.c
++++ b/gfx/drivers/sdl_gfx.c
+@@ -60,6 +60,12 @@
+    uint8_t font_r;
+    uint8_t font_g;
+    uint8_t font_b;
++
++   /* aspect-corrected (pillarbox/letterbox) scratch buffer + scaler */
++   void *scale_buf;
++   size_t scale_buf_size;
++   struct scaler_ctx aspect_scaler;
++
+    bool quitting;
+ } sdl_video_t;
+ 
+@@ -77,7 +83,9 @@
+ 
+    scaler_ctx_gen_reset(&vid->scaler);
+    scaler_ctx_gen_reset(&vid->menu.scaler);
++   scaler_ctx_gen_reset(&vid->aspect_scaler);
+ 
++   free(vid->scale_buf);
+    free(vid);
+ }
+ 
+@@ -324,6 +332,10 @@
+    vid->scaler.in_fmt           = video->rgb32 ? SCALER_FMT_ARGB8888 : SCALER_FMT_RGB565;
+    vid->scaler.out_fmt          = SCALER_FMT_ARGB8888;
+ 
++   vid->aspect_scaler.scaler_type = vid->scaler.scaler_type;
++   vid->aspect_scaler.in_fmt      = vid->scaler.in_fmt;
++   vid->aspect_scaler.out_fmt     = vid->scaler.out_fmt;
++
+    vid->menu.scaler             = vid->scaler;
+    vid->menu.scaler.scaler_type = SCALER_TYPE_BILINEAR;
+ 
+@@ -378,17 +390,88 @@
+    if (SDL_MUSTLOCK(vid->screen))
+       SDL_LockSurface(vid->screen);
+ 
+-   video_frame_scale(
+-         &vid->scaler,
+-         vid->screen->pixels,
+-         frame,
+-         vid->scaler.in_fmt,
+-         vid->screen->w,
+-         vid->screen->h,
+-         vid->screen->pitch,
+-         width,
+-         height,
+-         pitch);
++   {
++      /* Aspect-corrected rendering (pillarbox/letterbox). SDL1 has no
++       * viewport support, so derive the destination rectangle from the
++       * frame's own aspect ratio, centre it and clear the borders --
++       * the game is never stretched (distorted). */
++      unsigned sw       = vid->screen->w;
++      unsigned sh       = vid->screen->h;
++      float    src_asp  = (height > 0) ? (float)width / (float)height : 1.0f;
++      float    dst_asp  = (sh > 0) ? (float)sw / (float)sh : 1.0f;
++      unsigned ow       = sw;
++      unsigned oh       = sh;
++      bool     letterbox = false;
++
++      if (src_asp > dst_asp)
++         oh = (unsigned)((float)sw / src_asp);
++      else
++         ow = (unsigned)((float)sh * src_asp);
++
++      letterbox = (ow != sw || oh != sh);
++
++      if (letterbox)
++      {
++         size_t need = (size_t)ow * (size_t)oh * sizeof(uint32_t);
++
++         if (need > vid->scale_buf_size)
++         {
++            void *tmp = realloc(vid->scale_buf, need);
++            if (tmp)
++            {
++               vid->scale_buf      = tmp;
++               vid->scale_buf_size = need;
++            }
++            else
++               letterbox = false; /* OOM: fall back to full-screen stretch */
++         }
++      }
++
++      if (!letterbox)
++      {
++         video_frame_scale(
++               &vid->scaler,
++               vid->screen->pixels,
++               frame,
++               vid->scaler.in_fmt,
++               sw,
++               sh,
++               vid->screen->pitch,
++               width,
++               height,
++               pitch);
++      }
++      else
++      {
++         int      ox        = ((int)sw - (int)ow) / 2;
++         int      oy        = ((int)sh - (int)oh) / 2;
++         size_t   out_pitch = (size_t)vid->screen->pitch / sizeof(uint32_t);
++         uint32_t *dst      = (uint32_t*)vid->screen->pixels;
++         const uint32_t *sc = (const uint32_t*)vid->scale_buf;
++         unsigned y;
++
++         /* scale the core frame into the scratch buffer */
++         video_frame_scale(
++               &vid->aspect_scaler,
++               vid->scale_buf,
++               frame,
++               vid->aspect_scaler.in_fmt,
++               ow,
++               oh,
++               ow * sizeof(uint32_t),
++               width,
++               height,
++               pitch);
++
++         /* clear the screen, then blit the scaled frame centred */
++         SDL_FillRect(vid->screen, NULL,
++               SDL_MapRGB(vid->screen->format, 0, 0, 0));
++
++         for (y = 0; y < oh; y++)
++            memcpy(dst + (size_t)(oy + y) * out_pitch + ox,
++                  sc + (size_t)y * ow, (size_t)ow * sizeof(uint32_t));
++      }
++   }
+ 
+ #ifdef HAVE_MENU
+    menu_driver_frame(menu_is_alive, video_info);

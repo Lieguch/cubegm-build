@@ -290,6 +290,9 @@ log "STAGE 5 skipped: picoarch deprecated (RetroArch replaces it)"
 # 菜单：rgui（轻量文字菜单，244MB 内存足够）
 # 核心：复用现有 libretro 57 核（同一份 .so 文件）
 RETROARCH_REPO="https://github.com/libretro/RetroArch.git"
+# 478 实机 = RA Git 826219d / Built Sep 14。master 已前移(含 audio SRC/视频改动)，
+# 不锁则 CI 不可复现，且 sdl_gfx aspect patch 必须对固定 SHA 生成。
+RETROARCH_PIN="826219de14c63010d4e42331a71d3ec333833836"
 log "Building RetroArch (standalone libretro frontend)..."
 # 将 RetroArch 放入 WORKDIR 以便缓存复用（避免每次 CI 重新克隆 ~100MB）
 mkdir -p "$WORKDIR"
@@ -311,6 +314,37 @@ else
     cd "$HERE"
     ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
 fi
+# 无论克隆或缓存复用，强制锁定 478 实测的 RA 版本 $RETROARCH_PIN
+# （缓存可能是新 master；shallow clone 后 fetch 特定 SHA 由 GitHub 支持）。
+if [ -d RetroArch/.git ]; then
+    git -C RetroArch checkout -q "$RETROARCH_PIN" 2>/dev/null || {
+        git -C RetroArch fetch --depth 1 origin "$RETROARCH_PIN" 2>/dev/null || \
+            git -C RetroArch fetch origin 2>/dev/null
+        git -C RetroArch checkout -q "$RETROARCH_PIN" || \
+            die "RetroArch pin checkout $RETROARCH_PIN failed."
+    }
+    git -C RetroArch submodule update --init --recursive 2>&1 || \
+        die "RetroArch submodule update (pinned) failed."
+    log "RetroArch pinned to $RETROARCH_PIN ($(git -C RetroArch log -1 --format=%s 2>/dev/null))"
+
+    # Apply RetroArch SDL1 aspect-corrected rendering patch (000 vertical
+    # games): no auto-rotation distortion, upright + pillarbox. 属根治：
+    # 补齐 SDL1 缺的 viewport/aspect 渲染，非软旋转 hack。
+    RETROARCH_SDL_ASPECT_PATCH="$HERE/../patch/retroarch-sdl1-aspect.patch"
+    if [ -f "$RETROARCH_SDL_ASPECT_PATCH" ]; then
+        if git -C RetroArch apply --ignore-whitespace --check "$RETROARCH_SDL_ASPECT_PATCH" 2>/dev/null; then
+            log "Applying RetroArch SDL1 aspect patch..."
+            git -C RetroArch apply --ignore-whitespace "$RETROARCH_SDL_ASPECT_PATCH"
+        elif git -C RetroArch apply --ignore-whitespace -R --check "$RETROARCH_SDL_ASPECT_PATCH" 2>/dev/null; then
+            log "RetroArch SDL1 aspect patch already applied -- skipping."
+        else
+            die "RetroArch SDL1 aspect patch NOT applicable."
+        fi
+    else
+        die "RetroArch SDL1 aspect patch missing."
+    fi
+fi
+
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
     # ---- 显示/音频策略（2026-08-25 定案，基于权威源码验证）----
