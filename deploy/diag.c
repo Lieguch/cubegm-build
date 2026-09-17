@@ -23,6 +23,7 @@
  *   diag display      # DRM modeset 1280x720 + color/pattern test
  *   diag audio        # ALSA 1 kHz tone, 2 s
  *   diag cores        # dlopen every core in cubegm/cores/
+ *   diag video        # framebuffer + DRM mode + RA rotation log
  *
  * SAFETY
  *   Read-only on the SD card. Never touches root.dat / boot / cubegm binaries.
@@ -595,6 +596,102 @@ static void cmd_cores(void) {
     logf("  cores scanned=%d ok=%d\n", n, ok);
     logf("=== cores done ===\n");
 }
+/* ===========================================================================
+ * P3 -- cmd_video: framebuffer + DRM mode + RetroArch rotation-log probe
+ * For 000 arcade vertical-game auto-rotation / 90-degree-flip diagnosis.
+ * Read-only on /sys and the SD-card logs; never sets any video mode.
+ * ========================================================================== */
+static void video_kv(const char *label, const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) { logf("    %-30s [%s] n/a (%s)\n", label, path, strerror(errno)); return; }
+    char l[512];
+    if (fgets(l, sizeof l, f)) { l[strcspn(l, "\r\n")] = 0; logf("    %-30s = %s\n", label, l); }
+    fclose(f);
+}
+
+/* scan a RetroArch log for rotation / geometry / viewport / video-mode lines */
+static void ra_log_rot(const char *path) {
+    FILE *f = fopen(path, "r");
+    if (!f) { logf("  [%s] n/a (%s)\n", path, strerror(errno)); return; }
+    static const char *keys[] = {
+        "SET_ROTATION", "SET_GEOMETRY", "base_width", "base_height",
+        "Geometry", "Viewport", "viewport", "[Video]", "Video @",
+        "Found display", "width", "height", "rotation", "Rotation",
+        "Allow rotation", NULL
+    };
+    char line[1024]; int got = 0, i;
+    while (fgets(line, sizeof line, f)) {
+        int hit = 0;
+        for (i = 0; keys[i]; i++) if (strstr(line, keys[i])) { hit = 1; break; }
+        if (!hit) continue;
+        line[strcspn(line, "\r\n")] = 0;
+        logf("  %s\n", line);
+        if (++got > 250) { logf("  ... (truncated)\n"); break; }
+    }
+    fclose(f);
+    if (!got) logf("  (no rotation/geometry/video lines)\n");
+}
+
+static void cmd_video(void) {
+    g_fault_module = 6;
+    logf("=== video (framebuffer / DRM / RA rotation log) ===\n");
+
+    /* --- framebuffer (SDL1 fbcon renders into fb0) --- */
+    logf("--- framebuffer ---\n");
+    DIR *d = opendir("/sys/class/graphics");
+    if (d) {
+        struct dirent *e;
+        while ((e = readdir(d))) {
+            if (strncmp(e->d_name, "fb", 2) != 0) continue;
+            char p[200];
+            logf("  [%s]\n", e->d_name);
+            snprintf(p, sizeof p, "/sys/class/graphics/%s/name",         e->d_name); video_kv("name", p);
+            snprintf(p, sizeof p, "/sys/class/graphics/%s/virtual_size", e->d_name); video_kv("virtual_size", p);
+            snprintf(p, sizeof p, "/sys/class/graphics/%s/bits_per_pixel", e->d_name); video_kv("bits_per_pixel", p);
+            snprintf(p, sizeof p, "/sys/class/graphics/%s/stride",       e->d_name); video_kv("stride", p);
+        }
+        closedir(d);
+    } else logf("  /sys/class/graphics n/a (%s)\n", strerror(errno));
+
+    /* --- DRM connectors (available modes + current sink) --- */
+    logf("--- DRM connectors ---\n");
+    DIR *dd = opendir("/sys/class/drm");
+    if (dd) {
+        struct dirent *e;
+        while ((e = readdir(dd))) {
+            if (strncmp(e->d_name, "card", 4) != 0) continue;
+            char p[320];
+            /* connector objects have a 'status' file */
+            snprintf(p, sizeof p, "/sys/class/drm/%s/status", e->d_name);
+            if (access(p, R_OK) != 0) continue;
+            logf("  [%s]\n", e->d_name);
+            snprintf(p, sizeof p, "/sys/class/drm/%s/status",  e->d_name); video_kv("status", p);
+            snprintf(p, sizeof p, "/sys/class/drm/%s/enabled", e->d_name); video_kv("enabled", p);
+            snprintf(p, sizeof p, "/sys/class/drm/%s/dpms",    e->d_name); video_kv("dpms", p);
+            snprintf(p, sizeof p, "/sys/class/drm/%s/modes", e->d_name);
+            FILE *f = fopen(p, "r");
+            if (f) {
+                char l[128]; int n = 0;
+                logf("    modes:\n");
+                while (fgets(l, sizeof l, f) && n < 4) {
+                    l[strcspn(l, "\r\n")] = 0;
+                    logf("      %s\n", l); n++;
+                }
+                fclose(f);
+            } else logf("    modes: n/a\n");
+        }
+        closedir(dd);
+    } else logf("  /sys/class/drm n/a (%s)\n", strerror(errno));
+
+    /* --- RetroArch logs: the SET_ROTATION / geometry ground truth --- */
+    logf("--- retroarch_ra.log rotation/geometry lines ---\n");
+    ra_log_rot("/mnt/sdcard/retroarch_ra.log");
+    logf("--- retroarch.log rotation/geometry lines ---\n");
+    ra_log_rot("/mnt/sdcard/retroarch.log");
+
+    logf("=== video done ===\n");
+}
+
 /* ==== P1+P2: full-system debug modules ===== */
 /* ===========================================================================
  * P1 -- helpers + cmd_sysdeep (full-system deep debug snapshot)
@@ -1050,6 +1147,7 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "all") == 0 || strcmp(mod, "display") == 0) cmd_display();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "video") == 0)   cmd_video();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysdeep") == 0)         cmd_sysdeep();
     if (strcmp(mod, "monitor") == 0)                                    cmd_monitor(argc, argv);
     if (g_out) { logf("# diag finished OK\n"); fclose(g_out); }
