@@ -1,0 +1,308 @@
+--- a/gfx/drivers/sdl_gfx.c
++++ b/gfx/drivers/sdl_gfx.c
+@@ -60,6 +60,16 @@
+    uint8_t font_r;
+    uint8_t font_g;
+    uint8_t font_b;
++
++   /* SET_ROTATION support (upstream issue #7447) + aspect-corrected
++    * pillarbox/letterbox scratch buffers + scaler. */
++   unsigned rotation;
++   void *rotate_buf;
++   size_t rotate_buf_size;
++   void *scale_buf;
++   size_t scale_buf_size;
++   struct scaler_ctx aspect_scaler;
++
+    bool quitting;
+ } sdl_video_t;
+ 
+@@ -77,7 +87,10 @@
+ 
+    scaler_ctx_gen_reset(&vid->scaler);
+    scaler_ctx_gen_reset(&vid->menu.scaler);
++   scaler_ctx_gen_reset(&vid->aspect_scaler);
+ 
++   free(vid->rotate_buf);
++   free(vid->scale_buf);
+    free(vid);
+ }
+ 
+@@ -324,6 +337,16 @@
+    vid->scaler.in_fmt           = video->rgb32 ? SCALER_FMT_ARGB8888 : SCALER_FMT_RGB565;
+    vid->scaler.out_fmt          = SCALER_FMT_ARGB8888;
+ 
++   vid->aspect_scaler.scaler_type = vid->scaler.scaler_type;
++   vid->aspect_scaler.in_fmt      = vid->scaler.in_fmt;
++   vid->aspect_scaler.out_fmt     = vid->scaler.out_fmt;
++
++   vid->rotation                  = 0;
++   vid->rotate_buf                = NULL;
++   vid->rotate_buf_size           = 0;
++   vid->scale_buf                 = NULL;
++   vid->scale_buf_size            = 0;
++
+    vid->menu.scaler             = vid->scaler;
+    vid->menu.scaler.scaler_type = SCALER_TYPE_BILINEAR;
+ 
+@@ -358,12 +381,51 @@
+    }
+ }
+ 
++static void sdl_gfx_set_rotation(void *data, unsigned rotation)
++{
++   sdl_video_t *vid = (sdl_video_t*)data;
++   if (vid)
++      vid->rotation = rotation % 4;
++}
++
+ static bool sdl_gfx_frame(void *data, const void *frame, unsigned width,
+       unsigned height, uint64_t frame_count,
+       unsigned pitch, const char *msg, video_frame_info_t *video_info)
+ {
+    char title[128];
+    sdl_video_t   *vid = (sdl_video_t*)data;
++   unsigned rot           = 0;
++   const void *src_frame  = NULL;
++   unsigned src_w         = 0;
++   unsigned src_h         = 0;
++   unsigned src_pitch     = 0;
++   unsigned old_w         = 0;
++   unsigned out_w         = 0;
++   unsigned sw            = 0;
++   unsigned sh_v          = 0;
++   unsigned ow            = 0;
++   unsigned oh            = 0;
++   int      ox            = 0;
++   int      oy            = 0;
++   int      bpp           = 4;
++   unsigned dst_pitch     = 0;
++   unsigned x             = 0;
++   unsigned y             = 0;
++   size_t   so            = 0;
++   size_t   dof           = 0;
++   size_t   need          = 0;
++   size_t   spitch        = 0;
++   size_t   row_bytes     = 0;
++   unsigned dx            = 0;
++   unsigned dy            = 0;
++   const uint8_t *src     = NULL;
++   uint8_t      *dst      = NULL;
++   uint8_t      *sdst     = NULL;
++   float src_asp          = 1.0f;
++   float dst_asp          = 1.0f;
++   bool  letterbox        = false;
++   SDL_Rect bar;
++   Uint32 black           = 0;
+ #ifdef HAVE_MENU
+    bool menu_is_alive = (video_info->menu_st_flags & MENU_ST_FLAG_ALIVE) ? true : false;
+ #endif
+@@ -378,17 +440,188 @@
+    if (SDL_MUSTLOCK(vid->screen))
+       SDL_LockSurface(vid->screen);
+ 
+-   video_frame_scale(
+-         &vid->scaler,
+-         vid->screen->pixels,
+-         frame,
+-         vid->scaler.in_fmt,
+-         vid->screen->w,
+-         vid->screen->h,
+-         vid->screen->pitch,
+-         width,
+-         height,
+-         pitch);
++   rot       = vid->rotation;
++   src_frame = frame;
++   src_w     = width;
++   src_h     = height;
++   src_pitch = pitch;
++   old_w     = width;
++   bpp       = (vid->scaler.in_fmt == SCALER_FMT_ARGB8888) ? 4 : 2;
++
++   /* Software rotation (upstream issue #7447): SDL1 has no SET_ROTATION
++    * support; transpose/mirror the core frame before scaling. */
++   if (rot == 1 || rot == 3)
++   {
++      out_w = src_h;
++      need  = (size_t)out_w * old_w * bpp;
++      if (vid->rotate_buf_size < need)
++      {
++         void *tmp = realloc(vid->rotate_buf, need);
++         if (tmp)
++         {
++            vid->rotate_buf      = tmp;
++            vid->rotate_buf_size = need;
++         }
++      }
++      if (vid->rotate_buf && vid->rotate_buf_size >= need)
++      {
++         src       = (const uint8_t*)src_frame;
++         dst       = (uint8_t*)vid->rotate_buf;
++         dst_pitch = out_w * bpp;
++         for (y = 0; y < src_h; y++)
++         {
++            for (x = 0; x < src_w; x++)
++            {
++               so = (size_t)y * src_pitch + (size_t)x * bpp;
++               if (rot == 1)
++               {
++                  dx = src_h - 1 - y;
++                  dy = x;
++               }
++               else
++               {
++                  dx = y;
++                  dy = src_w - 1 - x;
++               }
++               dof = (size_t)dy * dst_pitch + (size_t)dx * bpp;
++               if (bpp == 4)
++                  *(uint32_t*)(dst + dof) = *(const uint32_t*)(src + so);
++               else
++                  *(uint16_t*)(dst + dof) = *(const uint16_t*)(src + so);
++            }
++         }
++         src_frame = dst;
++         src_w     = out_w;
++         src_h     = old_w;
++         src_pitch = dst_pitch;
++      }
++   }
++   else if (rot == 2)
++   {
++      need = (size_t)src_w * src_h * bpp;
++      if (vid->rotate_buf_size < need)
++      {
++         void *tmp = realloc(vid->rotate_buf, need);
++         if (tmp)
++         {
++            vid->rotate_buf      = tmp;
++            vid->rotate_buf_size = need;
++         }
++      }
++      if (vid->rotate_buf && vid->rotate_buf_size >= need)
++      {
++         src       = (const uint8_t*)src_frame;
++         dst       = (uint8_t*)vid->rotate_buf;
++         dst_pitch = src_w * bpp;
++         for (y = 0; y < src_h; y++)
++         {
++            for (x = 0; x < src_w; x++)
++            {
++               so  = (size_t)y * src_pitch + (size_t)x * bpp;
++               dof = (size_t)(src_h - 1 - y) * dst_pitch
++                   + (size_t)(src_w - 1 - x) * bpp;
++               if (bpp == 4)
++                  *(uint32_t*)(dst + dof) = *(const uint32_t*)(src + so);
++               else
++                  *(uint16_t*)(dst + dof) = *(const uint16_t*)(src + so);
++            }
++         }
++         src_frame = dst;
++         src_pitch = dst_pitch;
++      }
++   }
++
++   /* Aspect-corrected scaling: derive the centered destination rect from
++    * the (possibly rotated) frame's own aspect ratio, add pillarbox /
++    * letterbox borders, never stretch/distort the game. */
++   sw      = vid->screen->w;
++   sh_v    = vid->screen->h;
++   src_asp = (src_h > 0) ? ((float)src_w / (float)src_h) : 1.0f;
++   dst_asp = (sh_v > 0) ? ((float)sw / (float)sh_v) : 1.0f;
++   ow      = sw;
++   oh      = sh_v;
++
++   if (src_asp > dst_asp)
++      oh = (unsigned)((float)sw / src_asp);
++   else
++      ow = (unsigned)((float)sh_v * src_asp);
++
++   letterbox = (ow != sw || oh != sh_v);
++
++   if (letterbox)
++   {
++      need = (size_t)ow * oh * bpp;
++      if (need > vid->scale_buf_size)
++      {
++         void *tmp = realloc(vid->scale_buf, need);
++         if (tmp)
++         {
++            vid->scale_buf      = tmp;
++            vid->scale_buf_size = need;
++         }
++         else
++            letterbox = false; /* OOM: fall back to full-screen stretch */
++      }
++   }
++
++   if (!letterbox)
++   {
++      video_frame_scale(
++            &vid->scaler,
++            vid->screen->pixels,
++            src_frame,
++            vid->scaler.in_fmt,
++            sw,
++            sh_v,
++            vid->screen->pitch,
++            src_w,
++            src_h,
++            src_pitch);
++   }
++   else
++   {
++      ox    = ((int)sw - (int)ow) / 2;
++      oy    = ((int)sh_v - (int)oh) / 2;
++      black = SDL_MapRGB(vid->screen->format, 0, 0, 0);
++
++      video_frame_scale(
++            &vid->aspect_scaler,
++            vid->scale_buf,
++            src_frame,
++            vid->aspect_scaler.in_fmt,
++            ow,
++            oh,
++            ow * bpp,
++            src_w,
++            src_h,
++            src_pitch);
++
++      /* Clear ONLY the border bars (never the whole surface) so the
++       * per-frame cost stays low and does not starve the audio thread. */
++      if (ox > 0)
++      {
++         bar.x = 0;    bar.y = 0; bar.w = ox;          bar.h = sh_v;
++         SDL_FillRect(vid->screen, &bar, black);
++         bar.x = ox + (int)ow; bar.w = sw - ox - ow;   bar.h = sh_v;
++         SDL_FillRect(vid->screen, &bar, black);
++      }
++      if (oy > 0)
++      {
++         bar.x = 0;    bar.y = 0; bar.w = sw;          bar.h = oy;
++         SDL_FillRect(vid->screen, &bar, black);
++         bar.y = oy + (int)oh; bar.h = sh_v - oy - oh;
++         SDL_FillRect(vid->screen, &bar, black);
++      }
++
++      /* Blit the scaled frame centered (bytewise; handles 16/32 bpp). */
++      spitch    = (size_t)vid->screen->pitch;
++      row_bytes = (size_t)ow * bpp;
++      sdst      = (uint8_t*)vid->screen->pixels;
++      for (y = 0; y < oh; y++)
++         memcpy(sdst + (size_t)(oy + y) * spitch + (size_t)ox * bpp,
++                (uint8_t*)vid->scale_buf + (size_t)y * row_bytes,
++                row_bytes);
++   }
+ 
+ #ifdef HAVE_MENU
+    menu_driver_frame(menu_is_alive, video_info);
+@@ -571,7 +804,7 @@
+    sdl_gfx_free,
+    "sdl",
+    NULL, /* set_viewport */
+-   NULL, /* set_rotation */
++   sdl_gfx_set_rotation,
+    sdl_gfx_viewport_info,
+    NULL, /* read_viewport  */
+    NULL, /* read_frame_raw */

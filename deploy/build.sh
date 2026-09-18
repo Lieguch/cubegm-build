@@ -290,6 +290,7 @@ log "STAGE 5 skipped: picoarch deprecated (RetroArch replaces it)"
 # 菜单：rgui（轻量文字菜单，244MB 内存足够）
 # 核心：复用现有 libretro 57 核（同一份 .so 文件）
 RETROARCH_REPO="https://github.com/libretro/RetroArch.git"
+RETROARCH_PIN="826219de14c63010d4e42331a71d3ec333833836"
 log "Building RetroArch (standalone libretro frontend)..."
 # 将 RetroArch 放入 WORKDIR 以便缓存复用（避免每次 CI 重新克隆 ~100MB）
 mkdir -p "$WORKDIR"
@@ -310,6 +311,35 @@ else
         die "RetroArch submodule init failed."
     cd "$HERE"
     ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
+fi
+# 无论克隆或缓存复用，强制锁定 478 实测的 RA 版本 $RETROARCH_PIN
+# （缓存可能是新 master；shallow clone 后 fetch 特定 SHA 由 GitHub 支持）。
+if [ -d RetroArch/.git ]; then
+    git -C RetroArch checkout -q "$RETROARCH_PIN" 2>/dev/null || {
+        git -C RetroArch fetch --depth 1 origin "$RETROARCH_PIN" 2>/dev/null || \
+            git -C RetroArch fetch origin 2>/dev/null
+        git -C RetroArch checkout -q "$RETROARCH_PIN" || \
+            die "RetroArch pin checkout $RETROARCH_PIN failed."
+    }
+    git -C RetroArch submodule update --init --recursive 2>&1 || \
+        die "RetroArch submodule update (pinned) failed."
+    log "RetroArch pinned to $RETROARCH_PIN ($(git -C RetroArch log -1 --format=%s 2>/dev/null))"
+
+    # 000 竖屏街机转屏根治：补 SDL1 缺的 SET_ROTATION(软旋转 90/270, issue #7447)
+    # + 按帧自身宽高比等比缩放居中 + 左右/上下黑边(只清黑边条, 非整屏清零, 不动音频基线)。
+    RETROARCH_SDL_ROT_PATCH="$HERE/../patch/retroarch-sdl1-rotation-aspect.patch"
+    if [ -f "$RETROARCH_SDL_ROT_PATCH" ]; then
+        if git -C RetroArch apply --ignore-whitespace --check "$RETROARCH_SDL_ROT_PATCH" 2>/dev/null; then
+            log "Applying RetroArch SDL1 rotation+aspect patch..."
+            git -C RetroArch apply --ignore-whitespace "$RETROARCH_SDL_ROT_PATCH"
+        elif git -C RetroArch apply --ignore-whitespace -R --check "$RETROARCH_SDL_ROT_PATCH" 2>/dev/null; then
+            log "RetroArch SDL1 rotation+aspect patch already applied -- skipping."
+        else
+            die "RetroArch SDL1 rotation+aspect patch NOT applicable."
+        fi
+    else
+        die "RetroArch SDL1 rotation+aspect patch missing."
+    fi
 fi
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
