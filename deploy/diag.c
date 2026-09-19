@@ -55,6 +55,7 @@
 #include <drm/drm_mode.h>
 #include <drm/drm_fourcc.h>   /* DRM_FORMAT_RGB565 (run 281: undeclared) */
 #include <sys/statvfs.h>
+#include <sys/stat.h>      /* stat() for GPU probe (cmd_gpu) */
 
 #define REPORT "/mnt/sdcard/diag_report.txt"
 static FILE *g_out = NULL;
@@ -842,6 +843,142 @@ static void cmd_sysdeep(void) {
 }
 
 /* ===========================================================================
+ * GPU probe -- Mali-400 @ 0x10090000 feasibility check (no side effects)
+ *
+ * Reads sysfs/platform/debugfs to determine whether the Mali kernel driver
+ * is loaded and bound, and whether the GPU is clocked.  All paths are
+ * read-only; nothing is opened for write.  Output answers:
+ *   1. Does /sys/bus/platform/devices/10090000.gpu exist?  (DT node)
+ *   2. Is a driver bound?  (driver symlink → driver name)
+ *   3. Is devfreq registered?  (cur_freq / available_frequencies)
+ *   4. Are Mali debugfs entries present?  (/sys/kernel/debug/mali/*)
+ *   5. Are Mali character devices present?  (/dev/mali* / /dev/dri/renderD*)
+ *   6. GPU register block identity read via /dev/mem mmap (Mali_ID register)
+ *   7. Any Mali-related kernel log lines in dmesg ring buffer?
+ *
+ * VERDICT line at the end:
+ *   GPU_ENABLED      → kernel driver loaded + bound + clocked
+ *   GPU_DT_ONLY     → DT node present but no driver (kernel not compiled)
+ *   GPU_ABSENT      → no DT node at all
+ * ========================================================================== */
+static void cmd_gpu(void) {
+    g_fault_module = 30;
+    logf("=== gpu probe ===\n");
+
+    /* 1. Platform device existence */
+    logf("--- platform device ---\n");
+    struct stat st;
+    if (stat("/sys/bus/platform/devices/10090000.gpu", &st) == 0) {
+        logf("  /sys/bus/platform/devices/10090000.gpu exists\n");
+    } else {
+        logf("  /sys/bus/platform/devices/10090000.gpu ABSENT (%s)\n", strerror(errno));
+    }
+
+    /* 2. Driver binding (symlink "driver" → /sys/bus/platform/drivers/xxx) */
+    logf("--- driver binding ---\n");
+    char drvlink[256];
+    ssize_t n = readlink("/sys/bus/platform/devices/10090000.gpu/driver",
+                         drvlink, sizeof(drvlink) - 1);
+    if (n > 0) {
+        drvlink[n] = '\0';
+        const char *base = strrchr(drvlink, '/');
+        logf("  driver bound: %s\n", base ? base + 1 : drvlink);
+    } else {
+        logf("  driver NOT bound (no driver symlink: %s)\n", strerror(errno));
+    }
+
+    /* 3. Devfreq (GPU frequency management) */
+    logf("--- devfreq ---\n");
+    cat_file("/sys/class/devfreq/10090000.gpu/cur_freq");
+    cat_file("/sys/class/devfreq/10090000.gpu/available_frequencies");
+    cat_file("/sys/class/devfreq/10090000.gpu/governor");
+    cat_file("/sys/class/devfreq/10090000.gpu/min_freq");
+    cat_file("/sys/class/devfreq/10090000.gpu/max_freq");
+    cat_file("/sys/class/devfreq/10090000.gpu/trans_stat");
+
+    /* 4. Mali debugfs */
+    logf("--- /sys/kernel/debug/mali ---\n");
+    sys_class_list("/sys/kernel/debug/mali");
+    /* Also try debugfs under /sys/kernel/debug/ directly (some kernels) */
+    DIR *dbg = opendir("/sys/kernel/debug/mali");
+    if (dbg) {
+        struct dirent *e;
+        while ((e = readdir(dbg))) {
+            if (e->d_name[0] == '.') continue;
+            char p[256];
+            snprintf(p, sizeof p, "/sys/kernel/debug/mali/%s", e->d_name);
+            logf("  %s: ", e->d_name);
+            cat_file(p);
+        }
+        closedir(dbg);
+    } else {
+        logf("  /sys/kernel/debug/mali not accessible (%s)\n", strerror(errno));
+    }
+
+    /* 5. Character devices */
+    logf("--- char devices ---\n");
+    const char *devs[] = {
+        "/dev/mali", "/dev/mali0", "/dev/dri/card0",
+        "/dev/dri/renderD128", "/dev/fb0"
+    };
+    for (unsigned i = 0; i < sizeof(devs) / sizeof(devs[0]); i++) {
+        if (stat(devs[i], &st) == 0) {
+            logf("  %s exists (mode %o, rdev %lx)\n",
+                 devs[i], st.st_mode & 0777, (unsigned long)st.st_rdev);
+        } else {
+            logf("  %s absent (%s)\n", devs[i], strerror(errno));
+        }
+    }
+
+    /* 6. GPU register identity read (Mali_ID @ offset 0x020) */
+    logf("--- GPU registers @ 0x10090000 (via /dev/mem) ---\n");
+    dump_mem("/dev/mem", 0x10090000, 0x80);
+
+    /* 7. Kernel log scan for Mali-related lines */
+    logf("--- dmesg Mali lines (non-destructive) ---\n");
+    FILE *kmsg = fopen("/proc/kmsg", "r");
+    if (kmsg) {
+        /* /proc/kmsg blocks until new messages; read what's buffered then stop.
+         * We use non-blocking by setting O_NONBLOCK on the fd. */
+        int fd = fileno(kmsg);
+        int flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        char line[512];
+        int found = 0;
+        /* Read recent ring buffer entries (kernel keeps them buffered) */
+        while (fgets(line, sizeof line, kmsg)) {
+            if (strcasestr(line, "mali") || strcasestr(line, "gpu") ||
+                strcasestr(line, " Mali") || strcasestr(line, "PP0") ||
+                strcasestr(line, "devfreq")) {
+                logf("  %s", line);
+                found++;
+            }
+        }
+        if (!found) logf("  (no Mali/GPU lines in kmsg ring buffer)\n");
+        fclose(kmsg);
+    } else {
+        logf("  /proc/kmsg open failed: %s\n", strerror(errno));
+    }
+
+    /* VERDICT */
+    int dt_ok = (stat("/sys/bus/platform/devices/10090000.gpu", &st) == 0);
+    int drv_bound = (access("/sys/bus/platform/devices/10090000.gpu/driver", F_OK) == 0);
+    int devfreq = (stat("/sys/class/devfreq/10090000.gpu", &st) == 0);
+
+    logf("--- VERDICT ---\n");
+    if (dt_ok && drv_bound && devfreq) {
+        logf("  GPU_ENABLED: Mali kernel driver loaded + bound + devfreq active\n");
+    } else if (dt_ok && !drv_bound) {
+        logf("  GPU_DT_ONLY: DT node present, kernel driver NOT compiled/loaded\n");
+    } else if (!dt_ok) {
+        logf("  GPU_ABSENT: no 10090000.gpu platform device\n");
+    } else {
+        logf("  GPU_PARTIAL: dt=%d driver=%d devfreq=%d\n", dt_ok, drv_bound, devfreq);
+    }
+    logf("=== gpu probe done ===\n");
+}
+
+/* ===========================================================================
  * P2 -- cmd_monitor: resident periodic full-system debug logger.
  *
  *   diag monitor [interval_sec] [max_minutes]
@@ -1051,6 +1188,7 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysdeep") == 0)         cmd_sysdeep();
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "gpu") == 0)            cmd_gpu();
     if (strcmp(mod, "monitor") == 0)                                    cmd_monitor(argc, argv);
     if (g_out) { logf("# diag finished OK\n"); fclose(g_out); }
     logf("REPORT -> %s\n", REPORT);
