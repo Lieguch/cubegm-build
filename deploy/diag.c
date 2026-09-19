@@ -1178,7 +1178,8 @@ static void cmd_monitor(int argc, char **argv) {
 int main(int argc, char **argv) {
     install_guards();
     const char *mod = argc > 1 ? argv[1] : "all";
-    g_out = fopen(REPORT, "w");
+    /* keylog 只写 keylog.txt，不碰 diag_report.txt —— 否则并发覆盖 diag all 的 gpu 段 */
+    if (strcmp(mod, "keylog") != 0) g_out = fopen(REPORT, "w");
     if (g_out) logf("# CubeGM diag %s %s\n", mod, ctime(&(time_t){time(NULL)}));
     else logf("# WARN: cannot write %s (SD read-only?) -- console only\n", REPORT);
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysinfo") == 0) cmd_sysinfo();
