@@ -930,9 +930,11 @@ static void cmd_gpu(void) {
         }
     }
 
-    /* 6. GPU register identity read (Mali_ID @ offset 0x020) */
-    logf("--- GPU registers @ 0x10090000 (via /dev/mem) ---\n");
-    dump_mem("/dev/mem", 0x10090000, 0x80);
+    /* 6. GPU register identity read — SKIPPED
+     * dump_mem("/dev/mem", 0x10090000, 0x80) 读取 GPU 物理寄存器空间,
+     * 在内核无 Mali driver 时该地址未映射, mmap/读取触发内核 panic
+     * (500 实测 60s 后宕机, 501 无法启动). 改用 sysfs 判定, 不碰 /dev/mem. */
+    logf("--- GPU registers @ 0x10090000 (skipped: /dev/mem on unmapped GPU space may cause kernel panic) ---\n");
 
     /* 7. Kernel log scan for Mali-related lines */
     logf("--- dmesg Mali lines (non-destructive) ---\n");
