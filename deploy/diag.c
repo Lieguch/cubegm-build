@@ -1182,6 +1182,8 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "keylog") != 0) g_out = fopen(REPORT, "w");
     if (g_out) logf("# CubeGM diag %s %s\n", mod, ctime(&(time_t){time(NULL)}));
     else logf("# WARN: cannot write %s (SD read-only?) -- console only\n", REPORT);
+    /* gpu 排最前：diag all 最先执行 GPU 探针，避免进程被外部杀掉时 gpu 段来不及落盘 */
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "gpu") == 0)            cmd_gpu();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysinfo") == 0) cmd_sysinfo();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "input") == 0)   cmd_input();
     if (strcmp(mod, "keylog") == 0)                             cmd_keylog();
@@ -1189,7 +1191,6 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysdeep") == 0)         cmd_sysdeep();
-    if (strcmp(mod, "all") == 0 || strcmp(mod, "gpu") == 0)            cmd_gpu();
     if (strcmp(mod, "monitor") == 0)                                    cmd_monitor(argc, argv);
     if (g_out) { logf("# diag finished OK\n"); fclose(g_out); }
     logf("REPORT -> %s\n", REPORT);
