@@ -349,7 +349,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # INCLUDES='usr/include usr/local/include'，不会查 $SYSROOT。
     # 追加 sysroot 路径使 SDL.h 存在性检查通过。
     # 注意：ALSA 不需要此修补，因为 runner 宿主机装了 libasound2-dev。
-    sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include $SYSROOT/usr/include/SDL'|" qb/config.libs.sh
+    sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include $SYSROOT/usr/include/SDL $SYSROOT/usr/include/EGL $SYSROOT/usr/include/GLES2 $SYSROOT/usr/include/GLES'|" qb/config.libs.sh
     export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/GLES"
     # Mali-400 GPU: enable mali_fbdev (EGL context driver, opens /dev/fb0 + EGL_OPENGL_ES2_BIT)
     # + OpenGL ES 2.0 (video_driver="gl" in cfg). Blob provides libEGL/libGLESv2/libmali.
