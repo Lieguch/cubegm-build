@@ -363,8 +363,11 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # 完全不走 INCLUDES（504 根因：--enable-egl 强制 check_header EGL/eglext.h，
     # CFLAGS 为空 → 找不到 sysroot header → die "Build assumed that EGL/egl.h exists"）。
     # 作用域限定在 configure 命令（command-prefix env），不 export → make 阶段不受污染。
-    CFLAGS="-I$SYSROOT/usr/include" \
-    LDFLAGS="-L$SYSROOT/usr/lib" \
+    # qb check_header 编译测试用 BUILD_DIRS+$FLAGS(CFLAGS)+$LDFLAGS (qb.libs.sh L289)
+    # 全局 CFLAGS(L173) 含 --sysroot+$ARCH_FLAGS+$ALSA_CFLAGS，不能覆盖。
+    # 追加 -I$SYSROOT/usr/include 使 check_header #include <EGL/egl.h> 编译通过。
+    CFLAGS="$CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/KHR -I$SYSROOT/usr/include/GLES2" \
+    LDFLAGS="$LDFLAGS -L$SYSROOT/usr/lib" \
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
         --enable-alsa \
@@ -754,7 +757,7 @@ done
 _queue+=("libstdc++.so.6" "libatomic.so.1")
 # fallback: if readelf was unavailable, seed the known direct deps
 if [ ${#_queue[@]} -eq 0 ]; then
-    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libmali-utgard-400-r7p0-r0p0-fbdev.so libmali.so.7 libmali.so libEGL.so.1 libEGL.so libGLESv2.so.2 libGLESv2.so libGLESv1_CM.so.1 libGLESv1_CM.so)
+    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libMali.so libmali-utgard-400-r7p0-r0p0-fbdev.so libmali.so.7 libmali.so libEGL.so.1 libEGL.so libGLESv2.so.2 libGLESv2.so libGLESv1_CM.so.1 libGLESv1_CM.so)
     log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
