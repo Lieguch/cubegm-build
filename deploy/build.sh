@@ -358,6 +358,13 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     export OPENGLES_CFLAGS="-I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/EGL"
     export EGL_LIBS="-L$SYSROOT/usr/lib -lEGL -lmali"
     export EGL_CFLAGS="-I$SYSROOT/usr/include/EGL"
+    # qb 官方检测通道（qb.params.sh 文档化 "General environment variables: CC/CFLAGS/LDFLAGS"）：
+    # check_header 的编译测试与 check_val 的链接测试只用 BUILD_DIRS + $CFLAGS + $LDFLAGS，
+    # 完全不走 INCLUDES（504 根因：--enable-egl 强制 check_header EGL/eglext.h，
+    # CFLAGS 为空 → 找不到 sysroot header → die "Build assumed that EGL/egl.h exists"）。
+    # 作用域限定在 configure 命令（command-prefix env），不 export → make 阶段不受污染。
+    CFLAGS="-I$SYSROOT/usr/include" \
+    LDFLAGS="-L$SYSROOT/usr/lib" \
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
         --enable-alsa \

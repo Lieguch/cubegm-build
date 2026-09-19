@@ -64,29 +64,44 @@ ln -sf "$BLOB_NAME" libGLESv1_CM.so.1
 cd - >/dev/null
 
 # --- 3. Download headers if not present ------------------------------------
+# 双源下载：jsdelivr 快速通道 → 失败(空文件/非200)自动回退 GitHub API base64
+# (504 教训：jsdelivr 静默失败导致 sysroot 无 EGL header，configure die)
 log "Installing headers..."
 HDR_BASE="https://cdn.jsdelivr.net/gh/paolosabatino/libmali-rk-utgard-400@master/include"
 
-for hdr_pair in \
-    "EGL/egl.h:EGL/egl.h" \
-    "EGL/eglext.h:EGL/eglext.h" \
-    "EGL/eglplatform.h:EGL/eglplatform.h" \
-    "GLES2/gl2.h:GLES2/gl2.h" \
-    "GLES2/gl2ext.h:GLES2/gl2ext.h" \
-    "GLES/gl.h:GLES/gl.h" \
-    "gbm.h:gbm.h" \
-    "mali.icd:mali.icd"
+fetch_hdr() {
+    # $1 = repo-relative path (e.g. EGL/egl.h)
+    local src="$1"
+    local dst="$SYSROOT/usr/include/$src"
+    [ -s "$dst" ] && return 0
+    local dir=$(dirname "$dst")
+    mkdir -p "$dir"
+    # 通道1: jsdelivr
+    curl -s -m 40 -o "$dst" "${HDR_BASE}/${src}" || true
+    [ -s "$dst" ] && { log "header $src via jsdelivr ($(wc -c < "$dst") bytes)"; return 0; }
+    rm -f "$dst"
+    # 通道2: GitHub API base64（同 blob 下载通道，CI 已验证可达）
+    curl -s -m 60 "https://api.github.com/repos/paolosabatino/libmali-rk-utgard-400/contents/$src" \
+        | python3 -c "import sys,json,base64; d=json.load(sys.stdin); open('${dst}','wb').write(base64.b64decode(d['content']))" \
+        || { log "WARN: both channels failed for $src"; return 1; }
+    [ -s "$dst" ] && log "header $src via GitHub API ($(wc -c < "$dst") bytes)"
+}
+
+for src in \
+    "EGL/egl.h" "EGL/eglext.h" "EGL/eglplatform.h" \
+    "GLES2/gl2.h" "GLES2/gl2ext.h" \
+    "GLES/gl.h" \
+    "gbm.h" "mali.icd"
 do
-    src="${hdr_pair%%:*}"
-    dst_name="${hdr_pair##*:}"
-    dst_dir=$(dirname "$dst_name")
-    dst="$SYSROOT/usr/include/$dst_name"
-    if [ -f "$dst" ]; then
-        continue
-    fi
-    mkdir -p "$SYSROOT/usr/include/$dst_dir"
-    curl -s -m 40 -o "$dst" "${HDR_BASE}/${src}" || log "WARN: failed to download $src"
+    fetch_hdr "$src" || true
 done
+
+# --- 4. 安装校验：关键 header 必须落盘，否则 RA configure 必 die ---
+for must in EGL/egl.h EGL/eglext.h EGL/eglplatform.h GLES2/gl2.h GLES2/gl2ext.h; do
+    [ -s "$SYSROOT/usr/include/$must" ] || die "FATAL: $must missing in sysroot -- header download failed on all channels"
+done
+log "=== sysroot mali include tree ==="
+find "$SYSROOT/usr/include/EGL" "$SYSROOT/usr/include/GLES2" "$SYSROOT/usr/include/GLES" -type f 2>/dev/null
 
 log "=== libmali staged into $SYSROOT/usr/lib ==="
 ls -la "$SYSROOT/usr/lib/libmali"* "$SYSROOT/usr/lib/libEGL"* "$SYSROOT/usr/lib/libGLES"* 2>/dev/null
