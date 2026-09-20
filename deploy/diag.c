@@ -926,6 +926,46 @@ static void cmd_gpu(void) {
     cat_file("/sys/module/mali/version");
     cat_file("/sys/module/mali/uevent");
 
+    /* 4.6 Mali UK API version probe（2026-09-20 方向2）：
+     *   blob 的 eglGetDisplay(NULL) 内部 open("/dev/mali") 后做 ioctl
+     *   MALI_IOC_GET_API_VERSION，内核返回的 UK API 版本号若与 blob
+     *   预期不匹配 → "Device driver API mismatch" → EGL_NO_DISPLAY。
+     *   本探针直接 open + ioctl，报告内核侧 API 版本号，
+     *   一锤定音判定 r7p0 blob 是否匹配本设备内核驱动。
+     *   来源：Google Git amlogic-tv-modules/mali-driver mali_utgard_ioctl.h
+     *     #define MALI_IOC_GET_API_VERSION _IOWR(MALI_IOC_CORE_BASE,
+     *       _MALI_UK_GET_API_VERSION, u32)
+     *   MALI_IOC_CORE_BASE = 'm' << 8 = 0x6d00
+     *   _MALI_UK_GET_API_VERSION = 1（枚举值，在 mali_utgard_uk_types.h 中定义）
+     *   ioctl number = _IOWR(0x6d00, 1, u32) — 我们直接用原始值 */
+    logf("--- Mali UK API version probe ---\n");
+    {
+        /* _IOWR(type, nr, size) = (1<<30) | (sizeof(u32)<<16) | (type<<8) | nr
+         * type=0x6d (MALI_IOC_CORE_BASE>>8... 但实际 type 就是 'm'=0x6d)
+         * nr=1 (_MALI_UK_GET_API_VERSION)
+         * size=4 (sizeof(u32))
+         * _IOWR = (DIR_WRITE|DIR_READ)<<30 = 0xc0000000
+         * → 0xc0000000 | (4<<16) | (0x6d<<8) | 1 = 0xc0046d01 */
+        #define MALI_IOC_GET_API_VERSION_RAW  0xc0046d01
+        int mfd = open("/dev/mali", O_RDWR);
+        if (mfd < 0) {
+            logf("  open /dev/mali failed: %s\n", strerror(errno));
+        } else {
+            unsigned int api_ver = 0xFFFFFFFF;
+            int ret = ioctl(mfd, MALI_IOC_GET_API_VERSION_RAW, &api_ver);
+            if (ret < 0) {
+                logf("  ioctl MALI_IOC_GET_API_VERSION failed: %s (errno=%d)\n",
+                     strerror(errno), errno);
+            } else {
+                logf("  Mali UK API version: %u (0x%x)\n", api_ver, api_ver);
+            }
+            /* 也尝试 V2 变体（_MALI_UK_GET_API_VERSION_V2，nr 可能不同） */
+            /* V2 用 _mali_uk_get_api_version_v2_s 结构体，但我们不知道确切 ioctl nr。
+             * 只报 V1 结果；V2 留给 blob 运行时触发。 */
+            close(mfd);
+        }
+    }
+
     /* 5. Character devices */
     logf("--- char devices ---\n");
     const char *devs[] = {

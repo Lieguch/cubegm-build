@@ -78,34 +78,61 @@ static void set_cpu_performance(void) {
     }
 }
 
-/* GPU 降频（RK3036 Mali-400 devfreq 根治，2026-09-18）：
+/* GPU 降频（RK3036 Mali-400 devfreq 根治，2026-09-20 v2）：
  *   论坛成功案例：原厂 Mali devfreq 只有两档 200MHz/400MHz，启动默认上 400MHz
  *   高档，在该频点 GPU 不稳（LibreELEC RK3036 实测 lockup，CubeGM 实测 eglGetDisplay
  *   NULL）。降到 200MHz 低档即可稳定启用 GLES。
- *   实现：枚举 /sys/class/devfreq/*（不硬编码 10091000.gpu，避免探测名与内核实际
- *   不一致），对名字含 gpu/mali 的节点把 min_freq/max_freq 都锁到 200000000。
- *   无 devfreq 节点或无写权限则静默跳过（不阻塞启动）。 */
+ *   v2 修复（2026-09-20 统一日志分析）：
+ *   - v1 的 write() 返回值被 (void) 吞掉，hlog 报"locked"但实际写失败
+ *   - v1 先写 min_freq 再写 max_freq；内核要求 min ≤ max，但 min_freq sysfs
+ *     在 simple_ondemand governor 下可能拒绝写（diag 实测 min_freq=400MHz 未变）
+ *   - v2 正确顺序：①切 governor=performance（锁定最高频）②写 max_freq=200MHz
+ *     （先降上限）③写 min_freq=200MHz（再降下限，此时 min=max=200MHz）
+ *   - 每步检查 write() 返回值，hlog 报真实结果 */
 static void downclock_gpu(void) {
     const char *bus = "/sys/class/devfreq";
     DIR *d = opendir(bus);
-    if (!d) return;
+    if (!d) { hlog("icube: GPU devfreq: /sys/class/devfreq not accessible\n"); return; }
     struct dirent *e;
     while ((e = readdir(d))) {
         char p[320];
         if (e->d_name[0] == '.') continue;
         if (!strstr(e->d_name, "gpu") && !strstr(e->d_name, "mali")) continue;
-        const char *files[] = { "min_freq", "max_freq" };
-        for (int i = 0; i < 2; i++) {
-            snprintf(p, sizeof p, "%s/%s/%s", bus, e->d_name, files[i]);
-            int fd = open(p, O_WRONLY);
-            if (fd >= 0) {
-                ssize_t w = write(fd, "200000000\n", 10);
-                (void)w;
-                close(fd);
-            }
+
+        char msg[256];
+        int ok_gov = 0, ok_max = 0, ok_min = 0;
+
+        /* ① 切 governor=performance（锁定最高频，使手动 min/max 写入生效） */
+        snprintf(p, sizeof p, "%s/%s/governor", bus, e->d_name);
+        int fd = open(p, O_WRONLY);
+        if (fd >= 0) {
+            ssize_t w = write(fd, "performance\n", 12);
+            ok_gov = (w > 0);
+            close(fd);
         }
-        char msg[192];
-        snprintf(msg, sizeof msg, "icube: GPU devfreq %s locked to 200MHz\n", e->d_name);
+        /* ② 写 max_freq=200MHz（先降上限，保证 min ≤ max 不变量成立） */
+        snprintf(p, sizeof p, "%s/%s/max_freq", bus, e->d_name);
+        fd = open(p, O_WRONLY);
+        if (fd >= 0) {
+            ssize_t w = write(fd, "200000000\n", 10);
+            ok_max = (w > 0);
+            close(fd);
+        }
+        /* ③ 写 min_freq=200MHz（再降下限，此时 min=max=200MHz） */
+        snprintf(p, sizeof p, "%s/%s/min_freq", bus, e->d_name);
+        fd = open(p, O_WRONLY);
+        if (fd >= 0) {
+            ssize_t w = write(fd, "200000000\n", 10);
+            ok_min = (w > 0);
+            close(fd);
+        }
+
+        snprintf(msg, sizeof msg,
+            "icube: GPU devfreq %s downclock: governor=%s max_freq=%s min_freq=%s\n",
+            e->d_name,
+            ok_gov ? "performance OK" : "FAIL",
+            ok_max ? "200MHz OK" : "FAIL",
+            ok_min ? "200MHz OK" : "FAIL");
         hlog(msg);
     }
     closedir(d);
