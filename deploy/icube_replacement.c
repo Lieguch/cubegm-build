@@ -27,10 +27,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #define LOG_PATH      "/mnt/sdcard/icube.log"
 #define WORK_DIR      "/mnt/sdcard/cubegm"
@@ -74,6 +76,39 @@ static void set_cpu_performance(void) {
         f = fopen(path, "w");
         if (f) { fprintf(f, "performance\n"); fclose(f); }
     }
+}
+
+/* GPU 降频（RK3036 Mali-400 devfreq 根治，2026-09-18）：
+ *   论坛成功案例：原厂 Mali devfreq 只有两档 200MHz/400MHz，启动默认上 400MHz
+ *   高档，在该频点 GPU 不稳（LibreELEC RK3036 实测 lockup，CubeGM 实测 eglGetDisplay
+ *   NULL）。降到 200MHz 低档即可稳定启用 GLES。
+ *   实现：枚举 /sys/class/devfreq/*（不硬编码 10091000.gpu，避免探测名与内核实际
+ *   不一致），对名字含 gpu/mali 的节点把 min_freq/max_freq 都锁到 200000000。
+ *   无 devfreq 节点或无写权限则静默跳过（不阻塞启动）。 */
+static void downclock_gpu(void) {
+    const char *bus = "/sys/class/devfreq";
+    DIR *d = opendir(bus);
+    if (!d) return;
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        char p[320];
+        if (e->d_name[0] == '.') continue;
+        if (!strstr(e->d_name, "gpu") && !strstr(e->d_name, "mali")) continue;
+        const char *files[] = { "min_freq", "max_freq" };
+        for (int i = 0; i < 2; i++) {
+            snprintf(p, sizeof p, "%s/%s/%s", bus, e->d_name, files[i]);
+            int fd = open(p, O_WRONLY);
+            if (fd >= 0) {
+                ssize_t w = write(fd, "200000000\n", 10);
+                (void)w;
+                close(fd);
+            }
+        }
+        char msg[192];
+        snprintf(msg, sizeof msg, "icube: GPU devfreq %s locked to 200MHz\n", e->d_name);
+        hlog(msg);
+    }
+    closedir(d);
 }
 
 /* v11.6 音频根治（2026-08-28，rootfs 官方机制 + ~/.asoundrc，不打补丁）：
@@ -166,6 +201,7 @@ int main(int argc, char **argv) {
     /* v11.6：不再覆盖 ALSA_CONFIG_PATH。rootfs 官方 alsa.conf 的 @hooks 会根据
        HOME=/mnt/sdcard/cubegm 自动加载 ~/.asoundrc（双输出定义，payload 已部署）。 */
     set_cpu_performance();
+    downclock_gpu();   /* 启动 retroarch 前把 Mali GPU 锁到 200MHz（降频根治） */
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
 
     /* 1.5 开机即 Debug（v10.9）：后台派 diag all + diag keylog，不阻塞 retroarch */

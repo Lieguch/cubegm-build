@@ -848,7 +848,7 @@ static void cmd_sysdeep(void) {
  * Reads sysfs/platform/debugfs to determine whether the Mali kernel driver
  * is loaded and bound, and whether the GPU is clocked.  All paths are
  * read-only; nothing is opened for write.  Output answers:
- *   1. Does /sys/bus/platform/devices/10090000.gpu exist?  (DT node)
+ *   1. Does /sys/bus/platform/devices/10091000.gpu exist?  (DT node)
  *   2. Is a driver bound?  (driver symlink → driver name)
  *   3. Is devfreq registered?  (cur_freq / available_frequencies)
  *   4. Are Mali debugfs entries present?  (/sys/kernel/debug/mali/*)
@@ -868,16 +868,16 @@ static void cmd_gpu(void) {
     /* 1. Platform device existence */
     logf("--- platform device ---\n");
     struct stat st;
-    if (stat("/sys/bus/platform/devices/10090000.gpu", &st) == 0) {
-        logf("  /sys/bus/platform/devices/10090000.gpu exists\n");
+    if (stat("/sys/bus/platform/devices/10091000.gpu", &st) == 0) {
+        logf("  /sys/bus/platform/devices/10091000.gpu exists\n");
     } else {
-        logf("  /sys/bus/platform/devices/10090000.gpu ABSENT (%s)\n", strerror(errno));
+        logf("  /sys/bus/platform/devices/10091000.gpu ABSENT (%s)\n", strerror(errno));
     }
 
     /* 2. Driver binding (symlink "driver" → /sys/bus/platform/drivers/xxx) */
     logf("--- driver binding ---\n");
     char drvlink[256];
-    ssize_t n = readlink("/sys/bus/platform/devices/10090000.gpu/driver",
+    ssize_t n = readlink("/sys/bus/platform/devices/10091000.gpu/driver",
                          drvlink, sizeof(drvlink) - 1);
     if (n > 0) {
         drvlink[n] = '\0';
@@ -887,14 +887,15 @@ static void cmd_gpu(void) {
         logf("  driver NOT bound (no driver symlink: %s)\n", strerror(errno));
     }
 
-    /* 3. Devfreq (GPU frequency management) */
+    /* 3. Devfreq (GPU frequency management) — 先枚举全部节点（GPU 节点名随内核变），再定点读取 */
     logf("--- devfreq ---\n");
-    cat_file("/sys/class/devfreq/10090000.gpu/cur_freq");
-    cat_file("/sys/class/devfreq/10090000.gpu/available_frequencies");
-    cat_file("/sys/class/devfreq/10090000.gpu/governor");
-    cat_file("/sys/class/devfreq/10090000.gpu/min_freq");
-    cat_file("/sys/class/devfreq/10090000.gpu/max_freq");
-    cat_file("/sys/class/devfreq/10090000.gpu/trans_stat");
+    sys_class_list("/sys/class/devfreq");
+    cat_file("/sys/class/devfreq/10091000.gpu/cur_freq");
+    cat_file("/sys/class/devfreq/10091000.gpu/available_frequencies");
+    cat_file("/sys/class/devfreq/10091000.gpu/governor");
+    cat_file("/sys/class/devfreq/10091000.gpu/min_freq");
+    cat_file("/sys/class/devfreq/10091000.gpu/max_freq");
+    cat_file("/sys/class/devfreq/10091000.gpu/trans_stat");
 
     /* 4. Mali debugfs */
     logf("--- /sys/kernel/debug/mali ---\n");
@@ -914,6 +915,16 @@ static void cmd_gpu(void) {
     } else {
         logf("  /sys/kernel/debug/mali not accessible (%s)\n", strerror(errno));
     }
+
+    /* 4.5 Mali kernel driver version — blob 版本匹配判定关键（2026-09-18）：
+     *   老 utgard kbase 驱动在 /proc/mali/version 暴露版本号；若内核以模块加载，
+     *   /sys/module/mali/version 也有。此前只 dump debugfs \"version\"（GPU 型号），
+     *   拿不到「Inserting Mali vXXX / Driver revision」级别的驱动版本，导致 r7p0 blob
+     *   与内核驱动 API 是否匹配无法判定。 */
+    logf("--- Mali kernel driver version ---\n");
+    cat_file("/proc/mali/version");
+    cat_file("/sys/module/mali/version");
+    cat_file("/sys/module/mali/uevent");
 
     /* 5. Character devices */
     logf("--- char devices ---\n");
@@ -963,9 +974,9 @@ static void cmd_gpu(void) {
     }
 
     /* VERDICT */
-    int dt_ok = (stat("/sys/bus/platform/devices/10090000.gpu", &st) == 0);
-    int drv_bound = (access("/sys/bus/platform/devices/10090000.gpu/driver", F_OK) == 0);
-    int devfreq = (stat("/sys/class/devfreq/10090000.gpu", &st) == 0);
+    int dt_ok = (stat("/sys/bus/platform/devices/10091000.gpu", &st) == 0);
+    int drv_bound = (access("/sys/bus/platform/devices/10091000.gpu/driver", F_OK) == 0);
+    int devfreq = (stat("/sys/class/devfreq/10091000.gpu", &st) == 0);
 
     logf("--- VERDICT ---\n");
     if (dt_ok && drv_bound && devfreq) {
@@ -973,7 +984,7 @@ static void cmd_gpu(void) {
     } else if (dt_ok && !drv_bound) {
         logf("  GPU_DT_ONLY: DT node present, kernel driver NOT compiled/loaded\n");
     } else if (!dt_ok) {
-        logf("  GPU_ABSENT: no 10090000.gpu platform device\n");
+        logf("  GPU_ABSENT: no 10091000.gpu platform device\n");
     } else {
         logf("  GPU_PARTIAL: dt=%d driver=%d devfreq=%d\n", dt_ok, drv_bound, devfreq);
     }
