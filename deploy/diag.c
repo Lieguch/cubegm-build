@@ -932,21 +932,28 @@ static void cmd_gpu(void) {
      *   预期不匹配 → "Device driver API mismatch" → EGL_NO_DISPLAY。
      *   本探针直接 open + ioctl，报告内核侧 API 版本号，
      *   一锤定音判定 r7p0 blob 是否匹配本设备内核驱动。
-     *   来源：Google Git amlogic-tv-modules/mali-driver mali_utgard_ioctl.h
+     *
+     *   ioctl 号铁证（2026-09-20 跨版本源码核实，上次 0xc0046d01 是错的）：
+     *     #define MALI_IOC_BASE 0x82
+     *     #define MALI_IOC_CORE_BASE (_MALI_UK_CORE_SUBSYSTEM + MALI_IOC_BASE)
      *     #define MALI_IOC_GET_API_VERSION _IOWR(MALI_IOC_CORE_BASE,
-     *       _MALI_UK_GET_API_VERSION, u32)
-     *   MALI_IOC_CORE_BASE = 'm' << 8 = 0x6d00
-     *   _MALI_UK_GET_API_VERSION = 1（枚举值，在 mali_utgard_uk_types.h 中定义）
-     *   ioctl number = _IOWR(0x6d00, 1, u32) — 我们直接用原始值 */
+     *                                           _MALI_UK_GET_API_VERSION, u32)
+     *     _MALI_UK_CORE_SUBSYSTEM = 0（_mali_uk_functions 枚举首个成员）
+     *     _MALI_UK_GET_API_VERSION = 3（枚举: OPEN=0, CLOSE=1,
+     *                                   WAIT_FOR_NOTIFICATION=2, GET_API_VERSION=3）
+     *   跨版本一致取证（mripard/sunxi-mali 源码逐文件核对）：
+     *     r6p0 / r6p2 / r8p1 / r9p0 的 MALI_IOC_BASE 均为 0x82，
+     *     GET_API_VERSION 枚举均=3；r7p0 由 paolosabatino/rockchip-4.4-mali 同证。
+     *   故 UK API 的 GET_API_VERSION ioctl 号跨全部 Utgard DDK 版本固定。 */
     logf("--- Mali UK API version probe ---\n");
     {
-        /* _IOWR(type, nr, size) = (1<<30) | (sizeof(u32)<<16) | (type<<8) | nr
-         * type=0x6d (MALI_IOC_CORE_BASE>>8... 但实际 type 就是 'm'=0x6d)
-         * nr=1 (_MALI_UK_GET_API_VERSION)
-         * size=4 (sizeof(u32))
-         * _IOWR = (DIR_WRITE|DIR_READ)<<30 = 0xc0000000
-         * → 0xc0000000 | (4<<16) | (0x6d<<8) | 1 = 0xc0046d01 */
-        #define MALI_IOC_GET_API_VERSION_RAW  0xc0046d01
+        /* _IOWR(type, nr, size):
+         *   dir(_IOC_READ|_IOC_WRITE=3)<<30 = 0xC0000000
+         *   type(0x82)<<8                    = 0x8200
+         *   nr(3)<<0                         = 0x3
+         *   size(sizeof u32 = 4)<<16         = 0x40000
+         *   合计                              = 0xC0048203 */
+        #define MALI_IOC_GET_API_VERSION_RAW  0xC0048203
         int mfd = open("/dev/mali", O_RDWR);
         if (mfd < 0) {
             logf("  open /dev/mali failed: %s\n", strerror(errno));
