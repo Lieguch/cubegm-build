@@ -926,49 +926,116 @@ static void cmd_gpu(void) {
     cat_file("/sys/module/mali/version");
     cat_file("/sys/module/mali/uevent");
 
-    /* 4.6 Mali UK API version probe（2026-09-20 方向2）：
-     *   blob 的 eglGetDisplay(NULL) 内部 open("/dev/mali") 后做 ioctl
-     *   MALI_IOC_GET_API_VERSION，内核返回的 UK API 版本号若与 blob
-     *   预期不匹配 → "Device driver API mismatch" → EGL_NO_DISPLAY。
-     *   本探针直接 open + ioctl，报告内核侧 API 版本号，
-     *   一锤定音判定 r7p0 blob 是否匹配本设备内核驱动。
+    /* 4.6 Mali UK probe（2026-09-21 一次拿全诊断字段）：
+     *   内核 UK API 通过 ioctl 暴露诊断信息，一锤定音判定 r7p0 blob
+     *   与内核驱动的匹配关系。此前两轮教训：
+     *   ① ioctl 号曾错成 0xc0046d01（type/nr 全错）→ errno=25 ENOTTY；
+     *   ② 参数曾错成 4 字节 u32，而内核 handler 按 12 字节结构体
+     *      _mali_uk_get_api_version_s 读写，version 写 offset 4 溢出丢失。
      *
-     *   ioctl 号铁证（2026-09-20 跨版本源码核实，上次 0xc0046d01 是错的）：
-     *     #define MALI_IOC_BASE 0x82
-     *     #define MALI_IOC_CORE_BASE (_MALI_UK_CORE_SUBSYSTEM + MALI_IOC_BASE)
-     *     #define MALI_IOC_GET_API_VERSION _IOWR(MALI_IOC_CORE_BASE,
-     *                                           _MALI_UK_GET_API_VERSION, u32)
-     *     _MALI_UK_CORE_SUBSYSTEM = 0（_mali_uk_functions 枚举首个成员）
-     *     _MALI_UK_GET_API_VERSION = 3（枚举: OPEN=0, CLOSE=1,
-     *                                   WAIT_FOR_NOTIFICATION=2, GET_API_VERSION=3）
-     *   跨版本一致取证（mripard/sunxi-mali 源码逐文件核对）：
-     *     r6p0 / r6p2 / r8p1 / r9p0 的 MALI_IOC_BASE 均为 0x82，
-     *     GET_API_VERSION 枚举均=3；r7p0 由 paolosabatino/rockchip-4.4-mali 同证。
-     *   故 UK API 的 GET_API_VERSION ioctl 号跨全部 Utgard DDK 版本固定。 */
-    logf("--- Mali UK API version probe ---\n");
+     *   ioctl 号铁证（mripard/sunxi-mali r6p0~r9p0 + paolosabatino r7p0
+     *   源码逐文件核对，全部版本一致）：
+     *     MALI_IOC_BASE=0x82；CORE_SUBSYSTEM=0→CORE_BASE=0x82；
+     *     PP_SUBSYSTEM=2→PP_BASE=0x84；GP_SUBSYSTEM=3→GP_BASE=0x85。
+     *   CORE 枚举: OPEN=0,CLOSE=1,WAIT=2,GET_API_VERSION=3,POST=4,
+     *              GET_USER_SETTING=5,GET_USER_SETTINGS=6
+     *   PP 枚举: ...,GET_PP_NUMBER_OF_CORES=4,GET_PP_CORE_VERSION=5
+     *   GP 枚举: ...,GET_GP_NUMBER_OF_CORES=9,GET_GP_CORE_VERSION=10
+     *   r7p0 内核 UK API 常量 = _MAKE_VERSION_ID(900) = 0x03840384 */
+    logf("--- Mali UK probe ---\n");
     {
-        /* _IOWR(type, nr, size):
-         *   dir(_IOC_READ|_IOC_WRITE=3)<<30 = 0xC0000000
-         *   type(0x82)<<8                    = 0x8200
-         *   nr(3)<<0                         = 0x3
-         *   size(sizeof u32 = 4)<<16         = 0x40000
-         *   合计                              = 0xC0048203 */
-        #define MALI_IOC_GET_API_VERSION_RAW  0xC0048203
         int mfd = open("/dev/mali", O_RDWR);
         if (mfd < 0) {
             logf("  open /dev/mali failed: %s\n", strerror(errno));
         } else {
-            unsigned int api_ver = 0xFFFFFFFF;
-            int ret = ioctl(mfd, MALI_IOC_GET_API_VERSION_RAW, &api_ver);
-            if (ret < 0) {
-                logf("  ioctl MALI_IOC_GET_API_VERSION failed: %s (errno=%d)\n",
-                     strerror(errno), errno);
-            } else {
-                logf("  Mali UK API version: %u (0x%x)\n", api_ver, api_ver);
+            logf("  /dev/mali opened\n");
+
+            /* [1] GET_API_VERSION V1 —— 内核 UK API 版本 + 兼容判定（核心） */
+            {
+                struct { unsigned int ctx; unsigned int version; int compatible; } a;
+                memset(&a, 0, sizeof a);
+                a.ctx = 1;
+                int r = ioctl(mfd, 0xC0048203, &a);
+                if (r < 0) {
+                    logf("  GET_API_VERSION(V1) ioctl failed: %s (errno=%d)\n",
+                         strerror(errno), errno);
+                } else {
+                    logf("  UK API version(V1): 0x%08x (dec %u)  compatible=%d  [r7p0期望0x03840384=900]\n",
+                         a.version, a.version, a.compatible);
+                }
             }
-            /* 也尝试 V2 变体（_MALI_UK_GET_API_VERSION_V2，nr 可能不同） */
-            /* V2 用 _mali_uk_get_api_version_v2_s 结构体，但我们不知道确切 ioctl nr。
-             * 只报 V1 结果；V2 留给 blob 运行时触发。 */
+
+            /* [2] GET_API_VERSION_V2 —— r7p0 现代规范（u64 ctx） */
+            {
+                struct { unsigned long long ctx; unsigned int version; int compatible; } a;
+                memset(&a, 0, sizeof a);
+                a.ctx = 1;
+                int r = ioctl(mfd, 0xC0108203, &a);
+                if (r < 0) {
+                    logf("  GET_API_VERSION(V2) ioctl failed: %s (errno=%d)\n",
+                         strerror(errno), errno);
+                } else {
+                    logf("  UK API version(V2): 0x%08x (dec %u)  compatible=%d  [r7p0期望0x03840384=900]\n",
+                         a.version, a.version, a.compatible);
+                }
+            }
+
+            /* [3] PP 核数（Fragment Processor） */
+            {
+                struct { unsigned long long ctx; unsigned int total; unsigned int enabled; } a;
+                memset(&a, 0, sizeof a);
+                a.ctx = 1;
+                int r = ioctl(mfd, 0x80108404, &a);
+                if (r < 0) {
+                    logf("  PP_NUMBER_OF_CORES ioctl failed: %s (errno=%d)\n",
+                         strerror(errno), errno);
+                } else {
+                    logf("  PP cores: total=%u enabled=%u\n", a.total, a.enabled);
+                }
+            }
+
+            /* [4] PP 核硬件版本 */
+            {
+                struct { unsigned long long ctx; unsigned int version; unsigned int padding; } a;
+                memset(&a, 0, sizeof a);
+                a.ctx = 1;
+                int r = ioctl(mfd, 0x80108405, &a);
+                if (r < 0) {
+                    logf("  PP_CORE_VERSION ioctl failed: %s (errno=%d)\n",
+                         strerror(errno), errno);
+                } else {
+                    logf("  PP core version: 0x%08x\n", a.version);
+                }
+            }
+
+            /* [5] GP 核数（Vertex Processor） */
+            {
+                struct { unsigned long long ctx; unsigned int cores; unsigned int padding; } a;
+                memset(&a, 0, sizeof a);
+                a.ctx = 1;
+                int r = ioctl(mfd, 0x80108509, &a);
+                if (r < 0) {
+                    logf("  GP_NUMBER_OF_CORES ioctl failed: %s (errno=%d)\n",
+                         strerror(errno), errno);
+                } else {
+                    logf("  GP cores: %u\n", a.cores);
+                }
+            }
+
+            /* [6] GP 核硬件版本 */
+            {
+                struct { unsigned long long ctx; unsigned int version; unsigned int padding; } a;
+                memset(&a, 0, sizeof a);
+                a.ctx = 1;
+                int r = ioctl(mfd, 0x8010850A, &a);
+                if (r < 0) {
+                    logf("  GP_CORE_VERSION ioctl failed: %s (errno=%d)\n",
+                         strerror(errno), errno);
+                } else {
+                    logf("  GP core version: 0x%08x\n", a.version);
+                }
+            }
+
             close(mfd);
         }
     }
