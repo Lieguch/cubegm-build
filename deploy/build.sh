@@ -141,33 +141,82 @@ log "ALSA headers installed -> $SYSROOT/usr/include/alsa ($(ls "$SYSROOT/usr/inc
 ALSA_CFLAGS="-I$SYSROOT/usr/include"
 
 # -----------------------------------------------------------------------------
-# STAGE 4 -- libdrm headers (for RetroArch plain_drm driver)
-# The device ships libdrm.so.2 (driver.so NEEDED), but the crosstool sysroot
-# lacks the development headers. The host-installed libdrm-dev package (from
-# STAGE 0 apt) provides architecture-independent headers that work for
-# cross-compilation. Install them at the sysroot standard location so the
-# cross-compiler's --sysroot lookup finds them.
+# STAGE 4 -- libdrm / DRM headers (for RetroArch --enable-kms + egl/gl kms ctx)
+#
+# 历史坑 (run 513 实证, 已复现):
+#   旧代码守卫与拷贝都盯着 "$DRM_HEADER_DIR/xf86drm.h" = /usr/include/libdrm/xf86drm.h,
+#   但 Debian/Ubuntu 的 libdrm-dev 把 xf86drm.h / xf86drmMode.h 装在
+#   /usr/include/ **根目录** (已用 `dpkg-deb -c libdrm-dev_2.4.110-1ubuntu1_amd64.deb`
+#   逐文件核对: ./usr/include/xf86drm.h (36788 B) + ./usr/include/xf86drmMode.h),
+#   /usr/include/libdrm/ 下只有 32 个 GPU 专用头 (amdgpu.h/drm.h/...)。
+#   ⇒ 那个守卫永真 → 静默重装 apt (no-op), xf86drm.h 从不进 sysroot。
+#   run 512 挂在更早的 configure(-lEGL), 掩盖了这个 bug; run 513 换 r1p1 blob
+#   修好 -lEGL 后, --enable-kms 真正启用, drm_common.h 的
+#   `#include <xf86drm.h>` 立刻 fatal error: No such file or directory
+#   (gfx/display_servers/dispserv_kms.c + gfx/drivers_context/drm_ctx.c, Makefile:268)。
+#
+# RetroArch 源码里 DRM 头有 4 种 include 约定 (已 grep 全源码核实), 全部要命中:
+#   <xf86drm.h>          gfx/common/drm_common.h (被 6 处引用)
+#   <xf86drmMode.h>      同上
+#   <libdrm/drm_fourcc.h> drm_ctx.c / drm_go2_ctx.c / drm_gfx.c / exynos_gfx.c
+#   <drm/drm_fourcc.h>    drm_go2_ctx.c / oga_gfx.c / deps/libgo2 (内核 uapi 路径)
+#   <drm_fourcc.h>        exynos_gfx.c
 # -----------------------------------------------------------------------------
 DRM_HEADER_DIR="/usr/include/libdrm"
-if [ ! -f "$DRM_HEADER_DIR/xf86drm.h" ]; then
+DRM_ROOT_HDRS="xf86drm.h xf86drmMode.h intel_bufmgr.h radeon_bo.h"
+
+# 守卫要看包真正提供的两个位置, 不能只看 libdrm/ 子目录
+if [ ! -d "$DRM_HEADER_DIR" ] || [ ! -f "/usr/include/xf86drm.h" ]; then
     log "Installing libdrm-dev (host headers, arch-independent)..."
     sudo apt-get install -y libdrm-dev 2>/dev/null || \
-        die "libdrm-dev not available -- RetroArch plain_drm cannot compile."
+        die "libdrm-dev not available -- RetroArch --enable-kms cannot compile."
 fi
 [ -d "$DRM_HEADER_DIR" ] || die "libdrm headers missing at $DRM_HEADER_DIR"
+# 收尾断言: 装不上就是硬错, 不要留到 RetroArch make 阶段才炸
+[ -f "/usr/include/xf86drm.h" ] || \
+    die "/usr/include/xf86drm.h missing after libdrm-dev install (unexpected layout)"
+[ -f "$DRM_HEADER_DIR/drm.h" ] || \
+    die "$DRM_HEADER_DIR/drm.h missing after libdrm-dev install"
+
 # FORCE refresh: CI may cache sysroot with stale headers. Delete and reinstall.
 rm -rf "$SYSROOT/usr/include/libdrm"
 mkdir -p "$SYSROOT/usr/include/libdrm"
 cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
-# ALSO copy to the sysroot include ROOT: RetroArch's gfx/drivers/drm_gfx.c does
-# `#include <xf86drm.h>` (angle brackets -> default include search). With
-# --sysroot the default path is $SYSROOT/usr/include/, so xf86drm.h must be
-# directly visible there (Debian provides it as libdrm/xf86drm.h via pkg-config,
-# but our toolchain has no pkg-config and RetroArch's configure does not relay
-# -I$SYSROOT/usr/include/libdrm into drm_gfx.c's include resolution).
-rm -f "$SYSROOT/usr/include/xf86drm.h"
-cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/" 2>/dev/null
-log "libdrm headers installed -> $SYSROOT/usr/include/(libdrm + root) ($(ls "$SYSROOT/usr/include/libdrm" | wc -l) files)"
+
+# ① 包根目录下的 xf86drm.h / xf86drmMode.h → sysroot 根 (RetroArch 用 <xf86drm.h>)
+# ② 上面那批根头同时补一份到 libdrm/ (RetroArch 某些文件用 <libdrm/xf86drm.h> 或
+#    间接通过 -I$SYSROOT/usr/include/libdrm 解析; 多一份无副作用)
+for _h in $DRM_ROOT_HDRS; do
+    if [ -f "/usr/include/$_h" ]; then
+        cp -f "/usr/include/$_h" "$SYSROOT/usr/include/$_h"
+        cp -f "/usr/include/$_h" "$SYSROOT/usr/include/libdrm/$_h"
+    fi
+done
+
+# ③ <drm/xxx.h> : 内核 uapi 路径 (libdrm-dev 不提供 drm/drm_fourcc.h)
+#    优先取内核头, 退而取 libdrm/ 里的同名副本
+for _h in drm_fourcc.h drm.h drm_mode.h drm_sarea.h; do
+    mkdir -p "$SYSROOT/usr/include/drm"
+    if [ -f "/usr/include/drm/$_h" ]; then
+        cp -f "/usr/include/drm/$_h" "$SYSROOT/usr/include/drm/$_h"
+    elif [ -f "$DRM_HEADER_DIR/$_h" ]; then
+        cp -f "$DRM_HEADER_DIR/$_h" "$SYSROOT/usr/include/drm/$_h"
+    fi
+done
+
+# ④ <drm_fourcc.h> 裸名 → sysroot 根
+if [ -f "/usr/include/drm/drm_fourcc.h" ]; then
+    cp -f "/usr/include/drm/drm_fourcc.h" "$SYSROOT/usr/include/drm_fourcc.h"
+elif [ -f "$DRM_HEADER_DIR/drm_fourcc.h" ]; then
+    cp -f "$DRM_HEADER_DIR/drm_fourcc.h" "$SYSROOT/usr/include/drm_fourcc.h"
+fi
+
+# 硬断言: 起决定性作用的 3 个头必须在位, 否则 --enable-kms 必挂
+for _h in xf86drm.h xf86drmMode.h libdrm/drm_fourcc.h; do
+    [ -f "$SYSROOT/usr/include/$_h" ] || \
+        die "sysroot DRM header missing: $SYSROOT/usr/include/$_h -- kms context will not build"
+done
+log "libdrm/DRM headers installed -> $SYSROOT/usr/include/ (libdrm=$(ls "$SYSROOT/usr/include/libdrm" 2>/dev/null | wc -l) + root xf86drm/drm + drm/ uapi)"
 
 # Common compile flags for every target binary
 export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm"

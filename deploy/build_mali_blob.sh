@@ -172,10 +172,34 @@ cd - >/dev/null
 # 关键: 根 include/EGL/eglplatform.h 含 __GBM__ 分支 (typedef gbm_device*);
 # gbm.h 自身 #define __GBM__ 1。fbdev 版用的是 include/FBDEV/ 子目录
 # (mali_fbdev_types.h), gbm 版改用根目录, 不再要 mali_fbdev_types.h。
+#
+# ★ run 513 实证的坑: 旧的 fetch_hdr 只要目标文件存在就跳过 ("already in sysroot"),
+#   CLI 缓存的 sysroot 里留着上一版 **FBDEV** 头, 于是 "装好了" 其实是错的 ——
+#   实测 egl.h=15361 B (= include/FBDEV/egl.h), eglplatform.h=3827 B (= FBDEV 版),
+#   而 GBM 版应分别是 20345 B / 5913 B (已逐个下载比对)。
+#
+#   判据 (实证, 非猜测): GBM 版 eglplatform.h 含 `#elif defined(__GBM__)` 且把
+#     EGLNativeDisplayType 定义为 `struct gbm_device *`;
+#   FBDEV 版 (3827 B) **完全没有** __GBM__ 分支 (grep 零命中)。
+#   用这个指纹决定要不要强制重下, 既避免缓存毒化, 又不会每次构建都重复下载。
 log "Installing headers (GBM EGL + KHR + GLES2 + gbm.h)..."
+HDR_FP="$SYSROOT/usr/include/EGL/eglplatform.h"
+if [ -s "$HDR_FP" ] && grep -q '__GBM__' "$HDR_FP" && grep -q 'gbm_device' "$HDR_FP"; then
+    HDR_REFRESH=0
+    log "  headers already GBM-flavoured (eglplatform.h has __GBM__ -> gbm_device) -- skip downloads"
+else
+    HDR_REFRESH=1
+    if [ -s "$HDR_FP" ]; then
+        log "  headers are FBDEV-flavoured (stale cache: $(wc -c < "$HDR_FP") B, no __GBM__) -- force refresh"
+    else
+        log "  headers absent -- downloading"
+    fi
+fi
+
 fetch_hdr() {
     local rel="$1" dest="$2"
-    [ -s "$dest" ] && return 0
+    # 仅当「指纹显示已是 GBM 版」且目标存在时才跳过; 否则强制重下 (覆盖缓存毒品)
+    [ "${HDR_REFRESH:-1}" -eq 0 ] && [ -s "$dest" ] && return 0
     mkdir -p "$(dirname "$dest")"
     fetch_url "${HDR_RAW}/${rel}" "${HDR_API}/${rel}" "$dest" \
         || { log "WARN: failed: $rel"; return 1; }
@@ -223,10 +247,39 @@ do
 done
 [ "$FAIL" -eq 0 ] || die "FATAL: critical headers missing -- cannot build RetroArch with GBM/KMS"
 
-# --- 5. 头文件自洽性验证: 用 __GBM__ 路径实编 EGL+GLES2+gbm 头 ---
+# --- 4b. ★ 变体指纹门禁 (run 513 根因固化) ---
+#   光"存在且非空"不够: FBDEV 版的 EGL 头同样非空, 但**没有 __GBM__ 分支**,
+#   会让 eglplatform.h 走错分支 → KMS/GBM 编译必挂。
+#   要求: ① eglplatform.h 必须有 __GBM__ 分支且 EGLNativeDisplayType 是 gbm_device*
+#         ② gbm.h 必须 #define __GBM__ (否则 eglplatform.h 拿不到该宏)
+log "=== Header variant gate (must be GBM/DRM, not FBDEV) ==="
+_GBM_PLAT="$SYSROOT/usr/include/EGL/eglplatform.h"
+if ! grep -q '__GBM__' "$_GBM_PLAT"; then
+    log "  FAIL: EGL/eglplatform.h has no __GBM__ branch -> this is the FBDEV header"
+    log "        ($_GBM_PLAT, $(wc -c < "$_GBM_PLAT") B; GBM 版应含 __GBM__ 且约 5913 B)"
+    die "wrong header variant: FBDEV EGL headers cannot build the GBM/KMS context"
+fi
+if ! grep -q 'gbm_device' "$_GBM_PLAT"; then
+    log "  FAIL: EGL/eglplatform.h has __GBM__ but no gbm_device typedef"
+    die "EGL/eglplatform.h __GBM__ branch is not the expected gbm_device form"
+fi
+if ! grep -q 'define __GBM__' "$SYSROOT/usr/include/gbm.h"; then
+    log "  FAIL: gbm.h does not #define __GBM__ -> eglplatform.h cannot take the GBM branch"
+    die "gbm.h missing '__GBM__' definition"
+fi
+log "  OK: GBM variant confirmed (eglplatform.h __GBM__ -> gbm_device; gbm.h defines __GBM__)"
+
+# --- 5. 头文件自洽性验证: 用 __GBM__ 路径实编 EGL+GLES2+gbm+DRM 头 ---
 # 历史教训: 通用 EGL 头在 Linux 上会走 X11 分支 (#include <X11/Xlib.h>) 必挂;
 # 而 RetroArch 的 check_header() 只吃 $CFLAGS, 不吃 INCLUDES —— 头不装好,
 # 报错会出现在很远的 configure 阶段。用 -fsyntax-only 就地拦下。
+#
+# ★ run 513 扩展 (DRM/KMS 头): --enable-kms 启用后 RetroArch 会编
+#   gfx/common/drm_common.h (#include <xf86drm.h> / <xf86drmMode.h>) 等文件,
+#   而这些头由 build.sh STAGE 4 装进 sysroot。此前它不在这里受检, 于是 run 513
+#   一路跑到 STAGE 8 (约 40 分钟后) 才在 Makefile:268 炸
+#   "xf86drm.h: No such file or directory"。现在把同一批头纳入就地自检:
+#   顺序 —— build.sh 先跑 STAGE 4 (装 DRM 头), 再调本脚本, 所以此刻头已就位。
 #
 # ⚠ 只在「确认存在 ARM 交叉编译器」时才跑: build.sh 第 99 行
 #   export CROSS_COMPILE="${TARGET}-" 会传进来。若退回主机 gcc, -mfloat-abi=hard
@@ -236,23 +289,36 @@ if [ -n "${CROSS_COMPILE:-}" ] && command -v "${CROSS_COMPILE}gcc" >/dev/null 2>
     TMPC="/tmp/mali_hdrchk_$$.c"
     HDRCHK_ERR="/tmp/mali_hdrchk_$$.err"
     cat > "$TMPC" <<'EOF'
+/* ⚠ 顺序有意义: gbm.h 必须排在 EGL 头之前 —— 它 #define __GBM__ 1, 而
+   EGL/eglplatform.h 靠 __GBM__ 才能走 gbm 分支 (否则落到 X11 分支要 <X11/Xlib.h>)。
+   RetroArch 真实源码也是这个顺序: gfx/common/egl_common.h (gbm.h@21 → EGL/egl.h@23)、
+   gfx/drivers_context/drm_ctx.c (<libdrm/drm.h> → <gbm.h>)。把 EGL 头放前面会得到
+   假失败 "X11/Xlib.h: No such file" (已本地复现)。 */
+#include <libdrm/drm.h>
+#include <gbm.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
-#include <gbm.h>
+/* DRM/KMS context heads (RetroArch --enable-kms) -- run 513 缺这几个头挂了 40 分钟 */
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+#include <libdrm/drm_fourcc.h>
+#include <drm/drm_fourcc.h>
+#include <drm_fourcc.h>
 int main(void) { return 0; }
 EOF
     # 参数与 build.sh 第 33 行 ARCH_FLAGS 保持一致, 保证检查环境 == 真实编译环境
     if "${CROSS_COMPILE}gcc" -fsyntax-only \
          -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard \
-         --sysroot="$SYSROOT" -I"$SYSROOT/usr/include" "$TMPC" 2>"$HDRCHK_ERR"; then
-        log "  OK: EGL+GLES2+gbm headers compile via __GBM__ path (no X11)"
+         --sysroot="$SYSROOT" -I"$SYSROOT/usr/include" \
+         -I"$SYSROOT/usr/include/libdrm" "$TMPC" 2>"$HDRCHK_ERR"; then
+        log "  OK: EGL+GLES2+gbm+DRM/KMS headers compile via __GBM__ path (no X11)"
     else
         log "  FAIL: header self-check failed (${CROSS_COMPILE}gcc):"
         sed 's/^/      /' "$HDRCHK_ERR" >&2 || true
         rm -f "$TMPC" "$HDRCHK_ERR"
-        die "libmali headers not self-consistent (X11/KHR path leak?) -- see errors above"
+        die "headers not self-consistent (X11/KHR leak? missing DRM header?) -- see errors above"
     fi
     rm -f "$TMPC" "$HDRCHK_ERR"
 else
