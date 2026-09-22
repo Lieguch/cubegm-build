@@ -184,14 +184,40 @@ export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3
 bash "$HERE/build_libudev_zero.sh" || die "libudev-zero sysroot install FAILED"
 
 # -----------------------------------------------------------------------------
-# STAGE 4.8 -- libmali blob (Mali-400 fbdev user-space driver)
+# STAGE 4.8 -- libmali blob (Mali-400 gbm/DRM user-space driver)
 #   RK3036G has Mali-400 MP GPU; kernel driver already loaded (diag confirmed:
-#   /dev/mali, debugfs /sys/kernel/debug/mali with Mali-400 MP entries).
-#   This installs the ARM blob + EGL/GLES2 headers into the sysroot so RA can
-#   link -lEGL -lGLESv2 -lmali and use --enable-mali_fbdev.
+#   /dev/mali, debugfs /sys/kernel/debug/mali with Mali-400 MP entries) and the
+#   display stack is DRM (/dev/dri/card0 + renderD128, fbs=0). The fbdev blob
+#   variant needs /dev/fb0 framebuffer panning which this DRM stack lacks
+#   (eglGetDisplay -> EGL_NO_DISPLAY). The gbm (drm-dma_buf) variant opens
+#   /dev/dri/card0 + /dev/mali and bundles libgbm. RetroArch then uses
+#   --enable-kms (drm context) instead of --enable-mali_fbdev.
 # -----------------------------------------------------------------------------
-log "STAGE 4.8: installing libmali fbdev blob into sysroot..."
+log "STAGE 4.8: installing libmali gbm (DRM) blob into sysroot..."
 SYSROOT="$SYSROOT" bash "$HERE/build_mali_blob.sh" || die "libmali blob install FAILED"
+
+# -----------------------------------------------------------------------------
+# STAGE 4.9 -- libdrm.so 链接库 (armhf)
+#   gbm 变体 libmali 自带 gbm 符号, 但 RetroArch --enable-kms 的 drm_ctx.c 仍调
+#   drmModeGetResources/drmModeAddFB 等 → 需 -ldrm。设备 rootfs 自带 libdrm.so.2
+#   (driver.so NEEDED), 但交叉编译 sysroot 无链接 stub。从 Debian bullseye armhf
+#   libdrm2 包 (SONAME=libdrm.so.2, 仅依赖 libc 标准符号, ABI 稳定) 提取实文件
+#   并 symlink libdrm.so, 满足 RetroArch check_val 'DRM -ldrm' 链接测试。
+# -----------------------------------------------------------------------------
+log "STAGE 4.9: staging libdrm.so (armhf) from Debian bullseye..."
+if [ ! -s "$SYSROOT/usr/lib/libdrm.so.2" ]; then
+    DRM_DEB="/tmp/libdrm2_armhf.deb"
+    DRM_DEB_URL="http://deb.debian.org/debian/pool/main/libd/libdrm/libdrm2_2.4.104-1_armhf.deb"
+    curl -fsSL -m 150 -o "$DRM_DEB" "$DRM_DEB_URL" || die "libdrm armhf deb download failed"
+    rm -rf /tmp/libdrm2_extract && mkdir -p /tmp/libdrm2_extract
+    dpkg-deb -x "$DRM_DEB" /tmp/libdrm2_extract || die "dpkg-deb extract libdrm deb failed"
+    DRM_SO="$(find /tmp/libdrm2_extract -name 'libdrm.so.2*' -type f | head -1)"
+    [ -n "$DRM_SO" ] || die "libdrm.so.2 not found in deb"
+    cp -f "$DRM_SO" "$SYSROOT/usr/lib/libdrm.so.2"
+    log "libdrm.so.2 staged: $(wc -c < "$SYSROOT/usr/lib/libdrm.so.2") bytes"
+fi
+ln -sf libdrm.so.2 "$SYSROOT/usr/lib/libdrm.so"
+log "libdrm.so -> libdrm.so.2 symlinked"
 
 # -----------------------------------------------------------------------------
 # STAGE 4 -- clone front-end sources
@@ -351,9 +377,9 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # 注意：ALSA 不需要此修补，因为 runner 宿主机装了 libasound2-dev。
     sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include $SYSROOT/usr/include/SDL $SYSROOT/usr/include/EGL $SYSROOT/usr/include/GLES2 $SYSROOT/usr/include/GLES'|" qb/config.libs.sh
     export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/GLES"
-    # Mali-400 GPU: enable mali_fbdev (EGL context driver, opens /dev/fb0 + EGL_OPENGL_ES2_BIT)
-    # + OpenGL ES 2.0 (video_driver="gl" in cfg). Blob provides libEGL/libGLESv2/libmali.
-    # Disable desktop OpenGL (no Mesa); keep SDL1 for game rendering + mali_fbdev for GL menu.
+    # Mali-400 GPU: gbm(drm-dma_buf) blob + --enable-kms (drm context driver, opens
+    # /dev/dri/card0 + /dev/mali). Blob provides libEGL/libGLESv2/libgbm/libmali.
+    # Disable desktop OpenGL (no Mesa); keep SDL1 fallback + kms/drm for GL menu.
     export OPENGLES_LIBS="-L$SYSROOT/usr/lib -lGLESv2 -lEGL -lmali"
     export OPENGLES_CFLAGS="-I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/EGL"
     export EGL_LIBS="-L$SYSROOT/usr/lib -lEGL -lmali"
@@ -372,7 +398,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --enable-sdl --disable-sdl2 --disable-sdl3 \
         --enable-alsa \
         --enable-udev \
-        --disable-plain_drm --disable-kms \
+        --disable-plain_drm --enable-kms \
         --enable-egl \
         --disable-opengl --disable-opengl1 \
         --disable-opengl_core --enable-opengles --disable-opengles3 \
@@ -384,7 +410,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-builtinmbedtls \
         --disable-videoprocessor --disable-qt --disable-cg \
         --disable-neon --disable-libretro \
-        --enable-mali_fbdev \
+        --disable-mali_fbdev \
         --enable-langextra \
         --prefix="$RETROARCH_DST" 2>&1 || \
         die "RetroArch configure failed."
@@ -757,7 +783,7 @@ done
 _queue+=("libstdc++.so.6" "libatomic.so.1")
 # fallback: if readelf was unavailable, seed the known direct deps
 if [ ${#_queue[@]} -eq 0 ]; then
-    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libMali.so libmali-utgard-400-r7p0-r0p0-fbdev.so libmali.so.7 libmali.so libEGL.so.1 libEGL.so libGLESv2.so.2 libGLESv2.so libGLESv1_CM.so.1 libGLESv1_CM.so)
+    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libMali.so libmali-utgard-400-r7p0-r0p0-gbm.so libmali.so.7 libmali.so libEGL.so libGLESv2.so libGLESv1_CM.so libgbm.so libdrm.so.2)
     log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
 fi
 while [ ${#_queue[@]} -gt 0 ]; do

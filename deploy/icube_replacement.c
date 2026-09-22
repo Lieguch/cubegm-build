@@ -138,6 +138,23 @@ static void downclock_gpu(void) {
     closedir(d);
 }
 
+/* v12.0 GPU 硬件加速根治（2026-09-20 gbm/drm 变体）：
+ *   设备显示栈 = DRM(/dev/dri/card0 + renderD128, fbs=0 无 fbdev 双缓冲)。
+ *   旧 libmali fbdev 变体走 /dev/fb0 framebuffer panning → eglGetDisplay EGL_NO_DISPLAY。
+ *   换 gbm(drm-dma_buf) 变体后, RetroArch 需用 kms context (drm_ctx.c, ident="kms")。
+ *   首次启动写默认 cfg(video_context_driver="kms"), 用户手改的 retroarch.cfg 永不被覆盖。 */
+static void write_default_cfg(void) {
+    FILE *f = fopen(RETROARCH_CFG, "r");
+    if (f) { fclose(f); return; }   /* user cfg exists -> never touch */
+    f = fopen(RETROARCH_CFG, "w");
+    if (!f) { hlog("icube: write retroarch.cfg FAILED\n"); return; }
+    fprintf(f,
+        "# CubeGM default cfg (generated; edit freely, never overwritten once present)\n"
+        "video_driver = \"gl\"\n"
+        "video_context_driver = \"kms\"\n");
+    fclose(f);
+}
+
 /* v11.6 音频根治（2026-08-28，rootfs 官方机制 + ~/.asoundrc，不打补丁）：
  *   设备 rootfs 自带完整 /usr/share/alsa/alsa.conf（官方 pcm.default = empty->plug->hw card0，
  *   及 @hooks 自动加载 /etc/asound.conf 与 ~/.asoundrc）。此前用 ALSA_CONFIG_PATH 覆盖整棵
@@ -230,6 +247,7 @@ int main(int argc, char **argv) {
     set_cpu_performance();
     downclock_gpu();   /* 启动 retroarch 前把 Mali GPU 锁到 200MHz（降频根治） */
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
+    write_default_cfg();   /* v12.0: 首次写 video_context_driver="kms" 默认 cfg */
 
     /* 1.5 开机即 Debug（v10.9）：后台派 diag all + diag keylog，不阻塞 retroarch */
     run_diag_bg("all");

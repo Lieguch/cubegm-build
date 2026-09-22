@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  build_mali_blob.sh -- Install libmali-rk-utgard-400 fbdev blob + headers into sysroot
-#  (v2: FBDEV headers + KHR + gl2platform + libMali.so SONAME)
+#  build_mali_blob.sh -- Install libmali-rk-utgard-400 gbm (DRM) blob + headers into sysroot
+#  (v3: GBM/DRM 变体, 替代 fbdev 变体 — 铁证: 设备显示栈是 DRM(/dev/dri/card0+renderD128),
+#   fbdev 变体走 /dev/fb0 framebuffer panning 拿不到 framebuffer → eglGetDisplay EGL_NO_DISPLAY。
+#   gbm 变体 VARIANT=...-drm-dma_buf, open /dev/dri/card0+/dev/mali, 自带 libgbm, 无 libdrm 依赖)
 # =============================================================================
 set -euo pipefail
 
 SYSROOT="${SYSROOT:?SYSROOT must be set}"
 MALI_REPO="https://github.com/paolosabatino/libmali-rk-utgard-400"
-BLOB_NAME="libmali-utgard-400-r7p0-r0p0-fbdev.so"
+BLOB_NAME="libmali-utgard-400-r7p0-r0p0-gbm.so"
 BLOB_URL="${MALI_REPO}/raw/master/lib/arm-linux-gnueabihf/${BLOB_NAME}"
 API_BASE="https://api.github.com/repos/paolosabatino/libmali-rk-utgard-400/contents"
 
@@ -26,7 +28,7 @@ BLOB_DST="$SYSROOT/usr/lib/$BLOB_NAME"
 if [ -f "$BLOB_DST" ] && [ -s "$BLOB_DST" ]; then
     log "libmali blob already in sysroot -- skip"
 else
-    log "Downloading libmali fbdev blob via GitHub API..."
+    log "Downloading libmali gbm (DRM) blob via GitHub API..."
     curl -s -m 120 "${API_BASE}/lib/arm-linux-gnueabihf/${BLOB_NAME}" \
         | python3 -c "import sys,json,base64; d=json.load(sys.stdin); open('${BLOB_DST}','wb').write(base64.b64decode(d['content']))" \
         || die "blob download via GitHub API failed"
@@ -34,27 +36,30 @@ else
     log "blob: $(wc -c < "$BLOB_DST") bytes"
 fi
 
-# --- 2. Symlinks (官方 SONAME=libMali.so, 大小写!) ---
+# --- 2. Symlinks ---
+# gbm 变体同时提供 EGL + GLESv2 + GLESv1 + GBM 全套符号 (readelf 实测)。
+# RetroArch --enable-kms 的 check_val link -lgbm -ldrm:
+#   -lgbm  -> 由本 blob 提供 gbm_create_device 等 (symlink libgbm.so 指向 blob)
+#   -ldrm  -> 由独立 libdrm (STAGE 4.9 从 Debian armhf deb 提取) 提供
 log "Creating symlinks..."
 cd "$SYSROOT/usr/lib"
-# 官方 SONAME (readelf -d 确认)
-ln -sf "$BLOB_NAME" libMali.so
-# 链接别名 (RA 用 -lEGL -lGLESv2 -lmali)
 ln -sf "$BLOB_NAME" libEGL.so
 ln -sf "$BLOB_NAME" libEGL.so.1
 ln -sf "$BLOB_NAME" libGLESv2.so
 ln -sf "$BLOB_NAME" libGLESv2.so.2
 ln -sf "$BLOB_NAME" libGLESv1_CM.so
 ln -sf "$BLOB_NAME" libGLESv1_CM.so.1
+ln -sf "$BLOB_NAME" libgbm.so
+ln -sf "$BLOB_NAME" libgbm.so.1
+ln -sf "$BLOB_NAME" libMali.so
 ln -sf "$BLOB_NAME" libmali.so
-ln -sf "$BLOB_NAME" libmali.so.7
-ln -sf "$BLOB_NAME" libmali.so.7.0.0
 cd - >/dev/null
 
-# --- 3. Download headers (官方 FBDEV 套头 + KHR + GLES2 全量) ---
-# 根因: 通用 EGL/eglplatform.h 在 Linux 默认走 X11 分支 → 无 X11 头必挂
-# 官方解法: 用 FBDEV/ 目录的 eglplatform.h (typedef fbdev_window*) + KHR/khrplatform.h
-log "Installing headers (FBDEV EGL + KHR + GLES2)..."
+# --- 3. Download headers (GBM 变体用根 EGL 头 + gbm.h) ---
+# 关键: 根 include/EGL/eglplatform.h 含 __GBM__ 分支 (typedef gbm_device*);
+# gbm.h 自身 #define __GBM__ 1。fbdev 版用的是 include/FBDEV/ 子目录 (mali_fbdev_types.h),
+# gbm 版改用根目录, 不再要 mali_fbdev_types.h。
+log "Installing headers (GBM EGL + KHR + GLES2 + gbm.h)..."
 fetch_hdr() {
     local rel="$1" dest="$2"
     [ -s "$dest" ] && return 0
@@ -65,16 +70,15 @@ fetch_hdr() {
     [ -s "$dest" ] && log "  $rel -> $(wc -c < "$dest") bytes"
 }
 
-# FBDEV EGL headers (libmali 官方 fbdev 变体, 避免 X11 依赖)
-fetch_hdr "include/FBDEV/egl.h"             "$SYSROOT/usr/include/EGL/egl.h"
-fetch_hdr "include/FBDEV/eglext.h"         "$SYSROOT/usr/include/EGL/eglext.h"
-fetch_hdr "include/FBDEV/eglplatform.h"     "$SYSROOT/usr/include/EGL/eglplatform.h"
-fetch_hdr "include/FBDEV/mali_fbdev_types.h" "$SYSROOT/usr/include/EGL/mali_fbdev_types.h"
+# GBM EGL headers (根目录, 走 __GBM__ 分支, 避免 X11 依赖)
+fetch_hdr "include/EGL/egl.h"             "$SYSROOT/usr/include/EGL/egl.h"
+fetch_hdr "include/EGL/eglext.h"         "$SYSROOT/usr/include/EGL/eglext.h"
+fetch_hdr "include/EGL/eglplatform.h"     "$SYSROOT/usr/include/EGL/eglplatform.h"
 
 # KHR (EGL + GLES 头都 #include <KHR/khrplatform.h>)
 fetch_hdr "include/KHR/khrplatform.h"      "$SYSROOT/usr/include/KHR/khrplatform.h"
 
-# GLES2 完整套 (gl2.h:37 #include <GLES2/gl2platform.h>)
+# GLES2 完整套
 fetch_hdr "include/GLES2/gl2.h"            "$SYSROOT/usr/include/GLES2/gl2.h"
 fetch_hdr "include/GLES2/gl2ext.h"         "$SYSROOT/usr/include/GLES2/gl2ext.h"
 fetch_hdr "include/GLES2/gl2platform.h"    "$SYSROOT/usr/include/GLES2/gl2platform.h"
@@ -85,13 +89,17 @@ fetch_hdr "include/GLES/gl.h"             "$SYSROOT/usr/include/GLES/gl.h"
 fetch_hdr "include/GLES/glext.h"          "$SYSROOT/usr/include/GLES/glext.h"
 fetch_hdr "include/GLES/glplatform.h"     "$SYSROOT/usr/include/GLES/glplatform.h"
 
+# gbm.h (RetroArch drm_ctx.c 必需, 定义 __GBM__ 宏 + gbm_* 声明)
+fetch_hdr "include/gbm.h"                 "$SYSROOT/usr/include/gbm.h"
+
 # --- 4. 落盘校验: 关键 header 必须存在且非空 ---
 log "=== Header install verification ==="
 FAIL=0
 for must in \
-    EGL/egl.h EGL/eglext.h EGL/eglplatform.h EGL/mali_fbdev_types.h \
+    EGL/egl.h EGL/eglext.h EGL/eglplatform.h \
     KHR/khrplatform.h \
-    GLES2/gl2.h GLES2/gl2ext.h GLES2/gl2platform.h
+    GLES2/gl2.h GLES2/gl2ext.h GLES2/gl2platform.h \
+    gbm.h
 do
     f="$SYSROOT/usr/include/$must"
     if [ -s "$f" ]; then
@@ -101,13 +109,8 @@ do
         FAIL=1
     fi
 done
-[ "$FAIL" -eq 0 ] || die "FATAL: critical headers missing -- cannot build RetroArch with EGL"
+[ "$FAIL" -eq 0 ] || die "FATAL: critical headers missing -- cannot build RetroArch with GBM/KMS"
 
-# gbm.h (RA plain_drm/kms 路径可能 include, 无害装上)
-fetch_hdr "include/gbm.h" "$SYSROOT/usr/include/gbm.h" || true
-# mali.icd (OpenCL vendor 文件, 非必须)
-fetch_hdr "include/mali.icd" "$SYSROOT/usr/include/mali.icd" || true
-
-log "=== libmali staged into $SYSROOT/usr/lib ==="
-ls -la "$SYSROOT/usr/lib/" | grep -E 'mali|Mali|EGL|GLES' || true
-log "DONE. RetroArch can now link -lEGL -lGLESv2 -lmali + find FBDEV headers via -I$SYSROOT/usr/include"
+log "=== libmali (gbm/drm) staged into $SYSROOT/usr/lib ==="
+ls -la "$SYSROOT/usr/lib/" | grep -E 'mali|Mali|EGL|GLES|gbm' || true
+log "DONE. RetroArch can now link -lEGL -lGLESv2 -lgbm + find GBM headers via -I$SYSROOT/usr/include"
