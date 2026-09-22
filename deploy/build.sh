@@ -783,7 +783,7 @@ done
 _queue+=("libstdc++.so.6" "libatomic.so.1")
 # fallback: if readelf was unavailable, seed the known direct deps
 if [ ${#_queue[@]} -eq 0 ]; then
-    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libMali.so libmali-utgard-400-r7p0-r0p0-gbm.so libmali.so.7 libmali.so libEGL.so libGLESv2.so libGLESv1_CM.so libgbm.so libdrm.so.2)
+    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libMali.so libmali-utgard-400-r7p0-r1p1-gbm.so libmali.so.1 libmali.so libEGL.so libGLESv2.so libGLESv1_CM.so libgbm.so libdrm.so.2 libcrypto.so.1.1)
     log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
@@ -806,6 +806,30 @@ while [ ${#_queue[@]} -gt 0 ]; do
     fi
 done
 log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
+
+# --- 断言 (run 512 后新增): Mali blob + 其 SONAME 链接名必须落到 payload ---
+#   r1p1 blob 的 DT_SONAME=libmali.so.1 → RetroArch 用 -lEGL 链接后，
+#   二进制里记的 NEEDED 是 libmali.so.1（不是 libEGL.so.1）。
+#   设备上缺这个名字就是 "cannot open shared object file: libmali.so.1"，
+#   屏幕直接不亮。这里显式拦住，避免又要刷一次机才发现。
+_mali_ok=0
+for _c in libmali-utgard-400-r7p0-r1p1-gbm.so libmali.so.1 libEGL.so.1 libgbm.so.1 libdrm.so.2; do
+    if [ -e "$DST/lib/$_c" ]; then
+        log "  bundle OK: $_c"
+    else
+        log "  bundle MISSING: $_c"
+        _mali_ok=1
+    fi
+done
+[ "$_mali_ok" -eq 0 ] || die "runtime Mali/EGL/GBM libs incomplete in $DST/lib -- device would fail to open EGL display"
+
+# libcrypto 兜底: 若某个 blob 变体还带 OpenSSL 未定义符号，把设备 rootfs 的
+# libcrypto 一起带上（不删，只会多几 KB）。注意: 这不能替代 build_mali_blob.sh
+# 的 blob 预检门禁 —— 链接期校验发生在构建机，运行时兜底救不了 configure 失败。
+if [ -e "$SYSROOT/usr/lib/libcrypto.so.1.1" ] && [ ! -e "$DST/lib/libcrypto.so.1.1" ]; then
+    cp -L "$SYSROOT/usr/lib/libcrypto.so.1.1" "$DST/lib/" 2>/dev/null \
+        && log "  bundle OK: libcrypto.so.1.1 (blob OpenSSL fallback)" || true
+fi
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
