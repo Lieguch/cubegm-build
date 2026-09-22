@@ -309,8 +309,12 @@ if [ -n "${CROSS_COMPILE:-}" ] && command -v "${CROSS_COMPILE}gcc" >/dev/null 2>
 int main(void) { return 0; }
 EOF
     # 参数与 build.sh 第 33 行 ARCH_FLAGS 保持一致, 保证检查环境 == 真实编译环境
+    # ★ -DEGL_NO_X11 必须带: 与 build.sh 全局 CFLAGS 一致 (run 514 根因见 build.sh 注释)。
+    #   否则 egl.h 会落到 X11 分支, 这里就会报假失败 "X11/Xlib.h: No such file" ——
+    #   与 RetroArch configure 的 check_header '' EGL EGL/egl.h EGL/eglext.h 完全同因。
     if "${CROSS_COMPILE}gcc" -fsyntax-only \
          -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard \
+         -DEGL_NO_X11 -DMESA_EGL_NO_X11_HEADERS \
          --sysroot="$SYSROOT" -I"$SYSROOT/usr/include" \
          -I"$SYSROOT/usr/include/libdrm" "$TMPC" 2>"$HDRCHK_ERR"; then
         log "  OK: EGL+GLES2+gbm+DRM/KMS headers compile via __GBM__ path (no X11)"

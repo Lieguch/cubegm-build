@@ -219,7 +219,28 @@ done
 log "libdrm/DRM headers installed -> $SYSROOT/usr/include/ (libdrm=$(ls "$SYSROOT/usr/include/libdrm" 2>/dev/null | wc -l) + root xf86drm/drm + drm/ uapi)"
 
 # Common compile flags for every target binary
-export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm"
+#
+# ★ -DEGL_NO_X11 (run 514 根因): libmali 的 EGL 头在 __unix__ 且未定义该宏时会落到
+#   "X11 (tentative)" 分支 -> #include <X11/Xlib.h> -> 无 X11 的 sysroot 直接 fatal。
+#   RetroArch 的 check_header '' EGL EGL/egl.h EGL/eglext.h (config.libs.sh:138) 正是
+#   这样炸的: "Checking presence of header file EGL/eglext.h ... no" ->
+#   "Build assumed that EGL/egl.h exists, but cannot locate. Exiting ..."。
+#
+#   为什么必须放这里(全局), 而不是只放 configure 作用域:
+#     eglplatform.h 的分支链在 _WIN32 → __EMSCRIPTEN__ → __WINSCW__ → WL_EGL_PLATFORM →
+#     __GBM__ → __ANDROID__ → USE_OZONE → [EGL_NO_X11] → X11 → __APPLE__ ...
+#     · <gbm.h> 在 EGL 头之前 #include 的文件 (drm_ctx.c / egl_common.h) 走 __GBM__ 分支,
+#       EGLNativeDisplayType = gbm_device*  (与 drm_ctx.c:306 的 (EGLNativeDisplayType)drm->gbm_dev 天然匹配)
+#     · 单独 include EGL 头、没有 gbm.h 的文件 (configure 探针 / gfx/drivers/vg.c) 拿不到 __GBM__,
+#       只能靠 EGL_NO_X11 落到 void* 分支才不引 X11
+#   两种次序都要能编译 ⇒ 两个宏都得给。上游自家也这么做: RetroArch
+#   Makefile.dingux:134 `OPENGLES_CFLAGS := -DMESA_EGL_NO_X11_HEADERS`。
+#   EGL_NO_X11 与旧名 MESA_EGL_NO_X11_HEADERS 同时定义 —— 上游不同版本只认其中一个。
+#   副作用核查: 全局仅此二宏, 语义等价于"平台取 void*/uintptr_t 的那条非 X11 分支",
+#   与 gbm 的 void* 分支一致; make 阶段与 configure 探针因此看到同一套宏 (不再有"探针过了、
+#   真编挂"的错配)。
+EGL_NO_X11_CFLAGS="-DEGL_NO_X11 -DMESA_EGL_NO_X11_HEADERS"
+export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS $EGL_NO_X11_CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
 
