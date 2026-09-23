@@ -1,0 +1,8 @@
+# ── qemu-sim 内的 assets/ 是**材料**，不是构建产物 ──────────────────────
+# 仓库根 .gitignore 有 `*.so`（本意是忽略交叉编译产物），会把本套件材料里的
+# 原厂 driver.so 一起误伤 ⇒ 交付出去后 guest 里 dlopen 报
+#   open driver.so fail: cannot open shared object file
+# 这类丢失是**静默**的（git add 不报错，只 warning），所以必须在这里显式放行。
+!assets/**
+!assets/**
+!*.so
