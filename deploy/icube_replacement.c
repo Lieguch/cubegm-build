@@ -38,7 +38,12 @@
 #define WORK_DIR      "/mnt/sdcard/cubegm"
 #define RETROARCH     "/mnt/sdcard/cubegm/retroarch"
 #define RETROARCH_CFG "/mnt/sdcard/cubegm/retroarch.cfg"
-#define RETROARCH_LOG "/mnt/sdcard/retroarch.log"
+#define RETROARCH_LOG   "/mnt/sdcard/retroarch.log"
+/* icube-owned video-debug override (rewritten every boot; NOT the user cfg).
+ * Loaded via RetroArch --appendconfig (configuration.c L6603, same
+ * check_verbosity_settings path as the main cfg). Its keys win over
+ * retroarch.cfg because appendconfig is loaded after and is additive. */
+#define RETROARCH_DEBUG_CFG "/mnt/sdcard/cubegm/retroarch_debug.cfg"
 #define DIAG_BIN      "/mnt/sdcard/cubegm/diag"
 
 static void hlog(const char *msg) {
@@ -155,6 +160,31 @@ static void write_default_cfg(void) {
     fclose(f);
 }
 
+/* v12.1 视频 Debug 日志全开（2026-09-23 gpu-probe 516 刷机验证后）：
+ * 开 RA 官方"视频全 debug"的两级门控：
+ *   ① CLI --verbose        -> verbosity_enable()        (retroarch.c L7855)
+ *   ② cfg  frontend_log_level=0 -> verbosity_set_log_level(0)
+ *                             (configuration.c L6418; RARCH_DBG 门控在
+ *                              verbosity.c L527: verbosity ON 且 level<=0 才放行)
+ * RA 默认 frontend_log_level=1 把 RARCH_DBG 全滤掉；drm_ctx.c/egl_common.c 里
+ * 所有 [KMS]/[EGL] 调试行都是 RARCH_DBG 级别 -> 必须置 0 才全出。
+ *
+ * 走 --appendconfig 官方通道（configuration.c L6603，与主 cfg 同一条
+ * check_verbosity_settings；appendconfig 后加载，键级覆盖主 cfg）。
+ * 机器 owned，每 boot 重写（O_WRONLY 整文件），retroarch.cfg 用户红线不碰。
+ * 用户若手改 retroarch.cfg 的 video_context_driver 仍可生效（这里不写它）。 */
+static void write_debug_cfg(void) {
+    FILE *f = fopen(RETROARCH_DEBUG_CFG, "w");
+    if (!f) { hlog("icube: write retroarch_debug.cfg FAILED\n"); return; }
+    fprintf(f,
+        "# CubeGM video-debug override (icube-owned, rewritten every boot)\n"
+        "# NOT the user config: RetroArch loads it via --appendconfig and its\n"
+        "# keys override retroarch.cfg (additive, loaded last).\n"
+        "frontend_log_level = 0\n"
+        "log_to_file = true\n");
+    fclose(f);
+}
+
 /* v11.6 音频根治（2026-08-28，rootfs 官方机制 + ~/.asoundrc，不打补丁）：
  *   设备 rootfs 自带完整 /usr/share/alsa/alsa.conf（官方 pcm.default = empty->plug->hw card0，
  *   及 @hooks 自动加载 /etc/asound.conf 与 ~/.asoundrc）。此前用 ALSA_CONFIG_PATH 覆盖整棵
@@ -206,6 +236,11 @@ static void run_supervisor(void) {
              * + ~/.asoundrc），避免引入 399/400 疑似宕机变量。 */
             execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu",
                   "--verbose",
+                  /* v12.1 视频 Debug 日志全开：官方 appendconfig 通道
+                   * （configuration.c L6603）加载 icube-owned 的
+                   * retroarch_debug.cfg，键级覆盖用户 retroarch.cfg。
+                   * frontend_log_level=0 + --verbose => RARCH_DBG 全放行。 */
+                  "--appendconfig=" RETROARCH_DEBUG_CFG,
                   "--log-file=/mnt/sdcard/retroarch_ra.log", (char *)NULL);
             hlog("icube: exec retroarch FAILED\n");
             _exit(1);
@@ -248,6 +283,7 @@ int main(int argc, char **argv) {
     downclock_gpu();   /* 启动 retroarch 前把 Mali GPU 锁到 200MHz（降频根治） */
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
     write_default_cfg();   /* v12.0: 首次写 video_context_driver="kms" 默认 cfg */
+    write_debug_cfg();     /* v12.1: 视频 Debug 全开 override (appendconfig, 每 boot 重写) */
 
     /* 1.5 开机即 Debug（v10.9）：后台派 diag all + diag keylog，不阻塞 retroarch */
     run_diag_bg("all");

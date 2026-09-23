@@ -70,6 +70,20 @@ static void logf(const char *fmt, ...) {
 
 /* ---- crash guard: one bad module must not kill the whole report ---------- */
 static volatile sig_atomic_t g_fault_module = 0;
+/* Live EGL/GBM/GL probing (dlopen of the Mali blob + DRM master probing) is
+ * only safe when NOT running next to a live RetroArch. Boot 'diag all' is
+ * forked in background by icube while RetroArch starts -> it must stay GPU
+ * read-only. 'diag video' (manual, explicit) is the only entry that runs the
+ * live chain. */
+static volatile sig_atomic_t g_video_live = 0;
+/* Watchdog for the live chain: even a manual 'diag video' must not hang if a
+ * blob call deadlocks the GPU. SIGALRM handler stays minimal (async-signal
+ * safe): logf already fflush()s g_out after every call, so a plain _exit(3)
+ * loses nothing already printed. */
+static void video_watchdog(int sig) {
+    (void)sig;
+    _exit(3);
+}
 static void crash_handler(int sig) {
     const char *nm = sig == SIGSEGV ? "SIGSEGV" : sig == SIGBUS ? "SIGBUS"
                    : sig == SIGABRT ? "SIGABRT" : sig == SIGILL ? "SIGILL"
@@ -1301,10 +1315,682 @@ static void cmd_monitor(int argc, char **argv) {
 }
 
 
+/* ===========================================================================
+ * video -- KMS/GBM/EGL/GL full-stack probe (one-shot, run 516+ video fix line).
+ *
+ * Replicates the EXACT RetroArch @3c3561f call order (gfx/video_driver.c L1440
+ * calls ctx->bind_api BEFORE egl_init_context; gfx/drivers_context/drm_ctx.c
+ * L1155 bind_api = eglBindAPI(EGL_OPENGL_ES_API); L310 egl_init_context on
+ * EGL_PLATFORM_GBM_KHR(0x31D7); egl_common.c L617 egl_init_context:
+ * get_egl_display -> eglInitialize -> egl_init_context_common (chooseConfig)).
+ * Every step logs rc + errno + eglGetError() so the failing ring is visible
+ * without guessing. All EGL/GBM/GL entry points come from dlopen of the
+ * payload blob (same libmali r1p1-gbm blob RetroArch uses at runtime via
+ * LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib) -- diag adds NO new link deps.
+ * ============================================================================ */
+
+#include <elf.h>
+#include <sys/param.h>
+
+/* EGL constants -- real values, sourced (device sysroot headers, i.e. what
+ * RetroArch was built against in run 516: /tmp/verify_sysroot MESA headers,
+ * identical to upstream KHR egl.h/eglext.h):
+ *   EGL/egl.h:    NONE 0x3038, VENDOR 0x3053, VERSION 0x3054,
+ *                 EXTENSIONS 0x3055, CLIENT_APIS 0x308D, SURFACE_TYPE 0x3033,
+ *                 WINDOW_BIT 0x0004, RENDERABLE_TYPE 0x3040, RED 0x3024,
+ *                 GREEN 0x3023, BLUE 0x3022, ALPHA 0x3021, DEPTH 0x3025,
+ *                 RENDER_BUFFER 0x3086, BACK_BUFFER 0x3084,
+ *                 OPENGL_ES2_BIT 0x0004, CONTEXT_CLIENT_VERSION 0x3098,
+ *                 OPENGL_ES_API 0x30A0
+ *   EGL/eglext.h: EGL_PLATFORM_GBM_KHR 0x31D7 (RA drm_ctx.c L68 fallback
+ *                 defines the same value)
+ *   egl errors:   SUCCESS 0x3000, NOT_INIT 0x3001, BAD_ATTRIBUTE 0x3004,
+ *                 BAD_CONFIG 0x3005, BAD_CONTEXT 0x3006, BAD_DISPLAY 0x3008,
+ *                 BAD_NATIVE_PIXMAP 0x300A, BAD_SURFACE 0x300D,
+ *                 CONTEXT_LOST 0x300E
+ * All entry points still resolved via dlsym (no header link needed). */
+#define D_EGL_NONE                  0x3038
+#define D_EGL_VENDOR                0x3053
+#define D_EGL_VERSION               0x3054
+#define D_EGL_EXTENSIONS            0x3055
+#define D_EGL_CLIENT_APIS           0x308D
+#define D_EGL_SURFACE_TYPE          0x3033
+#define D_EGL_WINDOW_BIT            0x0004
+#define D_EGL_RENDERABLE_TYPE       0x3040
+#define D_EGL_RED_SIZE              0x3024
+#define D_EGL_GREEN_SIZE            0x3023
+#define D_EGL_BLUE_SIZE             0x3022
+#define D_EGL_ALPHA_SIZE            0x3021
+#define D_EGL_DEPTH_SIZE            0x3025
+#define D_EGL_RENDER_BUFFER         0x3086
+#define D_EGL_BACK_BUFFER           0x3084
+#define D_EGL_OPENGL_ES2_BIT        0x0004
+#define D_EGL_CONTEXT_CLIENT_VERSION 0x3098
+#define D_EGL_OPENGL_ES_API         0x30A0
+#define D_EGL_PLATFORM_GBM_KHR      0x31D7   /* MESA eglext.h L302; RA drm_ctx.c L68 */
+
+/* GBM constants -- Mali official gbm.h (/tmp/mali_hdr/gbm.h L180-240):
+ *   enum gbm_bo_flags: SCANOUT = 1<<0, CURSOR = 1<<1, RENDERING = 1<<2.
+ *   gbm_surface_create(dev,w,h,format,flags) takes a 5th flags arg (upstream
+ *   mesa gbm API; Mali blob implements it).
+ *   XRGB8888 fourcc: GBM_FORMAT_XRGB8888 (mali gbm.h L122) ==
+ *   DRM_FORMAT_XRGB8888 (device UAPI drm_fourcc.h L77) = fourcc 'X','R','2','4'. */
+#define D_GBM_BO_USE_SCANOUT        (1u << 0)
+#define D_GBM_BO_USE_RENDERING      (1u << 2)
+#define D_GBM_FORMAT_XRGB8888       ((uint32_t)'X' | ((uint32_t)'R' << 8) | \
+                                     ((uint32_t)'2' << 16) | ((uint32_t)'4' << 24))
+/* GL (GLES2) string tokens (standard) */
+#define D_GL_VENDOR                 0x1F00
+#define D_GL_RENDERER               0x1F01
+#define D_GL_VERSION                0x1F02
+#define D_GL_SHADING_LANGUAGE_VER   0x8B8E
+
+typedef void *DPFN_display;
+
+struct d_video {
+    /* egl */
+    void *h;
+    DPFN_display (*eglGetError)(void);
+    DPFN_display (*eglGetDisplay)(unsigned long);
+    DPFN_display (*eglGetPlatformDisplay)(long, void *, const long *);
+    DPFN_display (*eglGetPlatformDisplayEXT)(long, void *, const long *);
+    int          (*eglInitialize)(DPFN_display, unsigned int *, unsigned int *);
+    const char *(*eglQueryString)(DPFN_display, unsigned int);
+    int          (*eglChooseConfig)(DPFN_display, const long *, void **, unsigned int *);
+    void *       (*eglCreateContext)(DPFN_display, void *, void *, const long *);
+    void *       (*eglCreateWindowSurface)(DPFN_display, void *, void *, const long *);
+    int          (*eglMakeCurrent)(DPFN_display, void *, void *, void *);
+    int          (*eglDestroySurface)(DPFN_display, void *);
+    int          (*eglDestroyContext)(DPFN_display, void *);
+    int          (*eglTerminate)(DPFN_display);
+    int          (*eglBindAPI)(unsigned int);
+    void *       (*eglGetCurrentContext)(void);
+    DPFN_display (*eglGetConfigAttrib)(DPFN_display, void *, unsigned int, unsigned int *);
+    /* gbm (Mali official gbm.h: surface_create takes a 5th flags arg;
+     * there is NO gbm_surface_create_with_bo in the Mali blob API) */
+    void *h_g;
+    void *(*gbm_create_device)(int);
+    void *(*gbm_bo_create)(void *, unsigned int, unsigned int, unsigned int, unsigned int);
+    void *(*gbm_surface_create)(void *, unsigned int, unsigned int, unsigned int, unsigned int);
+    unsigned int (*gbm_bo_get_width)(void *);
+    unsigned int (*gbm_bo_get_height)(void *);
+    unsigned int (*gbm_bo_get_format)(void *);
+    int  (*gbm_bo_destroy)(void *);
+    int  (*gbm_surface_destroy)(void *);
+    /* gles2 */
+    void *h_s;
+    const char *(*glGetString)(unsigned int);
+};
+
+static const char *d_egl_err_str(unsigned e) {
+    /* MESA EGL/egl.h error values (device sysroot, run 516 build) */
+    switch (e) {
+    case 0x3000: return "EGL_SUCCESS";
+    case 0x3001: return "EGL_NOT_INITIALIZED";
+    case 0x3004: return "EGL_BAD_ATTRIBUTE";
+    case 0x3005: return "EGL_BAD_CONFIG";
+    case 0x3006: return "EGL_BAD_CONTEXT";
+    case 0x3007: return "EGL_BAD_CURRENT_SURFACE";
+    case 0x3008: return "EGL_BAD_DISPLAY";
+    case 0x3009: return "EGL_BAD_MATCH";
+    case 0x300A: return "EGL_BAD_NATIVE_PIXMAP";
+    case 0x300B: return "EGL_BAD_NATIVE_WINDOW";
+    case 0x300C: return "EGL_BAD_PARAMETER";
+    case 0x300D: return "EGL_BAD_SURFACE";
+    case 0x300E: return "EGL_CONTEXT_LOST";
+    default: return "(other)";
+    }
+}
+
+/* dlopen the payload blob lib by candidate names (RA runtime path first). */
+static void *d_video_open(const char *names[], int n) {
+    for (int i = 0; i < n; i++) {
+        void *h = dlopen(names[i], RTLD_NOW | RTLD_LOCAL);
+        if (h) { logf("  dlopen %s OK -> %p\n", names[i], h); return h; }
+        logf("  dlopen %s failed: %s\n", names[i], dlerror());
+    }
+    return NULL;
+}
+
+/* ELF32 DT_NEEDED / DT_SONAME (manual parse: no libelf). */
+static void d_parse_elf(const char *path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) { logf("  [%s] open failed: %s\n", path, strerror(errno)); return; }
+    off_t sz = lseek(fd, 0, SEEK_END);
+    if (sz <= 0 || sz > (off_t)256 * 1024 * 1024) {
+        logf("  [%s] bad size %lld\n", path, (long long)sz);
+        if (fd >= 0) close(fd);
+        return;
+    }
+    char *b = (char *)malloc((size_t)sz);
+    if (!b) { close(fd); return; }
+    lseek(fd, 0, SEEK_SET);
+    if (read(fd, b, (size_t)sz) != sz) { logf("  [%s] short read\n", path); free(b); close(fd); return; }
+    close(fd);
+    if ((unsigned char)b[0] != 0x7f || memcmp(b + 1, "ELF", 3) != 0) {
+        logf("  [%s] not an ELF\n", path); free(b); return;
+    }
+    if (b[4] != 1) { logf("  [%s] 64-bit ELF, expected 32-bit ARM\n", path); free(b); return; }
+    const Elf32_Ehdr *e = (const Elf32_Ehdr *)b;
+    const Elf32_Shdr *sh = (const Elf32_Shdr *)(b + e->e_shoff);
+    const char *shstr = b + sh[e->e_shstrndx].sh_offset;
+    const char *dynstr = NULL; const char *dynamic = NULL;
+    unsigned dynstr_sz = 0;
+    for (int i = 0; i < e->e_shnum; i++) {
+        const char *nm = shstr + sh[i].sh_name;
+        if (sh[i].sh_size == 0) continue;
+        if (strcmp(nm, ".dynstr") == 0) { dynstr = b + sh[i].sh_offset; dynstr_sz = sh[i].sh_size; }
+        else if (strcmp(nm, ".dynamic") == 0) dynamic = b + sh[i].sh_offset;
+    }
+    if (!dynamic || !dynstr) { logf("  [%s] no .dynamic/.dynstr (fully stripped?)\n", path); free(b); return; }
+    const Elf32_Dyn *dy = (const Elf32_Dyn *)dynamic;
+    logf("  [%s] DT_NEEDED: ", path);
+    int first = 1;
+    for (int i = 0; dy[i].d_tag != DT_NULL; i++) {
+        if (dy[i].d_tag == DT_NEEDED) {
+            logf("%s%s", first ? "" : ", ", dynstr + dy[i].d_un.d_val);
+            first = 0;
+        }
+    }
+    logf("\n");
+    for (int i = 0; dy[i].d_tag != DT_NULL; i++) {
+        if (dy[i].d_tag == DT_SONAME) {
+            logf("  [%s] DT_SONAME = %.*s\n", path, (int)dynstr_sz, dynstr + dy[i].d_un.d_val);
+            break;
+        }
+    }
+    free(b);
+}
+
+/* hex dump a sysfs byte file (EDID blocks are raw bytes) */
+static void d_hex_dump(const char *path, int max_bytes) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) { logf("    [%s] open failed: %s\n", path, strerror(errno)); return; }
+    unsigned char buf[512];
+    ssize_t n = read(fd, buf, sizeof buf);
+    close(fd);
+    if (n <= 0) { logf("    [%s] empty (%s)\n", path, strerror(errno)); return; }
+    int lim = (int)n < max_bytes ? (int)n : max_bytes;
+    int all_ff = 1;
+    for (int i = 0; i < lim; i++) if (buf[i] != 0xFF) all_ff = 0;
+    logf("    [%s] %d bytes%s\n", path, (int)n, all_ff ? " -- ALL 0xFF (empty/missing EDID)" : "");
+    for (int off = 0; off < lim; off += 16) {
+        logf("      %04x: ", off);
+        int cnt = lim - off; if (cnt > 16) cnt = 16;
+        char line[16 * 3 + 20]; int pos = 0;
+        for (int i = 0; i < cnt; i++) pos += snprintf(line + pos, sizeof(line) - pos, "%02x ", buf[off + i]);
+        line[pos] = 0;
+        logf("%s\n", line);
+    }
+    /* PnP ID: EDID 0..5 = mfr(2) + product(2) + serial(4) */
+    if (n >= 8 && !all_ff)
+        logf("      EDID header mfr=%02x%02x product=%02x%02x serial=%02x%02x%02x%02x\n",
+             buf[4], buf[5], buf[6], buf[7], buf[0], buf[1], buf[2], buf[3]);
+}
+
+static void cmd_video(void) {
+    g_fault_module = 40;
+    logf("\n=== video (KMS/GBM/EGL/GL full-stack; replicates RA@3c3561f call order) ===\n");
+
+    /* --- 0. whoami / env --- */
+    logf("  uid=%d euid=%d\n", getuid(), geteuid());
+    {
+        const char *ldl = getenv("LD_LIBRARY_PATH");
+        logf("  LD_LIBRARY_PATH=%s\n", ldl ? ldl : "(unset)");
+        const char *home = getenv("HOME");
+        logf("  HOME=%s\n", home ? home : "(unset)");
+    }
+    cat_file("/proc/dri/card0");
+
+    /* --- 1. device nodes --- */
+    logf("  --- device nodes ---\n");
+    {
+        DIR *d = opendir("/dev/dri");
+        logf("    /dev/dri:\n");
+        if (d) {
+            struct dirent *e;
+            int any = 0;
+            while ((e = readdir(d))) {
+                if (e->d_name[0] == '.') continue;
+                struct stat st;
+                char p[128];
+                snprintf(p, sizeof p, "/dev/dri/%s", e->d_name);
+                if (stat(p, &st) == 0) {
+                    logf("      %s  perm=%o dev=%d:%d\n", e->d_name, (unsigned)st.st_mode,
+                         (int)(st.st_rdev >> 8), (int)(st.st_rdev & 0xff));
+                    any = 1;
+                }
+            }
+            if (!any) logf("      (empty)\n");
+            closedir(d);
+        } else logf("      opendir failed: %s\n", strerror(errno));
+        struct stat st;
+        logf("    /dev/mali: %s\n", stat("/dev/mali", &st) == 0
+               ? "present" : "ABSENT");
+        DIR *dfb = opendir("/dev");
+        logf("    /dev/fb*:\n");
+        if (dfb) {
+            struct dirent *e;
+            int nfb = 0;
+            while ((e = readdir(dfb))) {
+                if (strncmp(e->d_name, "fb", 2) != 0 || (e->d_name[2] == 0 || e->d_name[2] == '.')) continue;
+                logf("      /dev/%s\n", e->d_name);
+                nfb++;
+            }
+            if (!nfb) logf("      (none -- fbs=0, pure DRM display stack)\n");
+            closedir(dfb);
+        } else logf("      opendir failed: %s\n", strerror(errno));
+    }
+
+    /* --- 2. DRM resources (independent copy of the two-pass protocol) --- */
+    logf("  --- DRM resources (card0) ---\n");
+    int cfd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+    if (cfd < 0) { logf("    open card0 O_RDWR FAILED: %s\n", strerror(errno)); cfd = -1; }
+    if (cfd < 0) {
+        cfd = open("/dev/dri/card0", O_RDONLY | O_CLOEXEC);
+        if (cfd < 0) logf("    open card0 O_RDONLY also failed: %s\n", strerror(errno));
+    }
+    if (cfd >= 0) {
+        struct drm_mode_card_res res; memset(&res, 0, sizeof res);
+        if (ioctl(cfd, DRM_IOCTL_MODE_GETRESOURCES, &res) == 0) {
+            logf("    count_connectors=%u count_encoders=%u count_crtcs=%u count_fbs=%u\n",
+                 res.count_connectors, res.count_encoders, res.count_crtcs, res.count_fbs);
+            uint32_t *conns = calloc(res.count_connectors ? res.count_connectors : 1, 4);
+            uint32_t *crtcs = calloc(res.count_crtcs ? res.count_crtcs : 1, 4);
+            uint32_t *encs  = calloc(res.count_encoders ? res.count_encoders : 1, 4);
+            uint32_t *fbs   = calloc(res.count_fbs ? res.count_fbs : 1, 4);
+            res.connector_id_ptr = (uintptr_t)conns;
+            res.crtc_id_ptr      = (uintptr_t)crtcs;
+            res.encoder_id_ptr   = (uintptr_t)encs;
+            res.fb_id_ptr        = (uintptr_t)fbs;
+            if (ioctl(cfd, DRM_IOCTL_MODE_GETRESOURCES, &res) == 0) {
+                for (uint32_t i = 0; i < res.count_connectors; i++) {
+                    struct drm_mode_get_connector gc; memset(&gc, 0, sizeof gc);
+                    gc.connector_id = conns[i];
+                    if (ioctl(cfd, DRM_IOCTL_MODE_GETCONNECTOR, &gc) != 0) {
+                        logf("    conn%u(%u): GETCONNECTOR failed: %s\n", i, conns[i], strerror(errno));
+                        continue;
+                    }
+                    static const char *tnames[] = {
+                        "Unknown", "VGA", "DVI", "Composite", "S-Video", "LVDS", "Component",
+                        "Dp", "HDMIA", "HDMIB", "TBT", "eDP", "Virtual1", "Virtual2", "Virtual3"
+                    };
+                    const char *tn = gc.connector_type < 15 ? tnames[gc.connector_type] : "ext";
+                    static const char *connames[] = { "Disconn", "Connected", "Unknown" };
+                    logf("    conn%u id=%u name? type=%s(%u) connection=%s encoders_current=%u\n",
+                         i, gc.connector_id, tn, gc.connector_type,
+                         gc.connection < 3 ? connames[gc.connection] : "?", gc.encoder_id);
+                    logf("      mm=%ux%u  count_modes=%u\n", gc.mm_width, gc.mm_height, gc.count_modes);
+                    if (gc.count_modes) {
+                        struct drm_mode_modeinfo *modes = calloc(gc.count_modes, sizeof *modes);
+                        gc.modes_ptr = (uintptr_t)modes;
+                        if (ioctl(cfd, DRM_IOCTL_MODE_GETCONNECTOR, &gc) == 0) {
+                            for (uint32_t m = 0; m < gc.count_modes; m++)
+                                logf("      mode%u: %ux%u @%u.%02f%s\n", m,
+                                     modes[m].hdisplay, modes[m].vdisplay,
+                                     modes[m].clock / 1000, modes[m].clock % 1000,
+                                     (m == 0 && gc.connector_id ? " *" : ""));
+                        }
+                        free(modes);
+                    } else {
+                        logf("      count_modes=0  <-- NO MODES on this connector (matches 'no usable connector/mode')\n");
+                    }
+                    logf("      encoders=%u props=%u\n", gc.count_encoders, gc.count_props);
+                }
+            } else logf("    GETRESOURCES(2) failed: %s\n", strerror(errno));
+            free(conns); free(crtcs); free(encs); free(fbs);
+        } else logf("    GETRESOURCES failed: %s\n", strerror(errno));
+
+        /* --- 4. DRM master --- */
+        logf("  --- DRM master ---\n");
+        {
+            /* Try to (re)acquire master on this fd. If RA already holds it,
+             * the kernel denies (EACCES) -- that itself is evidence. Do NOT
+             * hold it afterwards (diag should not steal from RA). */
+            int r = ioctl(cfd, DRM_IOCTL_SET_MASTER);
+            logf("    SET_MASTER rc=%d errno=%d (%s)\n", r,
+                 r < 0 ? errno : 0, r < 0 ? strerror(errno) : "ok");
+            if (r == 0) {
+                /* drop it again so RA/driver state is untouched */
+                int d = ioctl(cfd, DRM_IOCTL_DROP_MASTER);
+                logf("    DROP_MASTER rc=%d errno=%d (%s)\n", d,
+                     d < 0 ? errno : 0, d < 0 ? strerror(errno) : "ok");
+            }
+            cat_file("/proc/dri/card0");
+        }
+    }
+
+    /* --- 3. EDID via sysfs (raw bytes; all-0xFF = innohdmi has no EDID -> no modes) --- */
+    logf("  --- EDID / connector sysfs ---\n");
+    {
+        DIR *sd = opendir("/sys/class/drm");
+        if (sd) {
+            struct dirent *e;
+            while ((e = readdir(sd))) {
+                if (strncmp(e->d_name, "card0", 5) != 0) continue;
+                char base[256];
+                snprintf(base, sizeof base, "/sys/class/drm/%s", e->d_name);
+                char statusp[300], edidp[300];
+                snprintf(statusp, sizeof statusp, "%s/status", base);
+                if (access(statusp, R_OK) == 0) {
+                    FILE *f = fopen(statusp, "r");
+                    char line[64] = "";
+                    if (f) { fgets(line, sizeof line, f); fclose(f); }
+                    logf("    %s\n      status=%s", e->d_name, line);
+                }
+                snprintf(edidp, sizeof edidp, "%s/edid", base);
+                d_hex_dump(edidp, 18);
+            }
+            closedir(sd);
+        } else logf("    /sys/class/drm opendir failed: %s\n", strerror(errno));
+    }
+
+    /* --- 5. payload lib layout (blob + symlinks) --- */
+    logf("  --- payload libs (/mnt/sdcard/cubegm/lib) ---\n");
+    {
+        DIR *d = opendir("/mnt/sdcard/cubegm/lib");
+        if (d) {
+            struct dirent *e;
+            while ((e = readdir(d))) {
+                if (e->d_name[0] == '.' ) {
+                    if (strcmp(e->d_name, ".") != 0 && strcmp(e->d_name, "..") != 0)
+                        logf("      %s\n", e->d_name);
+                    continue;
+                }
+                char p[200];
+                snprintf(p, sizeof p, "/mnt/sdcard/cubegm/lib/%s", e->d_name);
+                struct stat st;
+                char target[256] = "";
+                if (lstat(p, &st) == 0)
+                    snprintf(target, sizeof target, " [symlink -> %s]",
+                             readlink(p, target, sizeof target - 1) > 0 ? target : "(unreadable)");
+                logf("      %s  %d bytes%s\n", e->d_name, (int)st.st_size, target);
+            }
+            closedir(d);
+        } else logf("    opendir failed: %s\n", strerror(errno));
+    }
+    logf("  --- ELF deps ---\n");
+    d_parse_elf("/mnt/sdcard/cubegm/retroarch");
+    d_parse_elf("/mnt/sdcard/cubegm/lib/libmali.so.1");
+
+    /* --- 6. current user cfg values (informational; icube never overwrites) --- */
+    logf("  --- retroarch.cfg (user-owned; values in effect) ---\n");
+    {
+        FILE *f = fopen("/mnt/sdcard/cubegm/retroarch.cfg", "r");
+        if (f) {
+            char line[256];
+            while (fgets(line, sizeof line, f)) {
+                if (strstr(line, "video_") || strstr(line, "log_") ||
+                    strstr(line, "frontend_log_level") || strstr(line, "verbosity"))
+                    logf("    %s", line);
+            }
+            fclose(f);
+        } else logf("    (no retroarch.cfg at /mnt/sdcard/cubegm/retroarch.cfg)\n");
+    }
+
+    /* --- 7+8. live RA call chain: gbm -> EGL -> GL ---
+     * GPU-live: dlopen of the Mali blob + DRM master probing. Gated to the
+     * manual 'diag video' only; boot 'diag all' (forked bg next to a running
+     * RetroArch) keeps the GPU read-only. 60s SIGALRM watchdog guards the
+     * live path: a blob deadlock must not hang the report/boot. */
+    if (!g_video_live) {
+        logf("  -- live EGL/GBM/GL chain SKIPPED (boot diag all keeps GPU read-only)\n");
+        logf("     (run 'diag video' manually for live gbm/egl/gl probing)\n");
+        logf("=== video done ===\n");
+        return;
+    }
+    {
+        struct sigaction wsa; memset(&wsa, 0, sizeof wsa);
+        wsa.sa_handler = video_watchdog;
+        sigaction(SIGALRM, &wsa, NULL);
+        alarm(60);
+    }
+    logf("  --- EGL/GBM/GL chain (dlopen payload blob; RA original call order first) ---\n");
+    struct d_video d; memset(&d, 0, sizeof d);
+
+    {
+        static const char *egl_names[] = {
+            "/mnt/sdcard/cubegm/lib/libEGL.so",
+            "/mnt/sdcard/cubegm/lib/libEGL.so.1",
+            "/mnt/sdcard/cubegm/lib/libmali.so.1",
+            "libEGL.so", "libEGL.so.1", "libmali.so.1"
+        };
+        d.h = d_video_open(egl_names, 6);
+    }
+    if (d.h) {
+        d.eglGetError            = (DPFN_display)dlsym(d.h, "eglGetError");
+        d.eglGetDisplay         = (DPFN_display)dlsym(d.h, "eglGetDisplay");
+        d.eglGetPlatformDisplay = (DPFN_display)dlsym(d.h, "eglGetPlatformDisplay");
+        d.eglGetPlatformDisplayEXT = (DPFN_display)dlsym(d.h, "eglGetPlatformDisplayEXT");
+        d.eglInitialize         = (int (*)(DPFN_display, unsigned int *, unsigned int *))dlsym(d.h, "eglInitialize");
+        d.eglQueryString        = (const char *(*)(DPFN_display, unsigned int))dlsym(d.h, "eglQueryString");
+        d.eglChooseConfig       = (int (*)(DPFN_display, const long *, void **, unsigned int *))dlsym(d.h, "eglChooseConfig");
+        d.eglCreateContext      = (void *(*)(DPFN_display, void *, void *, const long *))dlsym(d.h, "eglCreateContext");
+        d.eglCreateWindowSurface= (void *(*)(DPFN_display, void *, void *, const long *))dlsym(d.h, "eglCreateWindowSurface");
+        d.eglMakeCurrent        = (int (*)(DPFN_display, void *, void *, void *))dlsym(d.h, "eglMakeCurrent");
+        d.eglDestroySurface     = (int (*)(DPFN_display, void *))dlsym(d.h, "eglDestroySurface");
+        d.eglDestroyContext     = (int (*)(DPFN_display, void *))dlsym(d.h, "eglDestroyContext");
+        d.eglTerminate          = (int (*)(DPFN_display))dlsym(d.h, "eglTerminate");
+        d.eglBindAPI            = (int (*)(unsigned int))dlsym(d.h, "eglBindAPI");
+        d.eglGetCurrentContext  = (void *(*)(void))dlsym(d.h, "eglGetCurrentContext");
+        logf("    EGL symbols: GetError=%p GetDisplay=%p GetPlatformDisplay=%p Initialize=%p QueryString=%p ChooseConfig=%p\n",
+             (void*)d.eglGetError, (void*)d.eglGetDisplay, (void*)d.eglGetPlatformDisplay,
+             (void*)d.eglInitialize, (void*)d.eglQueryString, (void*)d.eglChooseConfig);
+    }
+    logf("    GBM symbols (same blob): ");
+    {
+        static const char *gbm_names[] = {
+            "/mnt/sdcard/cubegm/lib/libgbm.so",
+            "/mnt/sdcard/cubegm/lib/libgbm.so.1",
+            "/mnt/sdcard/cubegm/lib/libmali.so.1",
+            "libgbm.so", "libgbm.so.1"
+        };
+        d.h_g = d_video_open(gbm_names, 5);
+    }
+    if (d.h_g) {
+        d.gbm_create_device = (void *(*)(int))dlsym(d.h_g, "gbm_create_device");
+        d.gbm_bo_create    = (void *(*)(void *, unsigned int, unsigned int, unsigned int, unsigned int))dlsym(d.h_g, "gbm_bo_create");
+        d.gbm_surface_create = (void *(*)(void *, unsigned int, unsigned int, unsigned int, unsigned int))dlsym(d.h_g, "gbm_surface_create");
+        d.gbm_bo_get_width = (unsigned int (*)(void *))dlsym(d.h_g, "gbm_bo_get_width");
+        d.gbm_bo_get_height= (unsigned int (*)(void *))dlsym(d.h_g, "gbm_bo_get_height");
+        d.gbm_bo_get_format= (unsigned int (*)(void *))dlsym(d.h_g, "gbm_bo_get_format");
+        d.gbm_bo_destroy   = (int (*)(void *))dlsym(d.h_g, "gbm_bo_destroy");
+        d.gbm_surface_destroy = (int (*)(void *))dlsym(d.h_g, "gbm_surface_destroy");
+        logf("create_device=%p bo_create=%p surface_create=%p\n",
+             (void*)d.gbm_create_device, (void*)d.gbm_bo_create, (void*)d.gbm_surface_create);
+    }
+    {
+        static const char *gles_names[] = {
+            "/mnt/sdcard/cubegm/lib/libGLESv2.so",
+            "/mnt/sdcard/cubegm/lib/libGLESv2.so.2",
+            "/mnt/sdcard/cubegm/lib/libmali.so.1",
+            "libGLESv2.so"
+        };
+        d.h_s = d_video_open(gles_names, 4);
+    }
+    if (d.h_s) {
+        d.glGetString = (const char *(*)(unsigned int))dlsym(d.h_s, "glGetString");
+        logf("    glGetString=%p\n", (void*)d.glGetString);
+    }
+
+    if (cfd < 0 || !d.h) {
+        logf("  (skipping EGL chain: %s %s)\n",
+             cfd < 0 ? "card0 not open" : "card0 open",
+             !d.h ? "-- no EGL handle" : "");
+    } else {
+        /* GBM device on card0 (RA: gbm_create_device(fd) after drmSetMaster) */
+        void *gbm_dev = NULL;
+        if (d.gbm_create_device) {
+            gbm_dev = d.gbm_create_device(cfd);
+            logf("    gbm_create_device(card0) -> %p %s\n", gbm_dev, gbm_dev ? "" : "(NULL)");
+        } else logf("    gbm_create_device symbol MISSING in blob\n");
+
+        /* === Stage A: RA original order (bind_api BEFORE any EGL init) === */
+        logf("  -- Stage A: RA original order (video_driver.c L1440 bind_api first) --\n");
+        if (d.eglBindAPI) {
+            int rc = d.eglBindAPI(D_EGL_OPENGL_ES_API);
+            logf("    A1 eglBindAPI(OPENGL_ES_API=0x30A0) rc=%d eglErr=0x%04x (%s)\n",
+                 rc, (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+                 d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+        } else logf("    A1 eglBindAPI symbol MISSING\n");
+
+        DPFN_display dpy = NULL;
+        int dpy_path = 0;
+        if (dpy == NULL && d.eglGetPlatformDisplay && gbm_dev) {
+            dpy = d.eglGetPlatformDisplay((long)D_EGL_PLATFORM_GBM_KHR, gbm_dev, NULL);
+            dpy_path = 1;
+        }
+        if (dpy == NULL && d.eglGetPlatformDisplayEXT && gbm_dev) {
+            dpy = d.eglGetPlatformDisplayEXT((long)D_EGL_PLATFORM_GBM_KHR, gbm_dev, NULL);
+            dpy_path = 2;
+        }
+        if (dpy == NULL && d.eglGetDisplay) {
+            dpy = d.eglGetDisplay(0);
+            dpy_path = 3;
+        }
+        logf("    A2 egl display: path=%d (%s) dpy=%p eglErr=0x%04x (%s)\n",
+             dpy_path,
+             dpy_path == 1 ? "eglGetPlatformDisplay(GBM)" :
+             dpy_path == 2 ? "eglGetPlatformDisplayEXT(GBM)" :
+             dpy_path == 3 ? "eglGetDisplay(0) fbdev-fallback" : "NONE",
+             dpy,
+             (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+             d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+
+        unsigned int maj = 0, mino = 0;
+        if (dpy && d.eglInitialize) {
+            int rc = d.eglInitialize(dpy, &maj, &mino);
+            logf("    A3 eglInitialize rc=%d ver=%u.%u eglErr=0x%04x (%s)\n",
+                 rc, maj, mino,
+                 (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+                 d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+        } else logf("    A3 eglInitialize SKIPPED (no display or symbol)\n");
+
+        if (dpy && d.eglQueryString) {
+            const char *vend = d.eglQueryString(dpy, D_EGL_VENDOR);
+            const char *ver  = d.eglQueryString(dpy, D_EGL_VERSION);
+            const char *apis = d.eglQueryString(dpy, D_EGL_CLIENT_APIS);
+            const char *exts = d.eglQueryString(dpy, D_EGL_EXTENSIONS);
+            logf("    A4 VENDOR=%s\n", vend ? vend : "(NULL)");
+            logf("       VERSION=%s\n", ver ? ver : "(NULL)");
+            logf("       CLIENT_APIS=%s\n", apis ? apis : "(NULL)");
+            logf("       EXTENSIONS=%s\n", exts ? exts : "(NULL)");
+        }
+
+        /* RA exact attribs (drm_ctx.c L239 DRM_EGL_ATTRIBS_BASE + GLES2 bit) */
+        long attribs[] = {
+            D_EGL_SURFACE_TYPE, D_EGL_WINDOW_BIT,
+            D_EGL_RED_SIZE, 1, D_EGL_GREEN_SIZE, 1, D_EGL_BLUE_SIZE, 1,
+            D_EGL_ALPHA_SIZE, 0, D_EGL_DEPTH_SIZE, 0,
+            D_EGL_RENDERABLE_TYPE, D_EGL_OPENGL_ES2_BIT,
+            D_EGL_NONE
+        };
+        void *cfg = NULL;
+        unsigned int n = 0;
+        if (dpy && d.eglChooseConfig) {
+            void *cfgs = (void *)calloc(1, sizeof(void *));
+            int rc = d.eglChooseConfig(dpy, attribs, &cfgs, &n);
+            logf("    A5 eglChooseConfig(RA attrs) rc=%d n=%u eglErr=0x%04x (%s)\n",
+                 rc, n,
+                 (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+                 d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+            if (rc && n > 0) cfg = cfgs;
+            free(cfgs);
+        }
+
+        void *ctx = NULL;
+        if (cfg && d.eglCreateContext) {
+            long cattrs[] = { D_EGL_CONTEXT_CLIENT_VERSION, 2, D_EGL_NONE };
+            ctx = d.eglCreateContext(dpy, cfg, NULL, cattrs);
+            logf("    A6 eglCreateContext(ES2) -> %p eglErr=0x%04x (%s)\n",
+                 ctx,
+                 (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+                 d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+        } else logf("    A6 eglCreateContext SKIPPED (no config/ctx symbol)\n");
+
+        /* GBM buffer + surface (RA official: gbm_surface_create(dev,w,h,fmt,flags)
+         * with GBM_FORMAT_XRGB8888 + SCANOUT|RENDERING — drm_ctx.c L1027/L672) */
+        void *bo = NULL, *gsurf = NULL;
+        if (gbm_dev && d.gbm_bo_create && d.gbm_surface_create) {
+            bo = d.gbm_bo_create(gbm_dev, 1280, 720, D_GBM_FORMAT_XRGB8888,
+                                 D_GBM_BO_USE_SCANOUT | D_GBM_BO_USE_RENDERING);
+            logf("    A7a gbm_bo_create(1280x720 XRGB8888) -> %p\n", bo);
+            if (bo && d.gbm_bo_get_width)
+                logf("        bo w=%u h=%u fmt=0x%08x\n",
+                     d.gbm_bo_get_width(bo), d.gbm_bo_get_height(bo), d.gbm_bo_get_format(bo));
+            gsurf = d.gbm_surface_create(gbm_dev, 1280, 720, D_GBM_FORMAT_XRGB8888,
+                                         D_GBM_BO_USE_SCANOUT | D_GBM_BO_USE_RENDERING);
+            logf("    A7b gbm_surface_create(1280x720 XRGB8888, flags=%u) -> %p\n",
+                 D_GBM_BO_USE_SCANOUT | D_GBM_BO_USE_RENDERING, gsurf);
+        } else logf("    A7 gbm bo/surface SKIPPED (no gbm_dev/symbols)\n");
+
+        void *wsurf = NULL;
+        if (dpy && cfg && ctx && gsurf && d.eglCreateWindowSurface) {
+            long wattrs[] = { D_EGL_RENDER_BUFFER, D_EGL_BACK_BUFFER, D_EGL_NONE };
+            wsurf = d.eglCreateWindowSurface(dpy, cfg, gsurf, wattrs);
+            logf("    A8 eglCreateWindowSurface -> %p eglErr=0x%04x (%s)\n",
+                 wsurf,
+                 (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+                 d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+        } else logf("    A8 eglCreateWindowSurface SKIPPED (prereq missing)\n");
+
+        if (dpy && ctx && d.eglMakeCurrent) {
+            int rc;
+            if (wsurf)
+                rc = d.eglMakeCurrent(dpy, wsurf, wsurf, ctx);
+            else
+                rc = d.eglMakeCurrent(dpy, NULL, NULL, ctx); /* EGL 1.4/1.5 core context w/o surface */
+            logf("    A9 eglMakeCurrent(%s) rc=%d eglErr=0x%04x (%s)\n",
+                 wsurf ? "wsurf" : "no-surface", rc,
+                 (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+                 d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+        }
+
+        /* Stage B: bind AFTER proper init+makeCurrent (the "correct" order) */
+        logf("  -- Stage B: correct-order bind (after Initialize+MakeCurrent) --\n");
+        if (d.eglBindAPI) {
+            int rc = d.eglBindAPI(D_EGL_OPENGL_ES_API);
+            logf("    B1 eglBindAPI(OPENGL_ES_API) rc=%d eglErr=0x%04x (%s)\n",
+                 rc,
+                 (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+                 d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
+            if (d.eglGetCurrentContext)
+                logf("    B2 eglGetCurrentContext -> %p\n", d.eglGetCurrentContext());
+        }
+
+        if (d.glGetString && d.eglGetCurrentContext && d.eglGetCurrentContext() != NULL) {
+            const char *v = d.glGetString(D_GL_VENDOR);
+            const char *r = d.glGetString(D_GL_RENDERER);
+            const char *g = d.glGetString(D_GL_VERSION);
+            const char *s = d.glGetString(D_GL_SHADING_LANGUAGE_VER);
+            logf("    B3 GL_VENDOR=%s\n", v ? v : "(NULL)");
+            logf("       GL_RENDERER=%s\n", r ? r : "(NULL)");
+            logf("       GL_VERSION=%s\n", g ? g : "(NULL)");
+            logf("       GL_SHADING_LANGUAGE_VERSION=%s\n", s ? s : "(NULL)");
+        } else {
+            logf("    B3 GL strings SKIPPED (no GL handle/current ctx)\n");
+        }
+
+        /* cleanup (best-effort, guarded) */
+        if (wsurf && d.eglDestroySurface)  d.eglDestroySurface(dpy, wsurf);
+        if (gsurf && d.gbm_surface_destroy) d.gbm_surface_destroy(gsurf);
+        if (bo && d.gbm_bo_destroy)        d.gbm_bo_destroy(bo);
+        if (ctx && d.eglDestroyContext)     d.eglDestroyContext(dpy, ctx);
+        if (dpy && d.eglTerminate)         d.eglTerminate(dpy);
+        logf("    cleanup done\n");
+    }
+    alarm(0);   /* live chain finished in time -> cancel watchdog */
+    logf("=== video done ===\n");
+}
+
 /* =========================================================================== */
 int main(int argc, char **argv) {
     install_guards();
     const char *mod = argc > 1 ? argv[1] : "all";
+    /* Live EGL/GBM/GL chain runs ONLY on explicit 'diag video' (manual).
+     * Boot 'diag all' (forked bg next to live RetroArch) keeps the GPU
+     * read-only. */
+    g_video_live = (strcmp(mod, "video") == 0);
     /* keylog 只写 keylog.txt，不碰 diag_report.txt —— 否则并发覆盖 diag all 的 gpu 段 */
     if (strcmp(mod, "keylog") != 0) g_out = fopen(REPORT, "w");
     if (g_out) logf("# CubeGM diag %s %s\n", mod, ctime(&(time_t){time(NULL)}));
@@ -1315,6 +2001,7 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "all") == 0 || strcmp(mod, "input") == 0)   cmd_input();
     if (strcmp(mod, "keylog") == 0)                             cmd_keylog();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "display") == 0) cmd_display();
+    if (strcmp(mod, "all") == 0 || strcmp(mod, "video") == 0)  cmd_video();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysdeep") == 0)         cmd_sysdeep();
