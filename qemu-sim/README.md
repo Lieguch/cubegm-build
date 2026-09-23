@@ -128,3 +128,12 @@ qemu-sim/
 - [ ] 主机能访问 `dl-cdn.alpinelinux.org`（取内核与模块）
 - [ ] **QEMU 参数里必须带 `-global virtio-mmio.force-legacy=false`**（否则 `/dev/dri` 永不出现，见 `PITFALLS.md` 第 1 条）
 - [ ] 内存 ≥ 1024 MB（initramfs 含全量模块，默认用 2048）
+
+---
+
+## 7. 使用注意（脚本可执行位 / 行尾）
+
+- **本目录所有文本文件保持 LF**（见 `qemu-sim/.gitattributes`）。本仓库 `core.autocrlf=true`，
+  若不显式覆盖，`.sh` 检出后会带 CR ⇒ `#!/bin/sh\r` 执行报 `\r: command not found`。
+- Windows 上 git 不记录可执行位 ⇒ **请用 `sh run.sh` 调用**（不要依赖 `./run.sh`）。
+  在 Linux/容器里可先 `chmod +x run.sh scripts/*.sh`。

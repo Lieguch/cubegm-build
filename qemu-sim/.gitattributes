@@ -1,0 +1,9 @@
+# ── qemu-sim：所有文本文件必须保持 LF ────────────────────────────────────
+# 为什么：本仓库（及许多机器）core.autocrlf=true 会让 .sh 在检出时变成 CRLF，
+# 于是 `#!/bin/sh` 实际是 `#!/bin/sh\r` ⇒ 执行报 `\r: command not found`，
+# 交付给下一个 Agent 的脚本会**直接不可用**（这是 handoff 级故障）。
+# 因此在这里显式覆盖：不做任何行尾转换。
+* -text
+
+# assets/ 是二进制（原厂镜像/设备树/ELF），明确禁止任何转换与 diff
+assets/** -text -diff
