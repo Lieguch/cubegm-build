@@ -1,0 +1,42 @@
+#!/bin/sh
+# S00cgmmod —— ★ 本项目新增的初始化脚本（不是原厂文件；红线要求绝不改原厂文件）。
+#
+# 为什么用「新增 S?? 脚本」这条路：
+#   busybox 的 /etc/init.d/rcS 是 `for i in /etc/init.d/S??*; do $i start; done`
+#   ⇒ 只要文件名排序在前面（S00 < S01），就会**先于**原厂脚本执行，且**零改动**原厂文件。
+#
+# ★ 为什么不用 export LD_PRELOAD 注入全系统：
+#   rcS 里每个脚本都是**子进程**（`$i start`）或**子 shell**（`. $i`），
+#   环境变量**传不到**后面的脚本。要给全系统注入只能用 /etc/ld.so.preload（glibc 系统级）。
+#
+# 本脚本的目的：给 guest 提供**真实设备**（真实内核驱动），而不是伪造成功。
+log() { echo "cmdmod: $*"; }
+ld() { modprobe "$1" 2>/dev/null; }
+
+case "$1" in
+  start)
+    mount -t devtmpfs devtmpfs /dev 2>/dev/null
+    mkdir -p /dev/dri /dev/snd /dev/input
+
+    # --- 图形：真实 DRM（virtio-gpu，需 qemu 侧 -device virtio-gpu-device）---
+    ld virtio_mmio          # qemu 的 virtio-mmio 总线（-device virtio-*-device 挂它上面）
+    ld drm
+    ld drm_kms_helper
+    ld drm_shmem_helper
+    ld virtio_gpu
+
+    # --- 音频：真实 ALSA（snd-dummy 是内核自带的虚拟声卡驱动）---
+    ld snd
+    ld snd_pcm
+    ld snd_dummy
+
+    # --- 输入：uinput + joydev（/dev/input/jsN 需要再触发才有节点）---
+    ld uinput
+    ld joydev
+
+    log "--- /dev/dri ---";        ls -l /dev/dri 2>/dev/null
+    log "--- /dev/snd ---";        ls   /dev/snd 2>/dev/null
+    log "--- /sys/class/drm ---";  ls   /sys/class/drm 2>/dev/null
+    ;;
+esac
+exit 0
