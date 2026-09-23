@@ -37,9 +37,9 @@ sh run.sh 120 --app <你的可执行>      # 或 --sdcard <你的整棵 SD 树>
 
 | # | 事项 | 现状 / 下一步判据 |
 |---|---|---|
-| 1 | **`DRM_IOCTL_MODE_CREATE_DUMB failed ret=-1`** | 原厂程序创帧缓冲失败（它只打印 `ret`，没打印 `errno`）。已备好探针 `drm_probe.c`（枚举 `DRM_CAP_*` + 7 组 w/h/bpp 参数扫描 + MAP_DUMB/mmap），把 `ret=-1` 变成具体 errno ⇒ 才能判定是"参数不被接受"还是"virtio-gpu 能力不足" |
+| 1 | ~~**`CREATE_DUMB failed ret=-1`**~~ **已结论** | ✅ **已用探针定位**：virtio-gpu 的 dumb buffer **仅接受 bpp=32**（实测 640x480/1280x720/1920x1080/320x240 全成功，含 MAP_DUMB+mmap）；**bpp=24/16 返回 `EINVAL`**。⇒ 原厂件传的 bpp ≠ 32（极可能是真机 VOP 的 **RGB565=16bpp**）。**这是设备能力差，不是缺陷**。详见 `README.md §5.1` / `PITFALLS.md #10` |
 | 2 | `Unknown format 875713089` | = `0x34325258` = `"XR24"` = `DRM_FORMAT_XRGB8888`。原厂程序在自己的格式表里没认出它 ⇒ 需查它的格式表来源（很可能来自真机 VOP 的 format 集合） |
-| 3 | `double free or corruption (fasttop)` | 上述失败路径上的堆损坏。**在 #1 解决前不要单独去追它**（很可能是失败处理分支的次生问题） |
+| 3 | `double free or corruption (fasttop)` | #1 已结论（格式不匹配）⇒ 这是失败处理分支的**次生**堆损坏。要根治应改走 32bpp 路径，或写 VOP 模型支持 RGB565 |
 | 4 | `/dev/mem` 的 RK GRF/GPIO 窗口 | 需要 qemu 侧补一块 MMIO（见 `PITFALLS.md` #7：内核侧本来就允许访问非 RAM 区） |
 | 5 | `/dev/input/jsN` | `uinput`+`joydev` 已加载，节点需再触发 |
 | 6 | 显示/音频的**真机能力集** | 当前用 virtio-gpu/snd-dummy，**不是 RK VOP/I2S**；要 1:1 得写机器模型（见 `README.md` §5） |

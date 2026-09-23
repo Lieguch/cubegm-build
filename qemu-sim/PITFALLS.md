@@ -93,3 +93,24 @@ qemu 未映射的地址访问会变成 bus error。
   要全系统注入只能用 `/etc/ld.so.preload`。
 - 容器内通常**无 `CAP_MKNOD`** ⇒ 不能在 initramfs 里手工做 `/dev/console` 等设备节点；
   交给内核 `devtmpfs` 自动补（`CONFIG_DEVTMPFS_MOUNT`）。
+
+## 10. ★★★★★ `CREATE_DUMB` 报 `-1` 但设备其实好的：virtio-gpu 只吃 bpp=32
+
+**症状**：程序打印 `DRM_IOCTL_MODE_CREATE_DUMB failed ret=-1`，于是你以为 DRM 坏了。
+
+**实测真相**（同一环境，同一 `/dev/dri/card0`）：
+```
+CREATE_DUMB bpp=32  → 成功（handle/pitch/size/map/mmap 全 OK）
+CREATE_DUMB bpp=24  → EINVAL(22)
+CREATE_DUMB bpp=16  → EINVAL(22)     ← 真机 VOP 常用的 RGB565 正好落在这里
+```
+
+**诊断方法（照做即可，30 秒）**：写个几十行的 ARM32 探针，
+`open("/dev/dri/card0", O_RDWR)` → `DRM_IOCTL_GET_CAP` 枚举 → 对 `{w,h,bpp}` 做**参数扫描**，
+把 `ret` 变成 **errno + strerror**。
+★ 教训：**跨层失败时不要只看上层的 `ret=-1`** —— 目标程序常常不打印 errno（本例就只打印 `ret`），
+必须自己到 **API 层**取回真实 errno，否则会把"能力不匹配"误判成"设备不可用"。
+
+**为什么会有这个差异**：真机是 **RK3036 VOP**（支持 RGB565/RGB888 等多种格式），
+本环境是 **virtio-gpu**（dumb buffer 仅 32bpp）。**这是设备能力差异，不是 bug。**
+

@@ -108,7 +108,7 @@ qemu-sim/
 
 | 限制 | 影响 |
 |---|---|
-| **不是 RK 的 VOP/HDMI** | 分辨率的 mode 列表、图层(plane)数量、旋转、RGB565 支持等**与真机不同**；`drmModeSetPlane` 之类调用可能返回 `-EINVAL`。**显示相关的行为差异不能作为"复刻错误"的证据。** |
+| **不是 RK 的 VOP/HDMI** | 分辨率的 mode 列表、图层(plane)数量、旋转、**像素格式集合**与真机不同。★ 已实测（见下表）。**显示相关的行为差异不能作为"复刻错误"的证据。** |
 | **不是 RK 的 I2S/ACODEC** | 采样率/格式集合与真机不同 |
 | **`/dev/mem` 无 RK GRF/GPIO 窗口** | 任何 `mmap(0x20000000…)` 读寄存器（如摇杆 GPIO）在此环境**不成立** |
 | **`/dev/input/jsN` 需再触发** | `uinput`+`joydev` 已加载，但节点需要应用/服务主动创建 |
@@ -137,3 +137,29 @@ qemu-sim/
   若不显式覆盖，`.sh` 检出后会带 CR ⇒ `#!/bin/sh\r` 执行报 `\r: command not found`。
 - Windows 上 git 不记录可执行位 ⇒ **请用 `sh run.sh` 调用**（不要依赖 `./run.sh`）。
   在 Linux/容器里可先 `chmod +x run.sh scripts/*.sh`。
+
+
+### 5.1 ★ 实测：virtio-gpu 的 dumb buffer **只接受 bpp=32**（会直接影响 RGB565/RGB555 的程序）
+
+用自带探针（`drm_probe.c` 的逻辑已在 `HANDOFF.md` §四列出）在同一环境实测：
+
+```
+open(/dev/dri/card0, O_RDWR) = 3                 errno=0(Success)
+CAP DUMB_BUFFER = 1   CAP ATOMIC = 1   CAP ADDFB2_MODIFIERS = 64   CAP PRIME = 1
+
+CREATE_DUMB  640x480  bpp=32  → r=0   handle=1 pitch=2560 size=1228800   MAP_DUMB r=0  mmap OK
+CREATE_DUMB  640x480  bpp=24  → r=-1  errno=22(EINVAL)
+CREATE_DUMB  640x480  bpp=16  → r=-1  errno=22(EINVAL)
+CREATE_DUMB 1280x720  bpp=32  → r=0   handle=1 pitch=5120 size=3686400   MAP_DUMB r=0  mmap OK
+CREATE_DUMB 1280x720  bpp=16  → r=-1  errno=22(EINVAL)
+CREATE_DUMB 1920x1080 bpp=32  → r=0   handle=1 pitch=7680 size=8294400
+CREATE_DUMB  320x240  bpp=32  → r=0   handle=1 pitch=1280 size=307200
+```
+
+**结论**：
+- **bpp=32 完全可用**（含 `MAP_DUMB` + `mmap` + 写入）。
+- **bpp=24 / bpp=16 一律 `EINVAL`**。
+- ⇒ 若你的目标程序按**真机 VOP 的格式**（RK3036 常见 **RGB565 = 16bpp**）申请 dumb buffer，
+  在**本环境会失败**，而**在真机成功**。这类失败**不是**复刻缺陷。
+- ⇒ 反过来，这也是判断"要不要写 RK VOP 机器模型"的硬判据：**只要目标程序用非 32bpp 格式，
+  就必须有 VOP 模型才能验证显示路径**。
