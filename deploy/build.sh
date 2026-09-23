@@ -877,13 +877,22 @@ while [ ${#_queue[@]} -gt 0 ]; do
 done
 log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
 
-# --- 断言 (run 512 后新增): Mali blob + 其 SONAME 链接名必须落到 payload ---
-#   r1p1 blob 的 DT_SONAME=libmali.so.1 → RetroArch 用 -lEGL 链接后，
-#   二进制里记的 NEEDED 是 libmali.so.1（不是 libEGL.so.1）。
-#   设备上缺这个名字就是 "cannot open shared object file: libmali.so.1"，
-#   屏幕直接不亮。这里显式拦住，避免又要刷一次机才发现。
+# --- 断言: Mali blob 及其 DT_NEEDED 必须落到 payload ---
+#   r1p1 blob 的 DT_SONAME=libmali.so.1 (readelf 实测, run 512)。
+#   RetroArch 链接命令 (run 515 日志 L775) 为: ... -lgbm -ldrm ... -lEGL ...
+#   其中 -lgbm 与 -lEGL 都指向同一个 blob 的 symlink
+#   (libgbm.so / libEGL.so -> libmali-utgard-400-r7p0-r1p1-gbm.so, SONAME=libmali.so.1),
+#   所以链接器只记一个 DT_NEEDED = libmali.so.1 (SONAME 折叠, 不是 libEGL.so.1/libgbm.so.1)。
+#   -lgbm 能链接成功本身就证明 gbm 符号由 blob 自带, 无需独立 libgbm.so.1。
+#   -ldrm 指向独立 libdrm.so.2 (真正的依赖)。
+#   ⇒ 设备运行时只需要这两个文件名:
+#       libmali.so.1   (blob 本体, 提供 EGL+GLES+gbm 全套符号)
+#       libdrm.so.2    (blob 的 NEEDED)
+#   libEGL.so.1 / libgbm.so.1 / 原始 blob 文件名都是【构建期链接名】, 经 SONAME
+#   折叠后运行时不需要; 强制要求它们会误报 (run 515: 3 个 bundle MISSING 全是这类
+#   假阳性, 而真正需要的 libmali.so.1 + libdrm.so.2 都已正确 bundle)。
 _mali_ok=0
-for _c in libmali-utgard-400-r7p0-r1p1-gbm.so libmali.so.1 libEGL.so.1 libgbm.so.1 libdrm.so.2; do
+for _c in libmali.so.1 libdrm.so.2; do
     if [ -e "$DST/lib/$_c" ]; then
         log "  bundle OK: $_c"
     else
@@ -891,7 +900,7 @@ for _c in libmali-utgard-400-r7p0-r1p1-gbm.so libmali.so.1 libEGL.so.1 libgbm.so
         _mali_ok=1
     fi
 done
-[ "$_mali_ok" -eq 0 ] || die "runtime Mali/EGL/GBM libs incomplete in $DST/lib -- device would fail to open EGL display"
+[ "$_mali_ok" -eq 0 ] || die "runtime Mali/drm libs incomplete in $DST/lib -- device would fail to open EGL display"
 
 # libcrypto 兜底: 若某个 blob 变体还带 OpenSSL 未定义符号，把设备 rootfs 的
 # libcrypto 一起带上（不删，只会多几 KB）。注意: 这不能替代 build_mali_blob.sh
