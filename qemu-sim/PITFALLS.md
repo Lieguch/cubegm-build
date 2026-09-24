@@ -114,3 +114,33 @@ CREATE_DUMB bpp=16  → EINVAL(22)     ← 真机 VOP 常用的 RGB565 正好落
 **为什么会有这个差异**：真机是 **RK3036 VOP**（支持 RGB565/RGB888 等多种格式），
 本环境是 **virtio-gpu**（dumb buffer 仅 32bpp）。**这是设备能力差异，不是 bug。**
 
+## 11. ★★★★★ 首次运行 DRM 必失败：step 顺序 bug（fetch_kmods 在 unsquashfs 之前）
+
+**症状**：fresh 环境（`rm -rf /tmp/cgmsim`）首次 `sh run.sh` 时
+`cannot find/open a drm device: No such file or directory`，
+但**第二次跑就好了**（step 4 跳过 ⇒ 模块不被删）⇒ 极易误判为「随机/时序问题」。
+
+**根因（源码级，`run.sh` 行号）**：
+```
+旧顺序:
+  step3 fetch_kmods.sh "$V/rootfs/lib/modules"   ← 放进 rootfs
+  step4 if [ ! -d "$V/rootfs/bin" ]; then rm -rf "$V/rootfs"; unsquashfs ... fi
+          fresh 时 rootfs 不存在 ⇒ rm -rf + unsquashfs ⇒ step3 刚放的 2449 个 .ko 全被删
+⇒ S00cgmmod 里 modprobe virtio_gpu/snd_dummy 无模块可载 ⇒ /dev/dri 为空
+```
+**修复**：step 顺序改为 2)内核 → 3)解rootfs → 4)真实内核模块 → 5)注入脚本（已改）。
+
+**判别铁证（可复现）**：
+- RUN1 (fresh) 后 `find $V/rootfs/lib/modules -name '*.ko' | wc -l` = **0**
+- RUN2 后 = **2449**，boot.log 出现 `[drm] Initialized virtio_gpu 0.1.0 ... on minor 0` + `card0`
+
+## 12. 启动链判定「★ 真实 DRM 设备」误报：grep 模式命中了 S00cgmmod 的 echo
+
+**症状**：DRM 实际失败时，判定仍打 `✓ [ 1] ★ 真实 DRM 设备`。
+
+**根因**：旧模式 `"Initialized virtio_gpu|/dev/dri"` 中 `/dev/dri` 会命中
+`cmdmod: --- /dev/dri ---`（S00cgmmod 的 `log "--- /dev/dri ---"` 输出行）⇒ 误报。
+**修复**：判定收紧为内核日志特征 `[drm] Initialized virtio_gpu`（模块真正 probe 成功才出现）。
+**通用教训**：判定 grep 模式必须用**内核/驱动日志的不可伪造特征串**（带时间戳前缀
+`[    x.x]` 或 `Initialized ...` 这种），不要用应用 echo 里也会出现的裸设备名。
+
