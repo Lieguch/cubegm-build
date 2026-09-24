@@ -46,15 +46,20 @@ for c in qemu-system-arm unsquashfs cpio gzip; do printf "  %-18s %s\n" "$c" "$(
 echo "########## 2) 内核（通用 ARMv7）##########"
 sh "$HERE/scripts/fetch_kernel.sh" "$V/vmlinuz" 2>&1 | sed 's/^/  /'
 
-echo "########## 3) 真实内核模块 ##########"
-sh "$HERE/scripts/fetch_kmods.sh" "$V/rootfs/lib/modules" 2>&1 | sed 's/^/  /'
-
-echo "########## 4) 解 rootfs ##########"
+echo "########## 3) 解 rootfs ##########"
 if [ ! -d "$V/rootfs/bin" ]; then
   rm -rf "$V/rootfs"
   unsquashfs -q -no-xattrs -d "$V/rootfs" "$ROOTFS" > "$V/unsq.log" 2>&1
   echo "  rc=$? 条目=$(find "$V/rootfs" 2>/dev/null | wc -l)（dev/console 建不出是正常的）"
 fi
+
+echo "########## 4) 真实内核模块 ##########"
+# ★ 必须放在「解 rootfs」之后（PITFALLS #11）：
+#   旧顺序 fresh 环境首次运行时，解 rootfs 的 rm -rf "$V/rootfs" 会把
+#   上一步刚放进 $V/rootfs/lib/modules 的 2449 个 .ko 全部删掉 ⇒
+#   S00cgmmod 的 modprobe virtio_gpu/snd_dummy 无模块可载 ⇒
+#   /dev/dri 为空 ⇒ 原厂 rkgame 报 "cannot find/open a drm device"。
+sh "$HERE/scripts/fetch_kmods.sh" "$V/rootfs/lib/modules" 2>&1 | sed 's/^/  /'
 
 echo "########## 5) 注入加载脚本 + 应用 ##########"
 cat > "$V/rootfs/etc/init.d/S00cgmmod" <<'EOS'
@@ -125,7 +130,7 @@ hit() { c=$(grep -acE "$2" "$V/boot.log" 2>/dev/null); [ "$c" -gt 0 ] && printf 
 hit "内核起来"            "Linux version [0-9]"
 hit "initramfs 解包成功"  "Run /sbin/init as init process"
 hit "rcS 跑起来"          "Starting logging|Starting network"
-hit "★ 真实 DRM 设备"     "Initialized virtio_gpu|/dev/dri"
+hit "★ 真实 DRM 设备"     "Initialized virtio_gpu"
 hit "★ 真实声卡"          "controlC|pcmC0D0"
 hit "原厂启动脚本"        "Starting icube|S80"
 hit "应用被拉起"          "open driver.so sucess|rkgame v|RetroArch"
