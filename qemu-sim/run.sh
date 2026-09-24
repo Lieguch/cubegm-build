@@ -19,6 +19,11 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 V="${CGM_SIM_DIR:-/tmp/cgmsim}"
+# 可恢复小缓存（vmlinuz-lts 8MB + modloop-lts 49.8MB ≈ 58MB < CNB file-keeper 100MB 上限）：
+#   CNB 云开发环境放 /workspace/.cgmsim-cache ⇒ file-keeper 自动备份/漫游, 环境回收重建后
+#   自动恢复 ⇒ fetch_kernel/fetch_kmods 命中缓存秒过免重下；本机/无 /workspace 放 /tmp（重建重下）。
+if [ -d /workspace ] && [ -w /workspace ]; then CACHE="/workspace/.cgmsim-cache"; else CACHE="/tmp/cgmsim-cache"; fi
+mkdir -p "$CACHE"
 SECS="60"; ROOTFS=""; SD=""; APP=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -44,7 +49,7 @@ fi
 for c in qemu-system-arm unsquashfs cpio gzip; do printf "  %-18s %s\n" "$c" "$(command -v $c 2>/dev/null || echo 缺)"; done
 
 echo "########## 2) 内核（通用 ARMv7）##########"
-sh "$HERE/scripts/fetch_kernel.sh" "$V/vmlinuz" 2>&1 | sed 's/^/  /'
+sh "$HERE/scripts/fetch_kernel.sh" "$V/vmlinuz" "$CACHE" 2>&1 | sed 's/^/  /'
 
 echo "########## 3) 解 rootfs ##########"
 if [ ! -d "$V/rootfs/bin" ]; then
@@ -59,7 +64,7 @@ echo "########## 4) 真实内核模块 ##########"
 #   上一步刚放进 $V/rootfs/lib/modules 的 2449 个 .ko 全部删掉 ⇒
 #   S00cgmmod 的 modprobe virtio_gpu/snd_dummy 无模块可载 ⇒
 #   /dev/dri 为空 ⇒ 原厂 rkgame 报 "cannot find/open a drm device"。
-sh "$HERE/scripts/fetch_kmods.sh" "$V/rootfs/lib/modules" 2>&1 | sed 's/^/  /'
+sh "$HERE/scripts/fetch_kmods.sh" "$V/rootfs/lib/modules" "$CACHE" 2>&1 | sed 's/^/  /'
 
 echo "########## 5) 注入加载脚本 + 应用 ##########"
 cat > "$V/rootfs/etc/init.d/S00cgmmod" <<'EOS'

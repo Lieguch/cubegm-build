@@ -1,0 +1,59 @@
+# ============================================================================
+# .cnb.yml —— CubeGM_RetroArch 的 CNB 流水线配置（CNB 云原生构建/开发）
+#
+# 设计原则（全部机制出自官方文档 docs.cnb.cool/zh）:
+#   1. vscode 事件 = 云开发(交互调试): 用 .ide/Dockerfile 预装 qemu 依赖,
+#      进环境即就绪; 显式 keepAliveTimeout 拉长保活（SSH 连接本身就是心跳）。
+#   2. api_trigger_qsim 事件 = 手动 CI 验证: **不挂 push、不自动触发**,
+#      仅 OpenAPI build/start(event=api_trigger_qsim) 或页面按钮触发 ⇒
+#      不增加任何自动 CI 频率（尊重"减少CI触发"红线）。
+#      跑完 sh qemu-sim/run.sh, 日志走 build/logs/{sn} 持久可读, 全程零 SSH。
+#   3. 外部大文件（vmlinuz 8MB + modloop 49.8MB ≈58MB）缓存到 /workspace/.cgmsim-cache,
+#      由 file-keeper 自动备份/漫游 ⇒ 云开发环境回收重建后免重下, setup 从 ~8min 降到秒级。
+# ============================================================================
+
+$:
+  # ---- 云开发(交互调试): 预装依赖 + 保活 -------------------------------------
+  vscode:
+    - docker:
+        build: .ide/Dockerfile
+        # 构建失败时官方自动回退默认镜像; run.sh step1 仍有 apt 兜底, 最坏无副作用
+        image: cnbcool/default-dev-env:latest
+      services:
+        - docker
+        - name: vscode
+          # 官方 grammar.md service:vscode: "检测不到开发环境内的 http/ssh 连接"才计时回收;
+          # 活跃 SSH 会话会刷新心跳。keepAliveTimeout 必须挂在 service 的 options 下, 单位支持 m/h。
+          # 默认 600000ms(10m); 拉到 4h 覆盖一次完整调试循环, 避免长命令间隙被误回收。
+          options:
+            keepAliveTimeout: 4h
+      stages:
+        - name: 环境就绪自检
+          script: |
+            echo "qemu-sim 依赖（.ide/Dockerfile 预装）:"
+            for c in qemu-system-arm unsquashfs cpio; do
+              printf "  %-18s %s\n" "$c" "$(command -v $c 2>/dev/null || echo '缺 → run.sh 将自动 apt')"
+            done
+            echo "缓存目录（file-keeper 自动备份漫游, 重建免重下）: /workspace/.cgmsim-cache"
+            echo "交互调试在单次 SSH 会话内跑完: cd qemu-sim && sh run.sh 60"
+
+  # ---- 手动 CI 验证（非交互, 零 SSH, 日志持久） ------------------------------
+  # 触发: OpenAPI POST /{repo}/-/build/start {"branch":"main","event":"api_trigger_qsim","sync":"false"}
+  #       → 轮询 GET /build/status/{sn} → GET /build/logs/{sn}
+  # 不挂 push ⇒ 不增加自动 CI 频率。
+  api_trigger_qsim:
+    - name: qemu-sim 原厂启动链仿真
+      docker:
+        build: .ide/Dockerfile
+        image: cnbcool/default-dev-env:latest
+      stages:
+        - name: 跑原厂启动链 (60s) + 判定摘要
+          script: |
+            cd /workspace
+            # CI 是全新 runner: 无历史缓存, 完整下载一次（alpine CDN）, 约 3-4min
+            sh qemu-sim/run.sh 60 2>&1 | tee /workspace/qsim_run.log
+            echo "============ 判定摘要（来自 boot.log） ============"
+            grep -aE "cannot find/open a drm|Initialized virtio_gpu|card0|renderD128|open drm!|rkgame v|Starting icube" \
+              /workspace/.cgmsim/boot.log 2>/dev/null | sort | uniq -c | sed 's/^/  /' || echo "  (boot.log 未生成)"
+            echo "============ run.sh 判定段 ============"
+            sed -n '/## 7) 启动链判定/,/## DONE/p' /workspace/qsim_run.log | sed 's/^/  /'
