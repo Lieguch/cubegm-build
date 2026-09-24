@@ -27,16 +27,23 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 #define LOG_PATH      "/mnt/sdcard/icube.log"
 #define WORK_DIR      "/mnt/sdcard/cubegm"
 #define RETROARCH     "/mnt/sdcard/cubegm/retroarch"
 #define RETROARCH_CFG "/mnt/sdcard/cubegm/retroarch.cfg"
-#define RETROARCH_LOG "/mnt/sdcard/retroarch.log"
+#define RETROARCH_LOG   "/mnt/sdcard/retroarch.log"
+/* icube-owned video-debug override (rewritten every boot; NOT the user cfg).
+ * Loaded via RetroArch --appendconfig (configuration.c L6603, same
+ * check_verbosity_settings path as the main cfg). Its keys win over
+ * retroarch.cfg because appendconfig is loaded after and is additive. */
+#define RETROARCH_DEBUG_CFG "/mnt/sdcard/cubegm/retroarch_debug.cfg"
 #define DIAG_BIN      "/mnt/sdcard/cubegm/diag"
 
 static void hlog(const char *msg) {
@@ -44,44 +51,6 @@ static void hlog(const char *msg) {
     if (!f) return;
     fprintf(f, "%s", msg);
     fclose(f);
-}
-
-/* v0.3 (2026-08-30，回归修复): 清理残留 libasound —— 音频确定性根治。
- * 旧 payload (399/400/401) 把 crosstool 的 1.2.10 libasound.so.2 打进 cubegm/lib，
- * 其编译期 ALSA_CONFIG_DIR=/home/runner/...（CI 路径）在设备上不存在 → 配置树
- * 加载失败 → "Unknown PCM default" + 设备列表空（default 消失）。402 起 payload
- * 不再打包 libasound，但用户覆盖拷贝不删旧文件 → 残留 1.2.10 仍被 LD_LIBRARY_PATH
- * 优先加载。此处每次启动主动 unlink cubegm/lib 与 cubegm/usr/lib 下的 libasound
- * 残留，强制回落设备 rootfs 原厂 1.1.5（ALSA_CONFIG_DIR=/usr/share/alsa，rootfs
- * 有完整配置树 + @hooks 自动加载 ~/.asoundrc）。不设 ALSA_CONFIG_PATH、不碰其余 lib。
- *
- * v0.11 (2026-09-01, 442 音频回归修复): 同步清 asound.conf / .asoundrc 残留。
- * 旧 payload 的 asound.conf（v11.8 写死 pcm.!default = plug → hw:0,0，无 format
- * 锁）会与新 payload（v0.11 锁 S16）冲突 → 用户覆盖拷贝不删旧文件 → 旧 asound.conf
- * 被 ALSA_CONFIG_PATH=~/.asoundrc 加载（rootfs alsa.conf @hooks 自动 include），
- * 导致 S32 underrun 复发。同步 unlink 强制回落新 payload 的 asound.conf。
- * v0.12 (2026-09-02, 449 路由修复): 上述清理同时覆盖到 v0.11 旧 .asoundrc
- * （钉死 hw:0,0/HDMI 端点版）；v0.12 的 .asoundrc 已改走 hw:0,1/acodec-ana 扬声器。
- * 路径表与 v0.11 相同，cleanup 行为一致。 */
-static void cleanup_stale_libasound(void) {
-    static const char *paths[] = {
-        /* libasound 残留（v0.3 根治） */
-        WORK_DIR "/lib/libasound.so.2",
-        WORK_DIR "/lib/libasound.so",
-        WORK_DIR "/usr/lib/libasound.so.2",
-        WORK_DIR "/usr/lib/libasound.so",
-        /* asound 配置残留（v0.11 根治，覆盖 v0.12 旧 hw:0,0 路由版） */
-        WORK_DIR "/.asoundrc",
-        WORK_DIR "/asound.conf",
-        /* retroarch 旧 cfg 备份（含旧 audio_format=s32 等脏值） */
-        WORK_DIR "/configs/retroarch/retroarch.cfg.bak",
-        NULL
-    };
-    int i;
-    for (i = 0; paths[i]; i++) {
-        if (unlink(paths[i]) == 0)
-            hlog("icube: removed stale libasound/asound (fallback to rootfs/device original)\n");
-    }
 }
 
 /* 写 /tmp/tfdevice.env（对齐 zhijack.sh，保留设备几何约定便于诊断与人工覆盖）。 */
@@ -112,6 +81,108 @@ static void set_cpu_performance(void) {
         f = fopen(path, "w");
         if (f) { fprintf(f, "performance\n"); fclose(f); }
     }
+}
+
+/* GPU 降频（RK3036 Mali-400 devfreq 根治，2026-09-20 v2）：
+ *   论坛成功案例：原厂 Mali devfreq 只有两档 200MHz/400MHz，启动默认上 400MHz
+ *   高档，在该频点 GPU 不稳（LibreELEC RK3036 实测 lockup，CubeGM 实测 eglGetDisplay
+ *   NULL）。降到 200MHz 低档即可稳定启用 GLES。
+ *   v2 修复（2026-09-20 统一日志分析）：
+ *   - v1 的 write() 返回值被 (void) 吞掉，hlog 报"locked"但实际写失败
+ *   - v1 先写 min_freq 再写 max_freq；内核要求 min ≤ max，但 min_freq sysfs
+ *     在 simple_ondemand governor 下可能拒绝写（diag 实测 min_freq=400MHz 未变）
+ *   - v2 正确顺序：①切 governor=performance（锁定最高频）②写 max_freq=200MHz
+ *     （先降上限）③写 min_freq=200MHz（再降下限，此时 min=max=200MHz）
+ *   - 每步检查 write() 返回值，hlog 报真实结果 */
+static void downclock_gpu(void) {
+    const char *bus = "/sys/class/devfreq";
+    DIR *d = opendir(bus);
+    if (!d) { hlog("icube: GPU devfreq: /sys/class/devfreq not accessible\n"); return; }
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        char p[320];
+        if (e->d_name[0] == '.') continue;
+        if (!strstr(e->d_name, "gpu") && !strstr(e->d_name, "mali")) continue;
+
+        char msg[256];
+        int ok_gov = 0, ok_max = 0, ok_min = 0;
+
+        /* ① 切 governor=performance（锁定最高频，使手动 min/max 写入生效） */
+        snprintf(p, sizeof p, "%s/%s/governor", bus, e->d_name);
+        int fd = open(p, O_WRONLY);
+        if (fd >= 0) {
+            ssize_t w = write(fd, "performance\n", 12);
+            ok_gov = (w > 0);
+            close(fd);
+        }
+        /* ② 写 max_freq=200MHz（先降上限，保证 min ≤ max 不变量成立） */
+        snprintf(p, sizeof p, "%s/%s/max_freq", bus, e->d_name);
+        fd = open(p, O_WRONLY);
+        if (fd >= 0) {
+            ssize_t w = write(fd, "200000000\n", 10);
+            ok_max = (w > 0);
+            close(fd);
+        }
+        /* ③ 写 min_freq=200MHz（再降下限，此时 min=max=200MHz） */
+        snprintf(p, sizeof p, "%s/%s/min_freq", bus, e->d_name);
+        fd = open(p, O_WRONLY);
+        if (fd >= 0) {
+            ssize_t w = write(fd, "200000000\n", 10);
+            ok_min = (w > 0);
+            close(fd);
+        }
+
+        snprintf(msg, sizeof msg,
+            "icube: GPU devfreq %s downclock: governor=%s max_freq=%s min_freq=%s\n",
+            e->d_name,
+            ok_gov ? "performance OK" : "FAIL",
+            ok_max ? "200MHz OK" : "FAIL",
+            ok_min ? "200MHz OK" : "FAIL");
+        hlog(msg);
+    }
+    closedir(d);
+}
+
+/* v12.0 GPU 硬件加速根治（2026-09-20 gbm/drm 变体）：
+ *   设备显示栈 = DRM(/dev/dri/card0 + renderD128, fbs=0 无 fbdev 双缓冲)。
+ *   旧 libmali fbdev 变体走 /dev/fb0 framebuffer panning → eglGetDisplay EGL_NO_DISPLAY。
+ *   换 gbm(drm-dma_buf) 变体后, RetroArch 需用 kms context (drm_ctx.c, ident="kms")。
+ *   首次启动写默认 cfg(video_context_driver="kms"), 用户手改的 retroarch.cfg 永不被覆盖。 */
+static void write_default_cfg(void) {
+    FILE *f = fopen(RETROARCH_CFG, "r");
+    if (f) { fclose(f); return; }   /* user cfg exists -> never touch */
+    f = fopen(RETROARCH_CFG, "w");
+    if (!f) { hlog("icube: write retroarch.cfg FAILED\n"); return; }
+    fprintf(f,
+        "# CubeGM default cfg (generated; edit freely, never overwritten once present)\n"
+        "video_driver = \"gl\"\n"
+        "video_context_driver = \"kms\"\n");
+    fclose(f);
+}
+
+/* v12.1 视频 Debug 日志全开（2026-09-23 gpu-probe 516 刷机验证后）：
+ * 开 RA 官方"视频全 debug"的两级门控：
+ *   ① CLI --verbose        -> verbosity_enable()        (retroarch.c L7855)
+ *   ② cfg  frontend_log_level=0 -> verbosity_set_log_level(0)
+ *                             (configuration.c L6418; RARCH_DBG 门控在
+ *                              verbosity.c L527: verbosity ON 且 level<=0 才放行)
+ * RA 默认 frontend_log_level=1 把 RARCH_DBG 全滤掉；drm_ctx.c/egl_common.c 里
+ * 所有 [KMS]/[EGL] 调试行都是 RARCH_DBG 级别 -> 必须置 0 才全出。
+ *
+ * 走 --appendconfig 官方通道（configuration.c L6603，与主 cfg 同一条
+ * check_verbosity_settings；appendconfig 后加载，键级覆盖主 cfg）。
+ * 机器 owned，每 boot 重写（O_WRONLY 整文件），retroarch.cfg 用户红线不碰。
+ * 用户若手改 retroarch.cfg 的 video_context_driver 仍可生效（这里不写它）。 */
+static void write_debug_cfg(void) {
+    FILE *f = fopen(RETROARCH_DEBUG_CFG, "w");
+    if (!f) { hlog("icube: write retroarch_debug.cfg FAILED\n"); return; }
+    fprintf(f,
+        "# CubeGM video-debug override (icube-owned, rewritten every boot)\n"
+        "# NOT the user config: RetroArch loads it via --appendconfig and its\n"
+        "# keys override retroarch.cfg (additive, loaded last).\n"
+        "frontend_log_level = 0\n"
+        "log_to_file = true\n");
+    fclose(f);
 }
 
 /* v11.6 音频根治（2026-08-28，rootfs 官方机制 + ~/.asoundrc，不打补丁）：
@@ -165,6 +236,11 @@ static void run_supervisor(void) {
              * + ~/.asoundrc），避免引入 399/400 疑似宕机变量。 */
             execl(RETROARCH, "retroarch", "-c", RETROARCH_CFG, "--menu",
                   "--verbose",
+                  /* v12.1 视频 Debug 日志全开：官方 appendconfig 通道
+                   * （configuration.c L6603）加载 icube-owned 的
+                   * retroarch_debug.cfg，键级覆盖用户 retroarch.cfg。
+                   * frontend_log_level=0 + --verbose => RARCH_DBG 全放行。 */
+                  "--appendconfig=" RETROARCH_DEBUG_CFG,
                   "--log-file=/mnt/sdcard/retroarch_ra.log", (char *)NULL);
             hlog("icube: exec retroarch FAILED\n");
             _exit(1);
@@ -189,10 +265,6 @@ int main(int argc, char **argv) {
 
     hlog("icube (replacement) v10.0 starting (RetroArch launcher)\n");
 
-    /* v0.3 (2026-08-30，回归修复): 启动即清理残留 libasound（旧 payload 的 1.2.10
-       CI-路径版），强制回落设备 rootfs 原厂 1.1.5（正确 ALSA_CONFIG_DIR=/usr/share/alsa）。 */
-    cleanup_stale_libasound();
-
     /* 1. 设备环境：tfdevice.env + TF_* 导出 + 库路径 + 黑屏修复 + CPU 调度 */
     write_tfdevice_env();
     setenv("TF_DEVICE", "rk3036g", 1);
@@ -208,7 +280,10 @@ int main(int argc, char **argv) {
     /* v11.6：不再覆盖 ALSA_CONFIG_PATH。rootfs 官方 alsa.conf 的 @hooks 会根据
        HOME=/mnt/sdcard/cubegm 自动加载 ~/.asoundrc（双输出定义，payload 已部署）。 */
     set_cpu_performance();
+    downclock_gpu();   /* 启动 retroarch 前把 Mali GPU 锁到 200MHz（降频根治） */
     if (chdir(WORK_DIR) != 0) hlog("icube: chdir WORK_DIR failed (continuing)\n");
+    write_default_cfg();   /* v12.0: 首次写 video_context_driver="kms" 默认 cfg */
+    write_debug_cfg();     /* v12.1: 视频 Debug 全开 override (appendconfig, 每 boot 重写) */
 
     /* 1.5 开机即 Debug（v10.9）：后台派 diag all + diag keylog，不阻塞 retroarch */
     run_diag_bg("all");

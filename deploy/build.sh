@@ -141,36 +141,106 @@ log "ALSA headers installed -> $SYSROOT/usr/include/alsa ($(ls "$SYSROOT/usr/inc
 ALSA_CFLAGS="-I$SYSROOT/usr/include"
 
 # -----------------------------------------------------------------------------
-# STAGE 4 -- libdrm headers (for RetroArch plain_drm driver)
-# The device ships libdrm.so.2 (driver.so NEEDED), but the crosstool sysroot
-# lacks the development headers. The host-installed libdrm-dev package (from
-# STAGE 0 apt) provides architecture-independent headers that work for
-# cross-compilation. Install them at the sysroot standard location so the
-# cross-compiler's --sysroot lookup finds them.
+# STAGE 4 -- libdrm / DRM headers (for RetroArch --enable-kms + egl/gl kms ctx)
+#
+# 历史坑 (run 513 实证, 已复现):
+#   旧代码守卫与拷贝都盯着 "$DRM_HEADER_DIR/xf86drm.h" = /usr/include/libdrm/xf86drm.h,
+#   但 Debian/Ubuntu 的 libdrm-dev 把 xf86drm.h / xf86drmMode.h 装在
+#   /usr/include/ **根目录** (已用 `dpkg-deb -c libdrm-dev_2.4.110-1ubuntu1_amd64.deb`
+#   逐文件核对: ./usr/include/xf86drm.h (36788 B) + ./usr/include/xf86drmMode.h),
+#   /usr/include/libdrm/ 下只有 32 个 GPU 专用头 (amdgpu.h/drm.h/...)。
+#   ⇒ 那个守卫永真 → 静默重装 apt (no-op), xf86drm.h 从不进 sysroot。
+#   run 512 挂在更早的 configure(-lEGL), 掩盖了这个 bug; run 513 换 r1p1 blob
+#   修好 -lEGL 后, --enable-kms 真正启用, drm_common.h 的
+#   `#include <xf86drm.h>` 立刻 fatal error: No such file or directory
+#   (gfx/display_servers/dispserv_kms.c + gfx/drivers_context/drm_ctx.c, Makefile:268)。
+#
+# RetroArch 源码里 DRM 头有 4 种 include 约定 (已 grep 全源码核实), 全部要命中:
+#   <xf86drm.h>          gfx/common/drm_common.h (被 6 处引用)
+#   <xf86drmMode.h>      同上
+#   <libdrm/drm_fourcc.h> drm_ctx.c / drm_go2_ctx.c / drm_gfx.c / exynos_gfx.c
+#   <drm/drm_fourcc.h>    drm_go2_ctx.c / oga_gfx.c / deps/libgo2 (内核 uapi 路径)
+#   <drm_fourcc.h>        exynos_gfx.c
 # -----------------------------------------------------------------------------
 DRM_HEADER_DIR="/usr/include/libdrm"
-if [ ! -f "$DRM_HEADER_DIR/xf86drm.h" ]; then
+DRM_ROOT_HDRS="xf86drm.h xf86drmMode.h intel_bufmgr.h radeon_bo.h"
+
+# 守卫要看包真正提供的两个位置, 不能只看 libdrm/ 子目录
+if [ ! -d "$DRM_HEADER_DIR" ] || [ ! -f "/usr/include/xf86drm.h" ]; then
     log "Installing libdrm-dev (host headers, arch-independent)..."
     sudo apt-get install -y libdrm-dev 2>/dev/null || \
-        die "libdrm-dev not available -- RetroArch plain_drm cannot compile."
+        die "libdrm-dev not available -- RetroArch --enable-kms cannot compile."
 fi
 [ -d "$DRM_HEADER_DIR" ] || die "libdrm headers missing at $DRM_HEADER_DIR"
+# 收尾断言: 装不上就是硬错, 不要留到 RetroArch make 阶段才炸
+[ -f "/usr/include/xf86drm.h" ] || \
+    die "/usr/include/xf86drm.h missing after libdrm-dev install (unexpected layout)"
+[ -f "$DRM_HEADER_DIR/drm.h" ] || \
+    die "$DRM_HEADER_DIR/drm.h missing after libdrm-dev install"
+
 # FORCE refresh: CI may cache sysroot with stale headers. Delete and reinstall.
 rm -rf "$SYSROOT/usr/include/libdrm"
 mkdir -p "$SYSROOT/usr/include/libdrm"
 cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/libdrm/" 2>/dev/null
-# ALSO copy to the sysroot include ROOT: RetroArch's gfx/drivers/drm_gfx.c does
-# `#include <xf86drm.h>` (angle brackets -> default include search). With
-# --sysroot the default path is $SYSROOT/usr/include/, so xf86drm.h must be
-# directly visible there (Debian provides it as libdrm/xf86drm.h via pkg-config,
-# but our toolchain has no pkg-config and RetroArch's configure does not relay
-# -I$SYSROOT/usr/include/libdrm into drm_gfx.c's include resolution).
-rm -f "$SYSROOT/usr/include/xf86drm.h"
-cp -f "$DRM_HEADER_DIR"/*.h "$SYSROOT/usr/include/" 2>/dev/null
-log "libdrm headers installed -> $SYSROOT/usr/include/(libdrm + root) ($(ls "$SYSROOT/usr/include/libdrm" | wc -l) files)"
+
+# ① 包根目录下的 xf86drm.h / xf86drmMode.h → sysroot 根 (RetroArch 用 <xf86drm.h>)
+# ② 上面那批根头同时补一份到 libdrm/ (RetroArch 某些文件用 <libdrm/xf86drm.h> 或
+#    间接通过 -I$SYSROOT/usr/include/libdrm 解析; 多一份无副作用)
+for _h in $DRM_ROOT_HDRS; do
+    if [ -f "/usr/include/$_h" ]; then
+        cp -f "/usr/include/$_h" "$SYSROOT/usr/include/$_h"
+        cp -f "/usr/include/$_h" "$SYSROOT/usr/include/libdrm/$_h"
+    fi
+done
+
+# ③ <drm/xxx.h> : 内核 uapi 路径 (libdrm-dev 不提供 drm/drm_fourcc.h)
+#    优先取内核头, 退而取 libdrm/ 里的同名副本
+for _h in drm_fourcc.h drm.h drm_mode.h drm_sarea.h; do
+    mkdir -p "$SYSROOT/usr/include/drm"
+    if [ -f "/usr/include/drm/$_h" ]; then
+        cp -f "/usr/include/drm/$_h" "$SYSROOT/usr/include/drm/$_h"
+    elif [ -f "$DRM_HEADER_DIR/$_h" ]; then
+        cp -f "$DRM_HEADER_DIR/$_h" "$SYSROOT/usr/include/drm/$_h"
+    fi
+done
+
+# ④ <drm_fourcc.h> 裸名 → sysroot 根
+if [ -f "/usr/include/drm/drm_fourcc.h" ]; then
+    cp -f "/usr/include/drm/drm_fourcc.h" "$SYSROOT/usr/include/drm_fourcc.h"
+elif [ -f "$DRM_HEADER_DIR/drm_fourcc.h" ]; then
+    cp -f "$DRM_HEADER_DIR/drm_fourcc.h" "$SYSROOT/usr/include/drm_fourcc.h"
+fi
+
+# 硬断言: 起决定性作用的 3 个头必须在位, 否则 --enable-kms 必挂
+for _h in xf86drm.h xf86drmMode.h libdrm/drm_fourcc.h; do
+    [ -f "$SYSROOT/usr/include/$_h" ] || \
+        die "sysroot DRM header missing: $SYSROOT/usr/include/$_h -- kms context will not build"
+done
+log "libdrm/DRM headers installed -> $SYSROOT/usr/include/ (libdrm=$(ls "$SYSROOT/usr/include/libdrm" 2>/dev/null | wc -l) + root xf86drm/drm + drm/ uapi)"
 
 # Common compile flags for every target binary
-export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm"
+#
+# ★ -DEGL_NO_X11 (run 514 根因): libmali 的 EGL 头在 __unix__ 且未定义该宏时会落到
+#   "X11 (tentative)" 分支 -> #include <X11/Xlib.h> -> 无 X11 的 sysroot 直接 fatal。
+#   RetroArch 的 check_header '' EGL EGL/egl.h EGL/eglext.h (config.libs.sh:138) 正是
+#   这样炸的: "Checking presence of header file EGL/eglext.h ... no" ->
+#   "Build assumed that EGL/egl.h exists, but cannot locate. Exiting ..."。
+#
+#   为什么必须放这里(全局), 而不是只放 configure 作用域:
+#     eglplatform.h 的分支链在 _WIN32 → __EMSCRIPTEN__ → __WINSCW__ → WL_EGL_PLATFORM →
+#     __GBM__ → __ANDROID__ → USE_OZONE → [EGL_NO_X11] → X11 → __APPLE__ ...
+#     · <gbm.h> 在 EGL 头之前 #include 的文件 (drm_ctx.c / egl_common.h) 走 __GBM__ 分支,
+#       EGLNativeDisplayType = gbm_device*  (与 drm_ctx.c:306 的 (EGLNativeDisplayType)drm->gbm_dev 天然匹配)
+#     · 单独 include EGL 头、没有 gbm.h 的文件 (configure 探针 / gfx/drivers/vg.c) 拿不到 __GBM__,
+#       只能靠 EGL_NO_X11 落到 void* 分支才不引 X11
+#   两种次序都要能编译 ⇒ 两个宏都得给。上游自家也这么做: RetroArch
+#   Makefile.dingux:134 `OPENGLES_CFLAGS := -DMESA_EGL_NO_X11_HEADERS`。
+#   EGL_NO_X11 与旧名 MESA_EGL_NO_X11_HEADERS 同时定义 —— 上游不同版本只认其中一个。
+#   副作用核查: 全局仅此二宏, 语义等价于"平台取 void*/uintptr_t 的那条非 X11 分支",
+#   与 gbm 的 void* 分支一致; make 阶段与 configure 探针因此看到同一套宏 (不再有"探针过了、
+#   真编挂"的错配)。
+EGL_NO_X11_CFLAGS="-DEGL_NO_X11 -DMESA_EGL_NO_X11_HEADERS"
+export CFLAGS="$ARCH_FLAGS --sysroot=$SYSROOT $ALSA_CFLAGS $EGL_NO_X11_CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/libdrm"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3"
 
@@ -182,6 +252,42 @@ export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3
 # 枚举 /sys + 自算 ID_INPUT_* 属性。选型与 ABI 依据见 build_libudev_zero.sh 头注。
 # 幂等：sysroot 已含 libudev.so.1 则跳过（含在 CI sysroot 缓存里）。
 bash "$HERE/build_libudev_zero.sh" || die "libudev-zero sysroot install FAILED"
+
+# -----------------------------------------------------------------------------
+# STAGE 4.8 -- libmali blob (Mali-400 gbm/DRM user-space driver)
+#   RK3036G has Mali-400 MP GPU; kernel driver already loaded (diag confirmed:
+#   /dev/mali, debugfs /sys/kernel/debug/mali with Mali-400 MP entries) and the
+#   display stack is DRM (/dev/dri/card0 + renderD128, fbs=0). The fbdev blob
+#   variant needs /dev/fb0 framebuffer panning which this DRM stack lacks
+#   (eglGetDisplay -> EGL_NO_DISPLAY). The gbm (drm-dma_buf) variant opens
+#   /dev/dri/card0 + /dev/mali and bundles libgbm. RetroArch then uses
+#   --enable-kms (drm context) instead of --enable-mali_fbdev.
+# -----------------------------------------------------------------------------
+log "STAGE 4.8: installing libmali gbm (DRM) blob into sysroot..."
+SYSROOT="$SYSROOT" bash "$HERE/build_mali_blob.sh" || die "libmali blob install FAILED"
+
+# -----------------------------------------------------------------------------
+# STAGE 4.9 -- libdrm.so 链接库 (armhf)
+#   gbm 变体 libmali 自带 gbm 符号, 但 RetroArch --enable-kms 的 drm_ctx.c 仍调
+#   drmModeGetResources/drmModeAddFB 等 → 需 -ldrm。设备 rootfs 自带 libdrm.so.2
+#   (driver.so NEEDED), 但交叉编译 sysroot 无链接 stub。从 Debian bullseye armhf
+#   libdrm2 包 (SONAME=libdrm.so.2, 仅依赖 libc 标准符号, ABI 稳定) 提取实文件
+#   并 symlink libdrm.so, 满足 RetroArch check_val 'DRM -ldrm' 链接测试。
+# -----------------------------------------------------------------------------
+log "STAGE 4.9: staging libdrm.so (armhf) from Debian bullseye..."
+if [ ! -s "$SYSROOT/usr/lib/libdrm.so.2" ]; then
+    DRM_DEB="/tmp/libdrm2_armhf.deb"
+    DRM_DEB_URL="http://deb.debian.org/debian/pool/main/libd/libdrm/libdrm2_2.4.104-1_armhf.deb"
+    curl -fsSL -m 150 -o "$DRM_DEB" "$DRM_DEB_URL" || die "libdrm armhf deb download failed"
+    rm -rf /tmp/libdrm2_extract && mkdir -p /tmp/libdrm2_extract
+    dpkg-deb -x "$DRM_DEB" /tmp/libdrm2_extract || die "dpkg-deb extract libdrm deb failed"
+    DRM_SO="$(find /tmp/libdrm2_extract -name 'libdrm.so.2*' -type f | head -1)"
+    [ -n "$DRM_SO" ] || die "libdrm.so.2 not found in deb"
+    cp -f "$DRM_SO" "$SYSROOT/usr/lib/libdrm.so.2"
+    log "libdrm.so.2 staged: $(wc -c < "$SYSROOT/usr/lib/libdrm.so.2") bytes"
+fi
+ln -sf libdrm.so.2 "$SYSROOT/usr/lib/libdrm.so"
+log "libdrm.so -> libdrm.so.2 symlinked"
 
 # -----------------------------------------------------------------------------
 # STAGE 4 -- clone front-end sources
@@ -303,50 +409,16 @@ elif [ -d RetroArch ]; then
     ln -sf "$WORKDIR/RetroArch" RetroArch
 else
     log "Cloning RetroArch (shallow, to save time; submodules init later)..."
-    git clone "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
+    git clone --depth 1 "$RETROARCH_REPO" "$WORKDIR/RetroArch" || \
         die "RetroArch clone failed."
-    # v0.7 (2026-08-31): 锁定 RetroArch 到 282a12d —— 402 实测可用稳定版
-    # 根因: 402 用 282a12d 正常, 406 漂移到 285d685 (63 commits 含
-    # audio_driver.c 重写 +86/-48) 导致无法启动。必须固定 commit。
-    cd "$WORKDIR/RetroArch" && git checkout 282a12d || \
-        die "RetroArch checkout 282a12d failed."
-    git submodule update --init --recursive 2>&1 || \
+    # Initialize submodules (libretro-common, deps)
+    cd "$WORKDIR/RetroArch" && git submodule update --init --recursive 2>&1 || \
         die "RetroArch submodule init failed."
     cd "$HERE"
     ln -sf "$WORKDIR/RetroArch" RetroArch || cp -r "$WORKDIR/RetroArch" RetroArch
 fi
 if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     cd RetroArch
-    # v0.7 (2026-08-31): 缓存复用路径也强制锁定 282a12d（幂等）
-    git checkout 282a12d 2>/dev/null || die "RetroArch checkout 282a12d failed (cached)"
-    # v0.10 (2026-09-01): 音频多变体驱动 —— 14 个可切 ident 一次刷机 A/B
-    # - alsa 家族: alsa/alsathread(S16 官方) + alsa-s24/alsa-s32/alsathread-s24/alsathread-s32
-    # - tinyalsa 家族: tinyalsa(S16 官方基石) + s24_3le/s24/s32/s16-p256/s16-p512
-    # - common: alsa_init_pcm_fmt(requested_format) 供 alsa 变体指定位深
-    # apply 顺序: 01(common) → 02(alsa新文件) → 03(tinyalsa新文件) → 04(注册+Makefile) → 05(tinyalsa pre-negotiate VWL)
-    for _ap in \
-        "$HERE/patches/audio-variants/01-common-alsa-fmt.patch" \
-        "$HERE/patches/audio-variants/02-alsa-variants.patch" \
-        "$HERE/patches/audio-variants/03-tinyalsa-variants.patch" \
-        "$HERE/patches/audio-variants/04-register-and-build.patch" \
-        "$HERE/patches/audio-variants/05-tinyalsa-prenegotiate.patch" \
-        "$HERE/patches/audio-variants/06-tinyalsa-strtoul-string.patch" \
-        "$HERE/patches/audio-variants/07a-cubegm-alsa-factory-files.patch" \
-        "$HERE/patches/audio-variants/07b-cubegm-alsa-register.patch" \
-        "$HERE/patches/audio-variants/07c-cubegm-makefile.patch"; do
-        if [ -f "$_ap" ]; then
-            if ! git apply "$_ap"; then
-                if ! git apply --reverse --check "$_ap" 2>/dev/null; then
-                    die "audio-variant patch apply FAILED: $_ap"
-                fi
-                log "audio-variant patch already applied (skip): $_ap"
-            else
-                log "audio-variant patch applied: $_ap"
-            fi
-        else
-            die "audio-variant patch missing: $_ap"
-        fi
-    done
     # ---- 显示/音频策略（2026-08-25 定案，基于权威源码验证）----
     # 设备 = RK3036G 无 GPU framebuffer。项目已在 build_sdl_libpng.sh 将
     # SDL 1.2.15 (fbcon 视频 + ALSA 音频) 交叉编译进 sysroot，且 picoarch
@@ -373,15 +445,33 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # INCLUDES='usr/include usr/local/include'，不会查 $SYSROOT。
     # 追加 sysroot 路径使 SDL.h 存在性检查通过。
     # 注意：ALSA 不需要此修补，因为 runner 宿主机装了 libasound2-dev。
-    sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include $SYSROOT/usr/include/SDL'|" qb/config.libs.sh
-    export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include"
+    sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include $SYSROOT/usr/include/SDL $SYSROOT/usr/include/EGL $SYSROOT/usr/include/GLES2 $SYSROOT/usr/include/GLES'|" qb/config.libs.sh
+    export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/GLES"
+    # Mali-400 GPU: gbm(drm-dma_buf) blob + --enable-kms (drm context driver, opens
+    # /dev/dri/card0 + /dev/mali). Blob provides libEGL/libGLESv2/libgbm/libmali.
+    # Disable desktop OpenGL (no Mesa); keep SDL1 fallback + kms/drm for GL menu.
+    export OPENGLES_LIBS="-L$SYSROOT/usr/lib -lGLESv2 -lEGL -lmali"
+    export OPENGLES_CFLAGS="-I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/EGL"
+    export EGL_LIBS="-L$SYSROOT/usr/lib -lEGL -lmali"
+    export EGL_CFLAGS="-I$SYSROOT/usr/include/EGL"
+    # qb 官方检测通道（qb.params.sh 文档化 "General environment variables: CC/CFLAGS/LDFLAGS"）：
+    # check_header 的编译测试与 check_val 的链接测试只用 BUILD_DIRS + $CFLAGS + $LDFLAGS，
+    # 完全不走 INCLUDES（504 根因：--enable-egl 强制 check_header EGL/eglext.h，
+    # CFLAGS 为空 → 找不到 sysroot header → die "Build assumed that EGL/egl.h exists"）。
+    # 作用域限定在 configure 命令（command-prefix env），不 export → make 阶段不受污染。
+    # qb check_header 编译测试用 BUILD_DIRS+$FLAGS(CFLAGS)+$LDFLAGS (qb.libs.sh L289)
+    # 全局 CFLAGS(L173) 含 --sysroot+$ARCH_FLAGS+$ALSA_CFLAGS，不能覆盖。
+    # 追加 -I$SYSROOT/usr/include 使 check_header #include <EGL/egl.h> 编译通过。
+    CFLAGS="$CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/KHR -I$SYSROOT/usr/include/GLES2" \
+    LDFLAGS="$LDFLAGS -L$SYSROOT/usr/lib" \
     ./configure --host=arm-linux-gnueabihf \
         --enable-sdl --disable-sdl2 --disable-sdl3 \
         --enable-alsa \
         --enable-udev \
-        --disable-plain_drm --disable-kms --disable-egl \
+        --disable-plain_drm --enable-kms \
+        --enable-egl \
         --disable-opengl --disable-opengl1 \
-        --disable-opengl_core --disable-opengles --disable-opengles3 \
+        --disable-opengl_core --enable-opengles --disable-opengles3 \
         --disable-vulkan --disable-x11 --disable-wayland \
         --disable-ffmpeg --disable-networking --disable-cheevos \
         --disable-discord --disable-7zip --disable-freetype \
@@ -389,7 +479,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
         --disable-ssl \
         --disable-builtinmbedtls \
         --disable-videoprocessor --disable-qt --disable-cg \
-        --enable-neon --disable-libretro \
+        --disable-neon --disable-libretro \
         --disable-mali_fbdev \
         --enable-langextra \
         --prefix="$RETROARCH_DST" 2>&1 || \
@@ -398,7 +488,7 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # /usr/include。用 DEF_FLAGS 追加 sysroot 真实路径，编译时优先解析。
     echo "" >> Makefile
     echo "# Added by build.sh: sysroot include paths (no pkg-config present)" >> Makefile
-    echo "DEF_FLAGS += -I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include" >> Makefile
+    echo "DEF_FLAGS += -I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/GLES" >> Makefile
     # libretro-common 子模块头文件（boolean.h/compat/strl.h/rthreads 等）不在
     # --sysroot 可见范围，make 阶段通过 CPPFLAGS 显式传入。
     # CFLAGS 由 Makefile 内部管理（?= 默认 + += DEF_FLAGS），外部传参会覆盖
@@ -412,20 +502,8 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # Strip Q= on next run to suppress verbose output
     ${CROSS_COMPILE}strip retroarch
     log "RetroArch built: $(ls -la retroarch 2>/dev/null | awk '{print $5}') bytes"
-        # v4.0 构建侧验证 1/3: 主二进制必须动态依赖 libasound.so.2（dlopen 的前提）
-        if readelf -d retroarch | grep -q 'libasound.so.2'; then
-            log "v4.0 verify 1/3: retroarch NEEDED libasound.so.2 = OK"
-        else
-            die "v4.0 verify 1/3 FAILED: retroarch does not link libasound.so.2"
-        fi
-        # v7.2 (2026-09-04, #465 实机证伪): 删除 v5.0 verify 2/3 门禁。
-        # 该门禁强制 'libasound chain active' 字符串必须存在于 binary，
-        # 等于强制 use_alsa dlopen 链编入 —— 而该链已在 #463/#464/#465
-        # 三次实机证伪（hw:0,1 纯 DAC 端点阻塞 → 整机 3-6s 冻结）。
-        # v6.1 移除 use_alsa 后此门禁会 die，必须同步删除。
-        # 保留 v4.0 verify 1/3（libasound 链接）即可：alsa 驱动本身需要它。
-        cp retroarch "$RETROARCH_DST/"
-        cd "$HERE"
+    cp retroarch "$RETROARCH_DST/"
+    cd "$HERE"
 else
     log "WARN: RetroArch directory missing -- using picoarch+frogui fallback."
 fi
@@ -654,26 +732,6 @@ DST="$HERE/cubegm"
 mkdir -p "$DST" "$DST/cores" "$DST/lib" "$DST/assets" "$DST/saves" "$DST/system" "$DST/autoconfig"
 # v10.1: 部署中文字体（RGUI 渲染中文必须）
 cp -f "$HERE/cubegm/font.ttf"              "$DST/" 2>/dev/null && log "  font.ttf deployed ($(ls -lh "$DST/font.ttf" 2>/dev/null | awk '{print $5}'))" || true
-# v0.2 (中文根治): 部署 RGUI 官方位图字体（RetroArch 官方 retroarch-assets 仓库
-#   rgui/font/ 下的 rzip 位图字体）。RGUI 按 user_language 动态加载对应字形：
-#   bitmap10x10_chn.bin=简体/繁体中文(0x4E00-0x9FFF, 解压 272896B)、jpn/kor/rus。
-#   此前 payload 缺失这些 .bin → 中文翻译(16676组)虽已编译进二进制，但
-#   bitmapfont_10x10_load() 读文件失败返回 NULL → 中文无字形显示。配合
-#   retroarch.cfg assets_directory=/mnt/sdcard/cubegm/assets 生效。
-mkdir -p "$DST/assets/rgui/font"
-if ls "$HERE/assets/rgui/font/"*.bin >/dev/null 2>&1; then
-    cp -f "$HERE/assets/rgui/font/"*.bin "$DST/assets/rgui/font/" 2>/dev/null \
-        && log "  RGUI bitmap fonts deployed ($(ls "$DST/assets/rgui/font/"*.bin 2>/dev/null | wc -l) .bin)"
-else
-    log "WARN: $HERE/assets/rgui/font/*.bin missing -- downloading from retroarch-assets..."
-    mkdir -p "$HERE/assets/rgui/font"
-    for _f in bitmap10x10_chn bitmap10x10_eng bitmap10x10_jpn bitmap10x10_kor bitmap10x10_rus bitmap6x10_eng bitmap6x10_lse; do
-        curl -sL --max-time 60 "https://raw.githubusercontent.com/libretro/retroarch-assets/master/rgui/font/$_f.bin" \
-            -o "$HERE/assets/rgui/font/$_f.bin" || log "WARN: download failed for $_f.bin"
-    done
-    cp -f "$HERE/assets/rgui/font/"*.bin "$DST/assets/rgui/font/" 2>/dev/null \
-        && log "  RGUI bitmap fonts deployed ($(ls "$DST/assets/rgui/font/"*.bin 2>/dev/null | wc -l) .bin)"
-fi
 if [ -f RetroArch/retroarch ]; then
     cp -f RetroArch/retroarch        "$DST/"
 else
@@ -749,31 +807,21 @@ if [ -f "$HERE/icube_replacement.c" ]; then
     fi
 fi
 
-# STAGE 9b -- bundle runtime libs into cubegm/lib
-#   The device rootfs does NOT ship SDL/libpng12/z (see zhijack.sh:
-#   LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib). RetroArch is linked against those,
+# STAGE 9b -- bundle runtime libs picoarch + frogui need into cubegm/lib
+#   The device rootfs does NOT ship SDL/libpng12/z/asound (see zhijack.sh:
+#   LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib). picoarch is linked against those,
 #   so without them it dies at load time ("cannot open shared object file")
 #   and the screen never lights. Copy every NEEDED .so (and transitive deps)
 #   from the sysroot into $DST/lib. Base libs (libc/libm/pthread/dl/gcc/ld)
 #   are provided by the device rootfs, so we exclude them to avoid shipping a
 #   second glibc that could mismatch the device's dynamic linker.
-#   例外：libasound.so.2 也由设备 rootfs 提供（原厂 1.1.5）——因其编译期
-#   ALSA_CONFIG_DIR 正确指向 rootfs /usr/share/alsa，优于 sysroot 1.2.10 的
-#   CI 路径，已归入 BASE_LIBS 排除（音频方案A，见 STAGE 9b 上方 BASE_LIBS 说明）。
 # -----------------------------------------------------------------------------
 log "Bundling runtime libs into $DST/lib ..."
 mkdir -p "$DST/lib"
 READELF="${CROSS_COMPILE}readelf"
-# base libs the device rootfs always provides -- do NOT bundle these.
-# v0.2 (音频方案A): libasound.so.2 也归入 BASE_LIBS。设备 rootfs 自带原厂
-#   alsa-lib 1.1.5 (/usr/lib/libasound.so.2 -> 2.0.0)，其编译期 ALSA_CONFIG_DIR
-#   = /usr/share/alsa（正确指向 rootfs 内完整配置树），且 ABI 经 readelf 验证
-#   覆盖 RetroArch 全部 76 个 snd_* 引用符号（0 缺失）。crosstool sysroot 的
-#   1.2.10 版会因 ALSA_CONFIG_DIR 指向 CI 路径 (/home/runner/...) 覆盖 rootfs
-#   配置树 → "Unknown PCM" 无声。故不再打包 libasound，让 LD_LIBRARY_PATH
-#   找不到时回落到 rootfs 原厂库（原版音质，无重采样）。
+# base libs the device rootfs always provides -- do NOT bundle these
 BASE_LIBS="libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 libgcc_s.so.1 \
-           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.29.so libasound.so.2"
+           librt.so.1 libutil.so.1 ld-linux-armhf.so.3 ld-2.29.so"
 # v8.8: libstdc++.so.6/libatomic.so.1 removed from BASE_LIBS and forced into the
 # bundle. diag-285 on-device cores scan showed nestopia/snes9x/vice_x64 failing
 # with "GLIBCXX_3.4.32 not found": the device's /usr/lib/libstdc++.so.6 is too
@@ -804,9 +852,8 @@ done
 # direct NEEDED (it may be loaded via DT_NEEDED of another bundled lib).
 _queue+=("libstdc++.so.6" "libatomic.so.1")
 # fallback: if readelf was unavailable, seed the known direct deps
-# (libasound.so.2 不在此列：音频方案A 改为回落 device rootfs 原厂 1.1.5)
 if [ ${#_queue[@]} -eq 0 ]; then
-    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1)
+    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libMali.so libmali-utgard-400-r7p0-r1p1-gbm.so libmali.so.1 libmali.so libEGL.so libGLESv2.so libGLESv1_CM.so libgbm.so libdrm.so.2 libcrypto.so.1.1)
     log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
@@ -829,6 +876,39 @@ while [ ${#_queue[@]} -gt 0 ]; do
     fi
 done
 log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
+
+# --- 断言: Mali blob 及其 DT_NEEDED 必须落到 payload ---
+#   r1p1 blob 的 DT_SONAME=libmali.so.1 (readelf 实测, run 512)。
+#   RetroArch 链接命令 (run 515 日志 L775) 为: ... -lgbm -ldrm ... -lEGL ...
+#   其中 -lgbm 与 -lEGL 都指向同一个 blob 的 symlink
+#   (libgbm.so / libEGL.so -> libmali-utgard-400-r7p0-r1p1-gbm.so, SONAME=libmali.so.1),
+#   所以链接器只记一个 DT_NEEDED = libmali.so.1 (SONAME 折叠, 不是 libEGL.so.1/libgbm.so.1)。
+#   -lgbm 能链接成功本身就证明 gbm 符号由 blob 自带, 无需独立 libgbm.so.1。
+#   -ldrm 指向独立 libdrm.so.2 (真正的依赖)。
+#   ⇒ 设备运行时只需要这两个文件名:
+#       libmali.so.1   (blob 本体, 提供 EGL+GLES+gbm 全套符号)
+#       libdrm.so.2    (blob 的 NEEDED)
+#   libEGL.so.1 / libgbm.so.1 / 原始 blob 文件名都是【构建期链接名】, 经 SONAME
+#   折叠后运行时不需要; 强制要求它们会误报 (run 515: 3 个 bundle MISSING 全是这类
+#   假阳性, 而真正需要的 libmali.so.1 + libdrm.so.2 都已正确 bundle)。
+_mali_ok=0
+for _c in libmali.so.1 libdrm.so.2; do
+    if [ -e "$DST/lib/$_c" ]; then
+        log "  bundle OK: $_c"
+    else
+        log "  bundle MISSING: $_c"
+        _mali_ok=1
+    fi
+done
+[ "$_mali_ok" -eq 0 ] || die "runtime Mali/drm libs incomplete in $DST/lib -- device would fail to open EGL display"
+
+# libcrypto 兜底: 若某个 blob 变体还带 OpenSSL 未定义符号，把设备 rootfs 的
+# libcrypto 一起带上（不删，只会多几 KB）。注意: 这不能替代 build_mali_blob.sh
+# 的 blob 预检门禁 —— 链接期校验发生在构建机，运行时兜底救不了 configure 失败。
+if [ -e "$SYSROOT/usr/lib/libcrypto.so.1.1" ] && [ ! -e "$DST/lib/libcrypto.so.1.1" ]; then
+    cp -L "$SYSROOT/usr/lib/libcrypto.so.1.1" "$DST/lib/" 2>/dev/null \
+        && log "  bundle OK: libcrypto.so.1.1 (blob OpenSSL fallback)" || true
+fi
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
