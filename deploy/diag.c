@@ -529,6 +529,31 @@ static void cmd_display(void) {
 static void cmd_audio(void) {
     g_fault_module = 4;
     logf("=== audio ===\n");
+    /* /dev/snd node inventory: the audio ENOENT (rc=-2) root cause is a
+     * missing device node, so list what is actually present + its perms. */
+    logf("  --- /dev/snd nodes ---\n");
+    {
+        DIR *sd = opendir("/dev/snd");
+        if (!sd) logf("    /dev/snd: %s\n", strerror(errno));
+        else {
+            struct dirent *e; int any = 0;
+            while ((e = readdir(sd))) {
+                if (e->d_name[0] == '.') continue;
+                char p[128]; snprintf(p, sizeof p, "/dev/snd/%s", e->d_name);
+                struct stat st;
+                if (stat(p, &st) == 0)
+                    logf("    %-10s perm=%o owner=%d group=%d rdev=%d:%d\n",
+                         e->d_name, (unsigned)st.st_mode,
+                         (int)st.st_uid, (int)st.st_gid,
+                         (int)(st.st_rdev >> 8), (int)(st.st_rdev & 0xff));
+                else logf("    %-10s (stat failed: %s)\n", e->d_name, strerror(errno));
+                any = 1;
+            }
+            closedir(sd);
+            if (!any) logf("    /dev/snd: EMPTY (no ALSA device nodes)\n");
+        }
+    }
+    cat_file("/proc/asound/cards");
     void *h = dlopen("libasound.so.2", RTLD_LAZY);
     if (!h) { logf("  dlopen libasound.so.2 FAILED: %s\n", dlerror()); return; }
     int (*p_open)(void **, const char *, int, int) = dlsym(h, "snd_pcm_open");
@@ -1528,6 +1553,45 @@ static void d_hex_dump(const char *path, int max_bytes) {
              buf[4], buf[5], buf[6], buf[7], buf[0], buf[1], buf[2], buf[3]);
 }
 
+/* Scan /proc for a live 'retroarch' process and report its Uid/Gid.
+ * Answers H2/H3: if RA runs as uid 1000 while /dev/dri/card0 is root:video
+ * mode 660, RA cannot open card0 / become DRM master -> kms ctx fails.
+ * Read-only (/proc), safe to run at boot next to a live RA. */
+static void proc_scan_retroarch(void) {
+    DIR *p = opendir("/proc");
+    if (!p) { logf("    /proc opendir failed: %s\n", strerror(errno)); return; }
+    struct dirent *e; int found = 0;
+    while ((e = readdir(p))) {
+        if (e->d_name[0] < '0' || e->d_name[0] > '9') continue; /* pids only */
+        char cmdp[512]; snprintf(cmdp, sizeof cmdp, "/proc/%s/cmdline", e->d_name);
+        FILE *f = fopen(cmdp, "r");
+        if (!f) continue;
+        char raw[1024]; size_t n = fread(raw, 1, sizeof raw - 1, f); fclose(f);
+        if (n == 0) continue;
+        raw[n] = 0;
+        char *tok = raw; int isra = 0;
+        while (*tok) { if (strstr(tok, "retroarch")) { isra = 1; break; } tok += strlen(tok) + 1; }
+        if (!isra) continue;
+        found = 1;
+        for (size_t i = 0; i < n; i++) if (raw[i] == 0) raw[i] = ' ';
+        char stp[128]; snprintf(stp, sizeof stp, "/proc/%s/status", e->d_name);
+        char uid_s[48] = "?", gid_s[48] = "?", name_s[128] = "?";
+        f = fopen(stp, "r");
+        if (f) {
+            char line[256];
+            while (fgets(line, sizeof line, f)) {
+                if (!strncmp(line, "Uid:", 4)) { int a, b; if (sscanf(line + 4, "%d %d", &a, &b) == 2) snprintf(uid_s, sizeof uid_s, "%d", b); }
+                else if (!strncmp(line, "Gid:", 4)) { int a, b; if (sscanf(line + 4, "%d %d", &a, &b) == 2) snprintf(gid_s, sizeof gid_s, "%d", b); }
+                else if (!strncmp(line, "Name:", 5)) { strncpy(name_s, line + 5, sizeof name_s - 1); name_s[127] = 0; char *nl = strchr(name_s, '\n'); if (nl) *nl = 0; }
+            }
+            fclose(f);
+        }
+        logf("    RA pid=%s name=%s Uid=%s Gid=%s  cmdline=\"%s\"\n", e->d_name, name_s, uid_s, gid_s, raw);
+    }
+    closedir(p);
+    if (!found) logf("    no 'retroarch' process in /proc (not started yet, or already crashed)\n");
+}
+
 static void cmd_video(void) {
     g_fault_module = 40;
     logf("\n=== video (KMS/GBM/EGL/GL full-stack; replicates RA@3c3561f call order) ===\n");
@@ -1541,6 +1605,7 @@ static void cmd_video(void) {
         logf("  HOME=%s\n", home ? home : "(unset)");
     }
     cat_file("/proc/dri/card0");
+    proc_scan_retroarch();
 
     /* --- 1. device nodes --- */
     logf("  --- device nodes ---\n");
@@ -1644,19 +1709,54 @@ static void cmd_video(void) {
         /* --- 4. DRM master --- */
         logf("  --- DRM master ---\n");
         {
-            /* Try to (re)acquire master on this fd. If RA already holds it,
-             * the kernel denies (EACCES) -- that itself is evidence. Do NOT
-             * hold it afterwards (diag should not steal from RA). */
-            int r = ioctl(cfd, DRM_IOCTL_SET_MASTER);
-            logf("    SET_MASTER rc=%d errno=%d (%s)\n", r,
-                 r < 0 ? errno : 0, r < 0 ? strerror(errno) : "ok");
-            if (r == 0) {
-                /* drop it again so RA/driver state is untouched */
-                int d = ioctl(cfd, DRM_IOCTL_DROP_MASTER);
-                logf("    DROP_MASTER rc=%d errno=%d (%s)\n", d,
-                     d < 0 ? errno : 0, d < 0 ? strerror(errno) : "ok");
-            }
+            /* Non-invasive (boot-safe): always read the current master holder
+             * from /proc/dri/card0. The invasive SET_MASTER probe + mode
+             * re-enumeration runs ONLY in the manual 'diag drm'/'diag video'
+             * (g_video_live), never at boot next to a live RetroArch. */
             cat_file("/proc/dri/card0");
+            if (!g_video_live) {
+                logf("    (boot-all: master probe is read-only; run 'diag drm' manually for the invasive SET_MASTER check)\n");
+            } else {
+                /* Try to (re)acquire master on this fd. If RA already holds it,
+                 * the kernel denies (EACCES) -- that itself is evidence. */
+                int r = ioctl(cfd, DRM_IOCTL_SET_MASTER);
+                logf("    SET_MASTER rc=%d errno=%d (%s)\n", r,
+                     r < 0 ? errno : 0, r < 0 ? strerror(errno) : "ok");
+                if (r == 0) {
+                    /* Re-enumerate connector modes UNDER master: if a
+                     * connector's count_modes goes 0 -> N, it needed a master
+                     * to fill its mode list; if it stays 0, the sink has no
+                     * EDID at all (innohdmi has_edid=0). */
+                    struct drm_mode_card_res r2; memset(&r2, 0, sizeof r2);
+                    if (ioctl(cfd, DRM_IOCTL_MODE_GETRESOURCES, &r2) == 0 && r2.count_connectors) {
+                        uint32_t *c2  = calloc(r2.count_connectors, 4);
+                        uint32_t *cr2 = calloc(r2.count_crtcs ? r2.count_crtcs : 1, 4);
+                        uint32_t *en2 = calloc(r2.count_encoders ? r2.count_encoders : 1, 4);
+                        uint32_t *fb2 = calloc(r2.count_fbs ? r2.count_fbs : 1, 4);
+                        r2.connector_id_ptr = (uintptr_t)c2;
+                        r2.crtc_id_ptr      = (uintptr_t)cr2;
+                        r2.encoder_id_ptr   = (uintptr_t)en2;
+                        r2.fb_id_ptr        = (uintptr_t)fb2;
+                        if (ioctl(cfd, DRM_IOCTL_MODE_GETRESOURCES, &r2) == 0) {
+                            for (uint32_t i = 0; i < r2.count_connectors; i++) {
+                                struct drm_mode_get_connector gc; memset(&gc, 0, sizeof gc);
+                                gc.connector_id = c2[i];
+                                if (ioctl(cfd, DRM_IOCTL_MODE_GETCONNECTOR, &gc) == 0)
+                                    logf("    reenum(conn%u id=%u) count_modes=%u under master\n",
+                                         i, gc.connector_id, gc.count_modes);
+                                else
+                                    logf("    reenum(conn%u id=%u) GETCONNECTOR failed: %s\n",
+                                         i, c2[i], strerror(errno));
+                            }
+                        }
+                        free(c2); free(cr2); free(en2); free(fb2);
+                    }
+                    /* Drop it immediately so RA/driver state is untouched. */
+                    int d = ioctl(cfd, DRM_IOCTL_DROP_MASTER);
+                    logf("    DROP_MASTER rc=%d errno=%d (%s)\n", d,
+                         d < 0 ? errno : 0, d < 0 ? strerror(errno) : "ok");
+                }
+            }
         }
     }
 
@@ -1990,7 +2090,7 @@ int main(int argc, char **argv) {
     /* Live EGL/GBM/GL chain runs ONLY on explicit 'diag video' (manual).
      * Boot 'diag all' (forked bg next to live RetroArch) keeps the GPU
      * read-only. */
-    g_video_live = (strcmp(mod, "video") == 0);
+    g_video_live = (strcmp(mod, "video") == 0) || (strcmp(mod, "drm") == 0);
     /* keylog 只写 keylog.txt，不碰 diag_report.txt —— 否则并发覆盖 diag all 的 gpu 段 */
     if (strcmp(mod, "keylog") != 0) g_out = fopen(REPORT, "w");
     if (g_out) logf("# CubeGM diag %s %s\n", mod, ctime(&(time_t){time(NULL)}));
@@ -2002,6 +2102,7 @@ int main(int argc, char **argv) {
     if (strcmp(mod, "keylog") == 0)                             cmd_keylog();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "display") == 0) cmd_display();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "video") == 0)  cmd_video();
+    if (strcmp(mod, "drm") == 0)                                cmd_video();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "audio") == 0)   cmd_audio();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "cores") == 0)   cmd_cores();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysdeep") == 0)         cmd_sysdeep();
