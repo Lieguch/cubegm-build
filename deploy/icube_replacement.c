@@ -216,6 +216,27 @@ static void run_diag_bg(const char *arg) {
     hlog(buf);
 }
 
+/* 前台串行跑 diag（等待完成）：用于 RA 启动前一次性取证 live EGL/GBM/GL 链。
+ * diag 内部按 mod 分流输出到 diag_video_report.txt，与后台 diag all 的
+ * diag_report.txt 不冲突；60s 看门狗在 diag 内部，这里不多加限时。 */
+static void run_diag_fg(const char *arg) {
+    pid_t pid = fork();
+    if (pid < 0) { hlog("icube: fork diag fg failed\n"); return; }
+    if (pid == 0) {
+        int fd = open("/dev/null", O_WRONLY);
+        if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
+        execl(DIAG_BIN, "diag", arg, (char *)NULL);
+        _exit(127);
+    }
+    char buf[128];
+    snprintf(buf, sizeof buf, "icube: diag %s (fg, blocking) started\n", arg);
+    hlog(buf);
+    int st = 0;
+    waitpid(pid, &st, 0);
+    snprintf(buf, sizeof buf, "icube: diag %s (fg) exited status=%d\n", arg, st);
+    hlog(buf);
+}
+
 /* supervisor：循环 exec retroarch，崩溃后重启（复刻原厂 icube 的 waitpid 监控）。 */
 static void run_supervisor(void) {
     int restart_count = 0;
@@ -288,6 +309,11 @@ int main(int argc, char **argv) {
     /* 1.5 开机即 Debug（v10.9）：后台派 diag all + diag keylog，不阻塞 retroarch */
     run_diag_bg("all");
     run_diag_bg("keylog");
+
+    /* 1.6 一次性取证：RA 启动前串行跑 live EGL/GBM/GL 链（diag video），
+     * 链尾 DROP_MASTER 后干净退出，再启动 RA，不与 RA 抢 DRM master；
+     * 输出到 diag_video_report.txt，不与后台 diag all 的 diag_report.txt 冲突。 */
+    run_diag_fg("video");
 
     /* 2. supervisor：循环 exec retroarch（自带 RGUI 菜单 + libretro 核心加载） */
     run_supervisor();

@@ -58,6 +58,7 @@
 #include <sys/stat.h>      /* stat() for GPU probe (cmd_gpu) */
 
 #define REPORT "/mnt/sdcard/diag_report.txt"
+#define REPORT_VIDEO "/mnt/sdcard/diag_video_report.txt"
 static FILE *g_out = NULL;
 
 static void logf(const char *fmt, ...) {
@@ -929,12 +930,21 @@ static void cmd_gpu(void) {
     /* 3. Devfreq (GPU frequency management) — 先枚举全部节点（GPU 节点名随内核变），再定点读取 */
     logf("--- devfreq ---\n");
     sys_class_list("/sys/class/devfreq");
-    cat_file("/sys/class/devfreq/10091000.gpu/cur_freq");
-    cat_file("/sys/class/devfreq/10091000.gpu/available_frequencies");
-    cat_file("/sys/class/devfreq/10091000.gpu/governor");
-    cat_file("/sys/class/devfreq/10091000.gpu/min_freq");
-    cat_file("/sys/class/devfreq/10091000.gpu/max_freq");
-    cat_file("/sys/class/devfreq/10091000.gpu/trans_stat");
+    logf("  cur_freq: ");             cat_file("/sys/class/devfreq/10091000.gpu/cur_freq");
+    logf("  available_frequencies: "); cat_file("/sys/class/devfreq/10091000.gpu/available_frequencies");
+    logf("  governor: ");             cat_file("/sys/class/devfreq/10091000.gpu/governor");
+    logf("  min_freq: ");             cat_file("/sys/class/devfreq/10091000.gpu/min_freq");
+    logf("  max_freq: ");             cat_file("/sys/class/devfreq/10091000.gpu/max_freq");
+    logf("  trans_stat:\n");          cat_file("/sys/class/devfreq/10091000.gpu/trans_stat");
+    /* 200MHz downclock 可行性判定：200MHz 是否在 available_frequencies 中出现 */
+    {
+        FILE *af = fopen("/sys/class/devfreq/10091000.gpu/available_frequencies", "r");
+        char ab[256] = "";
+        int has200 = 0;
+        if (af) { if (fgets(ab, sizeof ab, af)) has200 = (strstr(ab, "200000") != NULL); fclose(af); }
+        logf("  [VERDICT] 200MHz downclock %s (available_frequencies=%s)\n",
+             has200 ? "POSSIBLE" : "IMPOSSIBLE -- GPU pinned at max", ab);
+    }
 
     /* 4. Mali debugfs */
     logf("--- /sys/kernel/debug/mali ---\n");
@@ -994,6 +1004,7 @@ static void cmd_gpu(void) {
                 struct { unsigned int ctx; unsigned int version; int compatible; } a;
                 memset(&a, 0, sizeof a);
                 a.ctx = 1;
+                a.version = 0x03840384; /* _MAKE_VERSION_ID(900)=r7p0 UK API；必须先填否则 compatible 恒 0 */
                 int r = ioctl(mfd, 0xC0048203, &a);
                 if (r < 0) {
                     logf("  GET_API_VERSION(V1) ioctl failed: %s (errno=%d)\n",
@@ -1009,6 +1020,7 @@ static void cmd_gpu(void) {
                 struct { unsigned long long ctx; unsigned int version; int compatible; } a;
                 memset(&a, 0, sizeof a);
                 a.ctx = 1;
+                a.version = 0x03840384; /* r7p0 UK API v2 同样预填，否则 compatible 恒 0 */
                 int r = ioctl(mfd, 0xC0108203, &a);
                 if (r < 0) {
                     logf("  GET_API_VERSION(V2) ioctl failed: %s (errno=%d)\n",
@@ -1677,8 +1689,9 @@ static void cmd_video(void) {
                         continue;
                     }
                     static const char *tnames[] = {
-                        "Unknown", "VGA", "DVI", "Composite", "S-Video", "LVDS", "Component",
-                        "Dp", "HDMIA", "HDMIB", "TBT", "eDP", "Virtual1", "Virtual2", "Virtual3"
+                        "Unknown", "VGA", "DVII", "DVID", "DVIA", "Composite", "SVIDEO",
+                        "LVDS", "Component", "9PinDIN", "DisplayPort", "HDMIA", "HDMIB",
+                        "TV", "eDP", "Virtual"
                     };
                     const char *tn = gc.connector_type < 15 ? tnames[gc.connector_type] : "ext";
                     static const char *connames[] = { "Disconn", "Connected", "Unknown" };
@@ -1750,6 +1763,81 @@ static void cmd_video(void) {
                             }
                         }
                         free(c2); free(cr2); free(en2); free(fb2);
+                    }
+                    /* KMS modeset probe (RA drm_setup path): CREATE_DUMB -> ADDFB -> SETCRTC.
+                     * Answers whether this (old Rockchip) DRM supports dumb-buffer scanout,
+                     * which GBM/EGL depends on (count_fbs=0 seen at boot). */
+                    {
+                        struct drm_mode_card_res rr; memset(&rr, 0, sizeof rr);
+                        uint32_t *cc = NULL, *cr = NULL, *en = NULL, *fb = NULL;
+                        if (ioctl(cfd, DRM_IOCTL_MODE_GETRESOURCES, &rr) == 0) {
+                            cc = calloc(rr.count_connectors ? rr.count_connectors : 1, 4);
+                            cr = calloc(rr.count_crtcs ? rr.count_crtcs : 1, 4);
+                            en = calloc(rr.count_encoders ? rr.count_encoders : 1, 4);
+                            fb = calloc(rr.count_fbs ? rr.count_fbs : 1, 4);
+                            rr.connector_id_ptr = (uintptr_t)cc;
+                            rr.crtc_id_ptr      = (uintptr_t)cr;
+                            rr.encoder_id_ptr   = (uintptr_t)en;
+                            rr.fb_id_ptr        = (uintptr_t)fb;
+                            ioctl(cfd, DRM_IOCTL_MODE_GETRESOURCES, &rr);
+                        }
+                        if (cc && cr && rr.count_connectors && rr.count_crtcs) {
+                            struct drm_mode_get_connector gc; memset(&gc, 0, sizeof gc);
+                            gc.connector_id = cc[0];
+                            struct drm_mode_modeinfo *md = NULL;
+                            unsigned nm = 0;
+                            if (ioctl(cfd, DRM_IOCTL_MODE_GETCONNECTOR, &gc) == 0) nm = gc.count_modes;
+                            if (nm) {
+                                md = calloc(nm, sizeof *md);
+                                gc.modes_ptr = (uintptr_t)md;
+                                ioctl(cfd, DRM_IOCTL_MODE_GETCONNECTOR, &gc);
+                            }
+                            if (md && nm && gc.count_modes) {
+                                struct drm_mode_create_dumb cd; memset(&cd, 0, sizeof cd);
+                                cd.width  = md[0].hdisplay;
+                                cd.height = md[0].vdisplay;
+                                cd.bpp    = 32;
+                                int rcb = ioctl(cfd, DRM_IOCTL_MODE_CREATE_DUMB, &cd);
+                                logf("    CREATE_DUMB %ux%u@32 rc=%d errno=%d (%s) handle=%u pitch=%u size=%llu\n",
+                                     cd.width, cd.height, rcb, rcb < 0 ? errno : 0,
+                                     rcb < 0 ? strerror(errno) : "ok", cd.handle, cd.pitch,
+                                     (unsigned long long)cd.size);
+                                if (rcb == 0) {
+                                    struct drm_mode_fb_cmd fbc; memset(&fbc, 0, sizeof fbc);
+                                    fbc.width = cd.width; fbc.height = cd.height;
+                                    fbc.pitch = cd.pitch; fbc.bpp = cd.bpp; fbc.depth = 24;
+                                    fbc.handle = cd.handle;
+                                    int raf = ioctl(cfd, DRM_IOCTL_MODE_ADDFB, &fbc);
+                                    logf("    ADDFB rc=%d errno=%d (%s) fb_id=%u\n",
+                                         raf, raf < 0 ? errno : 0, raf < 0 ? strerror(errno) : "ok",
+                                         fbc.fb_id);
+                                    if (raf == 0) {
+                                        struct drm_mode_crtc crt; memset(&crt, 0, sizeof crt);
+                                        crt.crtc_id           = cr[0];
+                                        crt.fb_id             = fbc.fb_id;
+                                        crt.set_connectors_ptr = (uintptr_t)cc;
+                                        crt.count_connectors  = 1;
+                                        crt.mode_valid        = 1;
+                                        crt.mode              = md[0];
+                                        int rsc = ioctl(cfd, DRM_IOCTL_MODE_SETCRTC, &crt);
+                                        logf("    SETCRTC crtc=%u fb=%u mode=%s rc=%d errno=%d (%s)\n",
+                                             cr[0], fbc.fb_id, md[0].name, rsc,
+                                             rsc < 0 ? errno : 0, rsc < 0 ? strerror(errno) : "ok");
+                                        unsigned int rmid = fbc.fb_id;
+                                        ioctl(cfd, DRM_IOCTL_MODE_RMFB, &rmid);
+                                    }
+                                    struct drm_mode_destroy_dumb dd; dd.handle = cd.handle;
+                                    ioctl(cfd, DRM_IOCTL_MODE_DESTROY_DUMB, &dd);
+                                }
+                            } else {
+                                logf("    SETCRTC probe: connector modes unavailable (count_modes=%u)\n", nm);
+                            }
+                            free(md);
+                        } else {
+                            logf("    SETCRTC probe: no crtc/connector (n_conn=%u n_crtc=%u)\n",
+                                 rr.count_connectors, rr.count_crtcs);
+                        }
+                        free(cc); free(cr); free(en); free(fb);
                     }
                     /* Drop it immediately so RA/driver state is untouched. */
                     int d = ioctl(cfd, DRM_IOCTL_DROP_MASTER);
@@ -2092,9 +2180,13 @@ int main(int argc, char **argv) {
      * read-only. */
     g_video_live = (strcmp(mod, "video") == 0) || (strcmp(mod, "drm") == 0);
     /* keylog 只写 keylog.txt，不碰 diag_report.txt —— 否则并发覆盖 diag all 的 gpu 段 */
-    if (strcmp(mod, "keylog") != 0) g_out = fopen(REPORT, "w");
-    if (g_out) logf("# CubeGM diag %s %s\n", mod, ctime(&(time_t){time(NULL)}));
-    else logf("# WARN: cannot write %s (SD read-only?) -- console only\n", REPORT);
+    if (strcmp(mod, "keylog") != 0) {
+        int is_video = (strcmp(mod, "video") == 0) || (strcmp(mod, "drm") == 0);
+        g_out = fopen(is_video ? REPORT_VIDEO : REPORT, "w");
+        if (g_out) logf("# CubeGM diag %s %s\n", mod, ctime(&(time_t){time(NULL)}));
+        else logf("# WARN: cannot write %s (SD read-only?) -- console only\n",
+                  is_video ? REPORT_VIDEO : REPORT);
+    }
     /* gpu 排最前：diag all 最先执行 GPU 探针，避免进程被外部杀掉时 gpu 段来不及落盘 */
     if (strcmp(mod, "all") == 0 || strcmp(mod, "gpu") == 0)            cmd_gpu();
     if (strcmp(mod, "all") == 0 || strcmp(mod, "sysinfo") == 0) cmd_sysinfo();
