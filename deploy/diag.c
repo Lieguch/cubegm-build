@@ -1938,10 +1938,10 @@ static void cmd_video(void) {
 
     {
         static const char *egl_names[] = {
-            "/mnt/sdcard/cubegm/lib/libEGL.so",
+            "/mnt/sdcard/cubegm/lib/libmali.so.1",      /* RA 实际加载 (DT_NEEDED)，优先测它 */
+            "/mnt/sdcard/cubegm/lib/libEGL.so",          /* 若为旧 fbdev 残留独立文件，会被误测 */
             "/mnt/sdcard/cubegm/lib/libEGL.so.1",
-            "/mnt/sdcard/cubegm/lib/libmali.so.1",
-            "libEGL.so", "libEGL.so.1", "libmali.so.1"
+            "libmali.so.1", "libEGL.so", "libEGL.so.1"
         };
         d.h = d_video_open(egl_names, 6);
     }
@@ -1968,12 +1968,12 @@ static void cmd_video(void) {
     logf("    GBM symbols (same blob): ");
     {
         static const char *gbm_names[] = {
+            "/mnt/sdcard/cubegm/lib/libmali.so.1",      /* gbm 变体本体优先 (RA gbm 符号来源) */
             "/mnt/sdcard/cubegm/lib/libgbm.so",
             "/mnt/sdcard/cubegm/lib/libgbm.so.1",
-            "/mnt/sdcard/cubegm/lib/libmali.so.1",
-            "libgbm.so", "libgbm.so.1"
+            "libmali.so.1", "libgbm.so", "libgbm.so.1"
         };
-        d.h_g = d_video_open(gbm_names, 5);
+        d.h_g = d_video_open(gbm_names, 6);
     }
     if (d.h_g) {
         d.gbm_create_device = (void *(*)(int))dlsym(d.h_g, "gbm_create_device");
@@ -1989,12 +1989,12 @@ static void cmd_video(void) {
     }
     {
         static const char *gles_names[] = {
+            "/mnt/sdcard/cubegm/lib/libmali.so.1",      /* gbm 变体本体优先 (RA GLES 符号来源) */
             "/mnt/sdcard/cubegm/lib/libGLESv2.so",
             "/mnt/sdcard/cubegm/lib/libGLESv2.so.2",
-            "/mnt/sdcard/cubegm/lib/libmali.so.1",
-            "libGLESv2.so"
+            "libmali.so.1", "libGLESv2.so"
         };
-        d.h_s = d_video_open(gles_names, 4);
+        d.h_s = d_video_open(gles_names, 5);
     }
     if (d.h_s) {
         d.glGetString = (const char *(*)(unsigned int))dlsym(d.h_s, "glGetString");
