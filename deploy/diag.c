@@ -2015,6 +2015,9 @@ static void cmd_video(void) {
 
         /* === Stage A: RA original order (bind_api BEFORE any EGL init) === */
         logf("  -- Stage A: RA original order (video_driver.c L1440 bind_api first) --\n");
+        logf("    A0 pre-bind eglGetError=0x%04x (%s) [blob initial state, no EGL call yet]\n",
+             (unsigned)(d.eglGetError ? d.eglGetError() : 0),
+             d_egl_err_str((unsigned)(d.eglGetError ? d.eglGetError() : 0)));
         if (d.eglBindAPI) {
             int rc = d.eglBindAPI(D_EGL_OPENGL_ES_API);
             logf("    A1 eglBindAPI(OPENGL_ES_API=0x30A0) rc=%d eglErr=0x%04x (%s)\n",
@@ -2136,6 +2139,8 @@ static void cmd_video(void) {
 
         /* Stage B: bind AFTER proper init+makeCurrent (the "correct" order) */
         logf("  -- Stage B: correct-order bind (after Initialize+MakeCurrent) --\n");
+        logf("    B0 dpy=%p %s at bind time [display held through A-chain]\n",
+             dpy, dpy ? "(non-NULL)" : "(NULL=display not acquired)");
         if (d.eglBindAPI) {
             int rc = d.eglBindAPI(D_EGL_OPENGL_ES_API);
             logf("    B1 eglBindAPI(OPENGL_ES_API) rc=%d eglErr=0x%04x (%s)\n",
