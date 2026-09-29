@@ -227,8 +227,16 @@ ls -la "$STAGE_DIR" | head -30
 
 echo ""
 echo "=== 5) GLIBC ceiling check (must be <=2.29) ==="
+# ★ pipefail trap (run 36586120582): libGLESv2 has NO GLIBC_* version section, so
+#   `readelf -V | grep -oE GLIBC_` produces NO match -> grep exits 1 -> with
+#   `set -euo pipefail` the $(...) assignment fails -> the whole script dies here
+#   even though Mesa compiled+installed 943/943 successfully. This is a
+#   diagnostic step, not a build gate — append `|| true` so a missing version
+#   section reports GLIBC_max=none (informational) instead of aborting the build.
+#   GLIBC_max is *informational only* (all six libs are checked; the hard gate is
+#   the build.sh STAGE 4.8 `[ -s ... ]` presence asserts + readelf ceiling).
 for so in $(find "$STAGE_DIR" -name '*.so*' -type f 2>/dev/null); do
-    max=$(readelf -V "$so" 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -V | tail -1)
+    max=$(readelf -V "$so" 2>/dev/null | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -V | tail -1) || max=none
     echo "  $(basename "$so"): GLIBC_max=${max:-none}"
 done
 
