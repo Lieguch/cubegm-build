@@ -140,17 +140,54 @@ if command -v apt-get >/dev/null 2>&1; then
             log "WARN: apt-get update attempt $i failed -- retrying in $((i*5))s"
             sleep "$((i*5))"
         done
-        sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=90 install -y \
-            --no-install-recommends \
-            build-essential gcc g++ make git curl wget xz-utils \
+        # ★ 2026-09-29 ROOT CAUSE FIX: this used to be ONE atomic apt transaction.
+        #   jammy's `pkgconf` declares `Breaks: pkg-config (>= 0.29-1)`, and the
+        #   ubuntu-22.04 runner image PREINSTALLS pkg-config 0.29.2 (official:
+        #   actions/runner-images/images/ubuntu/Ubuntu2204-Readme.md). Both cannot
+        #   coexist, so apt aborted the WHOLE transaction:
+        #       pkgconf : Breaks: pkg-config (>= 0.29-1)
+        #       E: Unable to correct problems, you have held broken packages.
+        #   -> meson / ninja-build / python3-mako were never installed
+        #   -> STAGE 4.8 died with "ERROR: meson missing".
+        #
+        #   Fix: (1) drop pkgconf -- it is NOT needed, pkg-config is the Debian
+        #   default and build_mesa_lima.sh already accepts either binary
+        #   (PKGCONF="$(command -v pkgconf || command -v pkg-config)");
+        #   (2) split the install into independent groups so one bad package can
+        #   never take down the toolchain-critical ones again.
+        _apt_group() {
+            sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=90 install -y \
+                --no-install-recommends "$@" \
+                || log "WARN: apt group failed (continuing): $*"
+        }
+        _apt_group build-essential gcc g++ make git curl wget xz-utils \
             flex bison texinfo gawk libgmp-dev libmpfr-dev libmpc-dev \
-            pkg-config pkgconf autoconf automake libtool libtool-bin \
             gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip python3-dev \
-            python3-mako meson ninja-build \
-            help2man zip unzip file libdrm-dev libasound2-dev \
-            || log "WARN: apt-get install failed -- continuing with preinstalled tools"
+            help2man zip unzip file
+        _apt_group autoconf automake libtool libtool-bin
+        _apt_group pkg-config libdrm-dev libasound2-dev
+        _apt_group python3-mako meson ninja-build
+
+        # Meson official install route when the distro package is unavailable:
+        # https://mesonbuild.com/Getting-meson.html  (pip install meson / ninja)
+        for _t in meson ninja; do
+            if ! command -v "$_t" >/dev/null 2>&1; then
+                log "WARN: $_t missing after apt -- installing via pip (Meson official route)"
+                sudo pip3 install --no-cache-dir "$_t" >/dev/null 2>&1 \
+                    || pip3 install --user --no-cache-dir "$_t" >/dev/null 2>&1 \
+                    || warn "pip install $_t FAILED -- STAGE 4.8 will not build"
+            fi
+        done
+        # Mesa requires the Python Mako module (official: docs.mesa3d.org/meson.html
+        # "Build requirements": python3-mako).
+        if ! python3 -c 'import mako' >/dev/null 2>&1; then
+            log "WARN: python3-mako missing -- installing via pip (Mesa requirement)"
+            sudo pip3 install --no-cache-dir Mako >/dev/null 2>&1 \
+                || pip3 install --user --no-cache-dir Mako >/dev/null 2>&1 \
+                || warn "pip install Mako FAILED -- Mesa meson.build will not configure"
+        fi
         sudo touch /tmp/.cubegm_apt_done
-        log "STAGE 0: apt deps installed."
+        log "STAGE 0: apt deps installed (meson=$(command -v meson || echo MISSING), ninja=$(command -v ninja || command -v ninja-build || echo MISSING), pkg-config=$(command -v pkg-config || echo MISSING))"
     fi
 else
     warn "STAGE 0: apt-get not found -- assume deps already present (non-Debian host)."

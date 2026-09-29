@@ -36,8 +36,14 @@ CROSS_FILE="$SRCDIR/armhf.cross"
 mkdir -p "$SRCDIR" "$STAGE_DIR"
 
 # ---- host build tools needed by meson/mesa (apt in CI bootstrap, not here) ----
+# Meson official requirements: https://mesonbuild.com/Quick-guide.html
+# Mesa official build requirements: https://docs.mesa3d.org/meson.html
+#   -> python3 + python3-mako + ninja; meson itself may come from pip.
 command -v meson >/dev/null || { echo "ERROR: meson missing"; exit 1; }
-command -v ninja >/dev/null || { echo "ERROR: ninja missing"; exit 1; }
+NINJA="$(command -v ninja || command -v ninja-build || true)"
+[ -n "$NINJA" ] || { echo "ERROR: ninja missing (ninja / ninja-build)"; exit 1; }
+python3 -c 'import mako' >/dev/null 2>&1 \
+    || { echo "ERROR: python3 Mako module missing (Mesa meson.build requirement)"; exit 1; }
 command -v "${CROSS_COMPILE}gcc" >/dev/null || { echo "ERROR: ${CROSS_COMPILE}gcc missing"; exit 1; }
 
 # Resolve absolute paths for the cross file
