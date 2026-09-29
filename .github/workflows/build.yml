@@ -51,8 +51,10 @@ jobs:
         run: |
           # defend against CRLF line endings (files authored on Windows)
           sed -i 's/\r$//' bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
+          sed -i 's/\r$//' build_mesa_lima.sh build_mali_blob.sh build_libudev_zero.sh
           sed -i 's/\r$//' ../build/toolchain/build_sysroot_ctng.sh ../build/toolchain/verify_target_abi.sh
           chmod +x bootstrap_linux.sh build_sdl_libpng.sh build.sh build_sf3000_armhf.sh
+          chmod +x build_mesa_lima.sh build_mali_blob.sh build_libudev_zero.sh
           chmod +x ../build/toolchain/*.sh
           ./bootstrap_linux.sh
 

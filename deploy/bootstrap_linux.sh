@@ -144,8 +144,9 @@ if command -v apt-get >/dev/null 2>&1; then
             --no-install-recommends \
             build-essential gcc g++ make git curl wget xz-utils \
             flex bison texinfo gawk libgmp-dev libmpfr-dev libmpc-dev \
-            pkg-config autoconf automake libtool libtool-bin \
+            pkg-config pkgconf autoconf automake libtool libtool-bin \
             gperf dpkg-dev binutils-dev zlib1g-dev python3 python3-pip python3-dev \
+            python3-mako meson ninja-build \
             help2man zip unzip file libdrm-dev libasound2-dev \
             || log "WARN: apt-get install failed -- continuing with preinstalled tools"
         sudo touch /tmp/.cubegm_apt_done

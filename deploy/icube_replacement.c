@@ -298,6 +298,16 @@ int main(int argc, char **argv) {
     setenv("XDG_CONFIG_HOME", WORK_DIR "/configs", 1);
     setenv("LD_LIBRARY_PATH",
            "/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib", 1);
+    /* Mesa 20.3.5 (lima/kmsro) 运行时环境 —— 替代已弃用的 libmali blob：
+       - LIBGL_DRIVERS_PATH: Mesa 用 dlopen 加载 dri/lima_dri.so（不在 DT_NEEDED 里）
+       - EGL_PLATFORM=gbm: Mesa 选 gbm 平台后端（kmsro → rockchip display）
+       - GALLIUM_DRIVER=lima: 直接用 lima Gallium 驱动（kmsro 自动接管显示）
+       - LIBGL_ALWAYS_SOFTWARE 不设：设备有真 Mali-400，走硬件路径
+       未设 LIBGL_DRIVERS_PATH 时 Mesa 只查编译期默认路径（设备上不存在）→
+       "failed to load driver: lima" → eglInitialize 失败。 */
+    setenv("LIBGL_DRIVERS_PATH", "/mnt/sdcard/cubegm/lib/dri", 1);
+    setenv("EGL_PLATFORM", "gbm", 1);
+    setenv("GALLIUM_DRIVER", "lima", 1);
     /* v11.6：不再覆盖 ALSA_CONFIG_PATH。rootfs 官方 alsa.conf 的 @hooks 会根据
        HOME=/mnt/sdcard/cubegm 自动加载 ~/.asoundrc（双输出定义，payload 已部署）。 */
     set_cpu_performance();

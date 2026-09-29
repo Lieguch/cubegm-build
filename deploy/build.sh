@@ -254,17 +254,40 @@ export LDFLAGS="--sysroot=$SYSROOT -Wl,--dynamic-linker=/lib/ld-linux-armhf.so.3
 bash "$HERE/build_libudev_zero.sh" || die "libudev-zero sysroot install FAILED"
 
 # -----------------------------------------------------------------------------
-# STAGE 4.8 -- libmali blob (Mali-400 gbm/DRM user-space driver)
-#   RK3036G has Mali-400 MP GPU; kernel driver already loaded (diag confirmed:
-#   /dev/mali, debugfs /sys/kernel/debug/mali with Mali-400 MP entries) and the
-#   display stack is DRM (/dev/dri/card0 + renderD128, fbs=0). The fbdev blob
-#   variant needs /dev/fb0 framebuffer panning which this DRM stack lacks
-#   (eglGetDisplay -> EGL_NO_DISPLAY). The gbm (drm-dma_buf) variant opens
-#   /dev/dri/card0 + /dev/mali and bundles libgbm. RetroArch then uses
-#   --enable-kms (drm context) instead of --enable-mali_fbdev.
+# STAGE 4.8 -- Mesa 20.3.5 (lima + kmsro) open-source GPU userspace
+#
+#   REVERSAL (2026-09-29): ARM's closed libmali blob was replaced by Mesa.
+#   Root cause, proven by live device forensics (500-series diag + qemu + real
+#   glibc): the closed blob's eglBindAPI returns EGL_FALSE *silently* (err=0x3000
+#   is not an error code) whenever there is no current display/bound API context.
+#   RetroArch's video_driver.c:1198 calls ctx->bind_api() (=eglBindAPI) BEFORE
+#   ctx->init() (=eglInitialize), so eglBindAPI always fails on a fresh boot with
+#   this blob -> RA aborts with "Failed to bind API". No blob variant fixes it.
+#
+#   Mesa's EGL is the reference implementation: eglBindAPI(EGL_OPENGL_ES_API) is
+#   legal before eglInitialize (it only sets a per-thread current API). Mesa also
+#   gives us the open lima driver for Mali-400 (Utgard) instead of a binary blob.
+#   Mesa official docs (docs.mesa3d.org/drivers/lima.html): Mali-400 = Supported,
+#   Rockchip display is a tested kmsro path. Requires the mainline kernel built
+#   with CONFIG_DRM_LIMA (device kernel already ships it).
+#
+#   Produces: libEGL.so.1.0.0, libgbm.so.1.0.0, libGLESv2.so.2.0.0, libglapi.so,
+#   dri/lima_dri.so (+ rockchip_dri.so) — all GLIBC <= 2.29 (device ceiling).
 # -----------------------------------------------------------------------------
-log "STAGE 4.8: installing libmali gbm (DRM) blob into sysroot..."
-SYSROOT="$SYSROOT" bash "$HERE/build_mali_blob.sh" || die "libmali blob install FAILED"
+log "STAGE 4.8: cross-compiling Mesa 20.3.5 (lima+kmsro) into sysroot..."
+SYSROOT="$SYSROOT" CROSS_COMPILE="$CROSS_COMPILE" \
+    bash "$HERE/build_mesa_lima.sh" || die "Mesa lima cross-build FAILED"
+
+# Verify Mesa landed where RetroArch's checks will find it.
+MESA_EGL="$SYSROOT/usr/lib/libEGL.so.1.0.0"
+MESA_GBM="$SYSROOT/usr/lib/libgbm.so.1.0.0"
+[ -s "$MESA_EGL" ] || die "Mesa libEGL.so.1.0.0 missing after build"
+[ -s "$MESA_GBM" ] || die "Mesa libgbm.so.1.0.0 missing after build"
+# pkg-config descriptors are how RetroArch's qb finds gbm/egl/glesv2.
+for pc in gbm.pc egl.pc glesv2.pc; do
+    [ -s "$SYSROOT/usr/lib/pkgconfig/$pc" ] || die "Mesa $pc missing in sysroot pkgconfig"
+done
+log "STAGE 4.8: Mesa staged (libEGL/libgbm/libGLESv2/lima_dri + pkgconfig)"
 
 # -----------------------------------------------------------------------------
 # STAGE 4.9 -- libdrm.so 链接库 (armhf)
@@ -447,13 +470,15 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # 注意：ALSA 不需要此修补，因为 runner 宿主机装了 libasound2-dev。
     sed -i "s|^INCLUDES='usr/include usr/local/include'|INCLUDES='usr/include usr/local/include $SYSROOT/usr/include $SYSROOT/usr/include/SDL $SYSROOT/usr/include/EGL $SYSROOT/usr/include/GLES2 $SYSROOT/usr/include/GLES'|" qb/config.libs.sh
     export INCLUDE_DIRS="-I$SYSROOT/usr/include/SDL -I$SYSROOT/usr/include/alsa -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/GLES"
-    # Mali-400 GPU: gbm(drm-dma_buf) blob + --enable-kms (drm context driver, opens
-    # /dev/dri/card0 + /dev/mali). Blob provides libEGL/libGLESv2/libgbm/libmali.
-    # Disable desktop OpenGL (no Mesa); keep SDL1 fallback + kms/drm for GL menu.
-    export OPENGLES_LIBS="-L$SYSROOT/usr/lib -lGLESv2 -lEGL -lmali"
+    # Mali-400 GPU via MESA (open-source lima driver) — NOT the closed libmali blob.
+    # Mesa provides libEGL + libgbm + libGLESv2 + dri/lima_dri.so (kmsro display).
+    # RA config-gated KMS/EGL/GLES paths, no -lmali anywhere.
+    export OPENGLES_LIBS="-L$SYSROOT/usr/lib -lGLESv2 -lEGL"
     export OPENGLES_CFLAGS="-I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/EGL"
-    export EGL_LIBS="-L$SYSROOT/usr/lib -lEGL -lmali"
+    export EGL_LIBS="-L$SYSROOT/usr/lib -lEGL -lgbm"
     export EGL_CFLAGS="-I$SYSROOT/usr/include/EGL"
+    export GBM_LIBS="-L$SYSROOT/usr/lib -lgbm"
+    export GBM_CFLAGS="-I$SYSROOT/usr/include"
     # qb 官方检测通道（qb.params.sh 文档化 "General environment variables: CC/CFLAGS/LDFLAGS"）：
     # check_header 的编译测试与 check_val 的链接测试只用 BUILD_DIRS + $CFLAGS + $LDFLAGS，
     # 完全不走 INCLUDES（504 根因：--enable-egl 强制 check_header EGL/eglext.h，
@@ -462,6 +487,17 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # qb check_header 编译测试用 BUILD_DIRS+$FLAGS(CFLAGS)+$LDFLAGS (qb.libs.sh L289)
     # 全局 CFLAGS(L173) 含 --sysroot+$ARCH_FLAGS+$ALSA_CFLAGS，不能覆盖。
     # 追加 -I$SYSROOT/usr/include 使 check_header #include <EGL/egl.h> 编译通过。
+    # ★ PKG_CONF_PATH (2026-09-29 root cause): qb resolves its pkg-config binary as
+    #   `${CROSS_COMPILE}pkgconf` / `${CROSS_COMPILE}pkg-config`. With CROSS_COMPILE
+    #   set to the bare prefix those do not exist on the runner, so PKG_CONF_PATH
+    #   becomes "none" and EVERY package check (gbm/egl/glesv2/drm) reports "no".
+    #   Pinning it to the host pkgconf + PKG_CONFIG_LIBDIR=sysroot pkgconfig (so the
+    #   host's own .pc files never leak in) is what makes the Mesa checks pass.
+    #   PKG_CONFIG_SYSROOT_DIR prefixes -I/-L from the .pc so the compiler links
+    #   against the sysroot Mesa, not the host's.
+    PKG_CONF_PATH="$(command -v pkgconf || command -v pkg-config)" \
+    PKG_CONFIG_LIBDIR="$SYSROOT/usr/lib/pkgconfig" \
+    PKG_CONFIG_SYSROOT_DIR="$SYSROOT" \
     CFLAGS="$CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/KHR -I$SYSROOT/usr/include/GLES2" \
     LDFLAGS="$LDFLAGS -L$SYSROOT/usr/lib" \
     ./configure --host=arm-linux-gnueabihf \
@@ -853,7 +889,7 @@ done
 _queue+=("libstdc++.so.6" "libatomic.so.1")
 # fallback: if readelf was unavailable, seed the known direct deps
 if [ ${#_queue[@]} -eq 0 ]; then
-    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libMali.so libmali-utgard-400-r7p0-r1p1-gbm.so libmali.so.1 libmali.so libEGL.so libGLESv2.so libGLESv1_CM.so libgbm.so libdrm.so.2 libcrypto.so.1.1)
+    _queue=(libSDL.so.1 libpng12.so.0 libz.so.1 libasound.so.2 libEGL.so.1 libgbm.so.1 libGLESv2.so.2 libglapi.so.0 libdrm.so.2)
     log "WARN: readelf unavailable -- seeding hardcoded SDL/libpng/z/asound."
 fi
 while [ ${#_queue[@]} -gt 0 ]; do
@@ -877,37 +913,53 @@ while [ ${#_queue[@]} -gt 0 ]; do
 done
 log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib."
 
-# --- 断言: Mali blob 及其 DT_NEEDED 必须落到 payload ---
-#   r1p1 blob 的 DT_SONAME=libmali.so.1 (readelf 实测, run 512)。
-#   RetroArch 链接命令 (run 515 日志 L775) 为: ... -lgbm -ldrm ... -lEGL ...
-#   其中 -lgbm 与 -lEGL 都指向同一个 blob 的 symlink
-#   (libgbm.so / libEGL.so -> libmali-utgard-400-r7p0-r1p1-gbm.so, SONAME=libmali.so.1),
-#   所以链接器只记一个 DT_NEEDED = libmali.so.1 (SONAME 折叠, 不是 libEGL.so.1/libgbm.so.1)。
-#   -lgbm 能链接成功本身就证明 gbm 符号由 blob 自带, 无需独立 libgbm.so.1。
-#   -ldrm 指向独立 libdrm.so.2 (真正的依赖)。
-#   ⇒ 设备运行时只需要这两个文件名:
-#       libmali.so.1   (blob 本体, 提供 EGL+GLES+gbm 全套符号)
-#       libdrm.so.2    (blob 的 NEEDED)
-#   libEGL.so.1 / libgbm.so.1 / 原始 blob 文件名都是【构建期链接名】, 经 SONAME
-#   折叠后运行时不需要; 强制要求它们会误报 (run 515: 3 个 bundle MISSING 全是这类
-#   假阳性, 而真正需要的 libmali.so.1 + libdrm.so.2 都已正确 bundle)。
-_mali_ok=0
-for _c in libmali.so.1 libdrm.so.2; do
+# --- 断言: Mesa 运行时库必须落到 payload ---
+#   RetroArch now links against Mesa (not the closed blob). Its DT_NEEDED entries
+#   are the standard SONAMEs, so the device needs these files:
+#       libEGL.so.1     (Mesa EGL)
+#       libgbm.so.1     (Mesa GBM — kmsro display buffer manager)
+#       libGLESv2.so.2  (Mesa GLES2)
+#       libglapi.so.0   (Mesa shared GL API)
+#       libdrm.so.2     (DRM ioctl wrapper)
+#       dri/lima_dri.so (the Gallium lima+kmsro driver, dlopen'd at runtime)
+#   Any missing file means an EGL/GBM init failure on device.
+_mesa_ok=0
+for _c in libEGL.so.1 libgbm.so.1 libGLESv2.so.2 libdrm.so.2; do
     if [ -e "$DST/lib/$_c" ]; then
         log "  bundle OK: $_c"
     else
         log "  bundle MISSING: $_c"
-        _mali_ok=1
+        _mesa_ok=1
     fi
 done
-[ "$_mali_ok" -eq 0 ] || die "runtime Mali/drm libs incomplete in $DST/lib -- device would fail to open EGL display"
+# the DRI driver is dlopen'd via LIBGL_DRIVERS_PATH — it must ship too
+if [ -e "$DST/lib/dri/lima_dri.so" ]; then
+    log "  bundle OK: dri/lima_dri.so"
+else
+    log "  bundle MISSING: dri/lima_dri.so"
+    _mesa_ok=1
+fi
+[ "$_mesa_ok" -eq 0 ] || die "runtime Mesa libs incomplete in $DST/lib -- device would fail to open EGL display"
 
-# libcrypto 兜底: 若某个 blob 变体还带 OpenSSL 未定义符号，把设备 rootfs 的
-# libcrypto 一起带上（不删，只会多几 KB）。注意: 这不能替代 build_mali_blob.sh
-# 的 blob 预检门禁 —— 链接期校验发生在构建机，运行时兜底救不了 configure 失败。
-if [ -e "$SYSROOT/usr/lib/libcrypto.so.1.1" ] && [ ! -e "$DST/lib/libcrypto.so.1.1" ]; then
+# libcrypto 兜底: Mesa does NOT link OpenSSL, so this is dead weight now. Keep it
+# only if some other bundled lib (not Mesa) still needs libcrypto at runtime.
+if [ -e "$SYSROOT/usr/lib/libcrypto.so.1.1" ] && [ ! -e "$DST/lib/libcrypto.so.1.1" ] \
+   && grep -rlq "libcrypto" "$DST/lib" 2>/dev/null; then
     cp -L "$SYSROOT/usr/lib/libcrypto.so.1.1" "$DST/lib/" 2>/dev/null \
-        && log "  bundle OK: libcrypto.so.1.1 (blob OpenSSL fallback)" || true
+        && log "  bundle OK: libcrypto.so.1.1 (referenced by a bundled lib)" || true
+fi
+
+# -----------------------------------------------------------------------------
+# Mesa DRI driver: RETROARCH dlopens $LIBGL_DRIVERS_PATH/<driver>_dri.so at
+# runtime, so the .so is not in any DT_NEEDED and the closure walk above misses
+# it. Ship the whole dri/ dir from the sysroot Mesa build.
+# -----------------------------------------------------------------------------
+if [ -d "$SYSROOT/usr/lib/dri" ]; then
+    mkdir -p "$DST/lib/dri"
+    for _dri in "$SYSROOT/usr/lib/dri/"*_dri.so; do
+        [ -e "$_dri" ] || continue
+        cp -Lf "$_dri" "$DST/lib/dri/" && log "  bundle OK: dri/$(basename "$_dri")"
+    done
 fi
 
 # -----------------------------------------------------------------------------
