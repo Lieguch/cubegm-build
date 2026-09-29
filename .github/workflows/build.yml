@@ -40,7 +40,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /home/runner/cubegm-tc
-          key: tc-glibc229-${{ hashFiles('build/toolchain/build_sysroot_ctng.sh', 'deploy/build_sdl_libpng.sh', 'deploy/build.sh') }}
+          key: tc-glibc229-${{ hashFiles('build/toolchain/build_sysroot_ctng.sh', 'deploy/build_sdl_libpng.sh', 'deploy/build.sh', 'deploy/build_mesa_lima.sh', 'deploy/build_libudev_zero.sh') }}
           restore-keys: |
             tc-glibc229-
 

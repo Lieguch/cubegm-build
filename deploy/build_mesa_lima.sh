@@ -35,6 +35,32 @@ STAGE_DIR="$SYSROOT/usr/lib/mesa-stage"
 CROSS_FILE="$SRCDIR/armhf.cross"
 mkdir -p "$SRCDIR" "$STAGE_DIR"
 
+# =============================================================================
+# ★ CI cache pollution fix (run 36580735541 root cause)
+#   The GitHub Actions cache (key tc-glibc229-<hash of build scripts>) restores a
+#   sysroot built by the OLD libmali-blob pipeline. In that old pipeline,
+#   build.sh STAGE 4.9 did:
+#       cp -f  <bullseye-deb>/libdrm.so.2.4.0  $SYSROOT/usr/lib/libdrm.so.2
+#       ln -sf libdrm.so.2                   $SYSROOT/usr/lib/libdrm.so
+#   i.e. libdrm.so.2 landed as a REAL REGULAR FILE (not a symlink).
+#
+#   This script's libdrm meson install then tries to create a SYMLINK
+#   libdrm.so.2 -> libdrm.so.2.4.0 in the same location and dies with:
+#       ERROR: Destination '.../libdrm.so.2' already exists and is not a symlink
+#       FAILED: [code=1] meson-install
+#
+#   Meson official behaviour (mesonbuild.com/Installing.html + man meson(1)
+#   --only-changed): installing over an existing REGULAR FILE with a SYMLINK is
+#   a hard error -- meson will not silently replace it. The correct remedy is to
+#   remove the stale regular file BEFORE meson runs, so the symlink can be
+#   created cleanly. This is idempotent: if libdrm.so.2 is already the expected
+#   symlink, or absent, nothing is removed.
+# =============================================================================
+if [ -e "$SYSROOT/usr/lib/libdrm.so.2" ] && [ ! -L "$SYSROOT/usr/lib/libdrm.so.2" ]; then
+    echo "[mesa-lima] removing stale regular file libdrm.so.2 (old blob pipeline cache)"
+    rm -f "$SYSROOT/usr/lib/libdrm.so.2"
+fi
+
 # ---- host build tools needed by meson/mesa (apt in CI bootstrap, not here) ----
 # Meson official requirements: https://mesonbuild.com/Quick-guide.html
 # Mesa official build requirements: https://docs.mesa3d.org/meson.html
