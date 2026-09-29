@@ -137,7 +137,18 @@ extract_local "expat-${EXPAT_VER}.tar.xz" "$SRCDIR/expat-${EXPAT_VER}"
 
 export PATH="$(echo "$CROSS_COMPILE" | sed 's/-$//')/../../bin:$PATH" 2>/dev/null || true
 export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
-export PKG_CONFIG_SYSROOT_DIR="$SYSROOT"
+# ★ DO NOT set PKG_CONFIG_SYSROOT_DIR here (run 36583615873 root cause).
+#   Every dependency (libdrm, expat) is installed with --prefix=$PREFIX, i.e.
+#   its .pc file bakes the ABSOLUTE sysroot path into prefix/includedir. Setting
+#   PKG_CONFIG_SYSROOT_DIR makes pkg-config PREPEND sysroot again (pkg-config(1)
+#   man page: "prepends the value of PKG_CONFIG_SYSROOT_DIR to the -I and -L
+#   flags for all libraries"), producing doubled include paths:
+#       -I<sysroot><sysroot>/usr/include/libdrm   (nonexistent)
+#   -> Mesa src/loader dies with "drm.h: No such file or directory" (xf86drm.h
+#   is found via gcc's default sysroot, but drm.h only exists under the broken
+#   doubled -I). Meson's cross file ALSO must not set sys_root for the same
+#   reason (mesonbuild.com/Cross-compilation.html: sys_root drives
+#   PKG_CONFIG_SYSROOT_DIR internally).
 export CFLAGS_CROSS="-march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2"
 
 echo ""
