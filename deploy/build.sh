@@ -275,6 +275,12 @@ bash "$HERE/build_libudev_zero.sh" || die "libudev-zero sysroot install FAILED"
 #   dri/lima_dri.so (+ rockchip_dri.so) — all GLIBC <= 2.29 (device ceiling).
 # -----------------------------------------------------------------------------
 log "STAGE 4.8: cross-compiling Mesa 20.3.5 (lima+kmsro) into sysroot..."
+# ★ SRCDIR must NOT default to $(dirname SYSROOT)/mesa-src: that lands inside the
+#   crosstool-NG install tree (/home/runner/cubegm-tc/arm-linux-gnueabihf/...) which
+#   is read-only (crosstool-NG protects the toolchain -> "Permission denied").
+#   crosstool-ng docs explicitly warn against using the sysroot/toolchain dir as a
+#   build/install area. Build sources go to the writable WORKDIR instead.
+SRCDIR="$WORKDIR/mesa-src" \
 SYSROOT="$SYSROOT" CROSS_COMPILE="$CROSS_COMPILE" \
     bash "$HERE/build_mesa_lima.sh" || die "Mesa lima cross-build FAILED"
 
