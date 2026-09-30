@@ -479,8 +479,15 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     # Mali-400 GPU via MESA (open-source lima driver) — NOT the closed libmali blob.
     # Mesa provides libEGL + libgbm + libGLESv2 + dri/lima_dri.so (kmsro display).
     # RA config-gated KMS/EGL/GLES paths, no -lmali anywhere.
-    export OPENGLES_LIBS="-L$SYSROOT/usr/lib -lGLESv2 -lEGL"
-    export OPENGLES_CFLAGS="-I$SYSROOT/usr/include/GLES2 -I$SYSROOT/usr/include/EGL"
+    # ★ 不 export OPENGLES_LIBS/OPENGLES_CFLAGS (run 36646862145 root cause):
+    #   一旦 export，RA config.libs.sh 走 `add_define MAKEFILE OPENGLES_LIBS` 分支，
+    #   而 create_config_make 的 `for VAR in $(printf %s "$MAKEFILE_DEFINES")` 无引号
+    #   → 含空格的 "-L$SYSROOT/usr/lib -lGLESv2 -lEGL" 被 IFS 分词拆坏，config.mk 里
+    #   OPENGLES_LIBS 只剩 "-L$SYSROOT/usr/lib"，-lGLESv2 丢失 → make 链接
+    #   undefined reference to glUseProgram/glUniform4fv/... (46 个 gl 符号)。
+    #   不 export 时 RA 走 check_val OPENGLES → check_pkgconf glesv2（Mesa 已装
+    #   glesv2.pc，与 egl.pc/gbm.pc 同批，PKG_CONF_USED 机制带引号正确写入）。
+    #   EGL/GBM/DRM 已证明走 pkg-config 正确（日志 "package egl 20.3.5" / gbm / libdrm）。
     export EGL_LIBS="-L$SYSROOT/usr/lib -lEGL -lgbm"
     export EGL_CFLAGS="-I$SYSROOT/usr/include/EGL"
     export GBM_LIBS="-L$SYSROOT/usr/lib -lgbm"
@@ -499,11 +506,13 @@ if [ -d RetroArch ] && [ -f RetroArch/configure ]; then
     #   becomes "none" and EVERY package check (gbm/egl/glesv2/drm) reports "no".
     #   Pinning it to the host pkgconf + PKG_CONFIG_LIBDIR=sysroot pkgconfig (so the
     #   host's own .pc files never leak in) is what makes the Mesa checks pass.
-    #   PKG_CONFIG_SYSROOT_DIR prefixes -I/-L from the .pc so the compiler links
-    #   against the sysroot Mesa, not the host's.
+    #   PKG_CONF_PATH 必须 pin 到 host pkgconf + PKG_CONFIG_LIBDIR=sysroot pkgconfig
+    #   （否则 CROSS_COMPILE 前缀让 qb 找 ${CROSS_COMPILE}pkgconf 而失败成 "none"）。
+    #   ★ 不设 PKG_CONFIG_SYSROOT_DIR (run 36646862145 双倍 -L 路径): 与 build_mesa_lima.sh
+    #   同因 —— .pc 里的 prefix 已是绝对 $SYSROOT/usr 路径，PKG_CONFIG_SYSROOT_DIR 会把
+    #   $SYSROOT 再 prepend 一次 → -L$SYSROOT$SYSROOT/usr/lib（链接行出现 6 处双倍路径）。
     PKG_CONF_PATH="$(command -v pkgconf || command -v pkg-config)" \
     PKG_CONFIG_LIBDIR="$SYSROOT/usr/lib/pkgconfig" \
-    PKG_CONFIG_SYSROOT_DIR="$SYSROOT" \
     CFLAGS="$CFLAGS -I$SYSROOT/usr/include -I$SYSROOT/usr/include/EGL -I$SYSROOT/usr/include/KHR -I$SYSROOT/usr/include/GLES2" \
     LDFLAGS="$LDFLAGS -L$SYSROOT/usr/lib" \
     ./configure --host=arm-linux-gnueabihf \
