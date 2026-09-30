@@ -938,6 +938,17 @@ log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib.
 #       libdrm.so.2     (DRM ioctl wrapper)
 #       dri/lima_dri.so (the Gallium lima+kmsro driver, dlopen'd at runtime)
 #   Any missing file means an EGL/GBM init failure on device.
+# --- 先复制 Mesa DRI 驱动（必须在断言之前：断言检查 $DST/lib/dri/lima_dri.so。
+#   run 36655337551 根因：dri 复制原写在断言 die 之后 → 断言时还没复制 → MISSING。
+#   RETROARCH dlopens $LIBGL_DRIVERS_PATH/<driver>_dri.so，不在 DT_NEEDED，closure walk
+#   也 miss 它，故必须显式复制 sysroot 的 dri/ 目录。）---
+if [ -d "$SYSROOT/usr/lib/dri" ]; then
+    mkdir -p "$DST/lib/dri"
+    for _dri in "$SYSROOT/usr/lib/dri/"*_dri.so; do
+        [ -e "$_dri" ] || continue
+        cp -Lf "$_dri" "$DST/lib/dri/" && log "  bundle OK: dri/$(basename "$_dri")"
+    done
+fi
 _mesa_ok=0
 for _c in libEGL.so.1 libgbm.so.1 libGLESv2.so.2 libdrm.so.2; do
     if [ -e "$DST/lib/$_c" ]; then
@@ -965,17 +976,10 @@ if [ -e "$SYSROOT/usr/lib/libcrypto.so.1.1" ] && [ ! -e "$DST/lib/libcrypto.so.1
 fi
 
 # -----------------------------------------------------------------------------
-# Mesa DRI driver: RETROARCH dlopens $LIBGL_DRIVERS_PATH/<driver>_dri.so at
-# runtime, so the .so is not in any DT_NEEDED and the closure walk above misses
-# it. Ship the whole dri/ dir from the sysroot Mesa build.
+# Mesa DRI driver: already shipped above (before the assertion). The .so is
+# dlopen'd at runtime (not in DT_NEEDED), which is why the copy must precede
+# the assertion gate — done.
 # -----------------------------------------------------------------------------
-if [ -d "$SYSROOT/usr/lib/dri" ]; then
-    mkdir -p "$DST/lib/dri"
-    for _dri in "$SYSROOT/usr/lib/dri/"*_dri.so; do
-        [ -e "$_dri" ] || continue
-        cp -Lf "$_dri" "$DST/lib/dri/" && log "  bundle OK: dri/$(basename "$_dri")"
-    done
-fi
 
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
