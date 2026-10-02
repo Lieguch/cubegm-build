@@ -942,11 +942,23 @@ log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib.
 #   run 36655337551 根因：dri 复制原写在断言 die 之后 → 断言时还没复制 → MISSING。
 #   RETROARCH dlopens $LIBGL_DRIVERS_PATH/<driver>_dri.so，不在 DT_NEEDED，closure walk
 #   也 miss 它，故必须显式复制 sysroot 的 dri/ 目录。）---
+#   ★ v8.9 体积修复 (run 530 → 669 MB，其中 19 个无关 kmsro 驱动占 1205 MB / 78.7%):
+#     install_megadrivers.py 为 kmsro 全家桶生成 21 个 *_dri.so (armada-drm / exynos /
+#     hx8357d / ili9225 / ili9341 / imx-drm / imx-dcss / ingenic-drm / mcde / mediatek /
+#     meson / mi0283qt / mxsfb-drm / pl111 / repaper / st7586 / st7735r / stm / sun4i-drm)，
+#     每个 ~63 MB 且互为硬链接副本 (同一 libgallium_dri.so)。
+#     RK3036G 只需要: lima_dri.so (Mali-400 GPU) + rockchip_dri.so (RK 显示 kmsro)。
+#     再多复制一个都是纯体积浪费 —— 设备的 DRM 是 rockchip，不会去 dlopen 别家的。
+#     旧写法 for ... in "$SYSROOT/usr/lib/dri/"*_dri.so 把 21 个全打包了。
 if [ -d "$SYSROOT/usr/lib/dri" ]; then
     mkdir -p "$DST/lib/dri"
-    for _dri in "$SYSROOT/usr/lib/dri/"*_dri.so; do
-        [ -e "$_dri" ] || continue
-        cp -Lf "$_dri" "$DST/lib/dri/" && log "  bundle OK: dri/$(basename "$_dri")"
+    for _dri in lima_dri.so rockchip_dri.so; do
+        if [ -e "$SYSROOT/usr/lib/dri/$_dri" ]; then
+            cp -Lf "$SYSROOT/usr/lib/dri/$_dri" "$DST/lib/dri/" \
+                && log "  bundle OK: dri/$_dri"
+        else
+            log "  bundle MISSING: dri/$_dri (sysroot 无此驱动)"
+        fi
     done
 fi
 _mesa_ok=0

@@ -219,8 +219,13 @@ echo "mesa done"
 
 echo ""
 echo "=== 4) collect runtime libs ==="
+#   ★ v8.9 体积修复: 去掉 -name 'libgallium*'。
+#     libgallium_dri.so (63 MB) 是 21 个 *_dri.so 的母体，mesga-stage 只需
+#     最终被 dlopen 的两个驱动；libgallium_dri.so 本身不在任何 SONAME 链路上
+#     (它 install 成 $PREFIX/lib/dri/libgallium_dri.so，EGL 只按名 dlopen
+#     lima_dri.so / rockchip_dri.so)，复制进 stage 是死重。
 find "$PREFIX/lib" -maxdepth 2 \( -name 'libEGL.so*' -o -name 'libgbm.so*' -o \
-     -name 'libGLESv2.so*' -o -name 'libglapi*' -o -name 'libgallium*' -o \
+     -name 'libGLESv2.so*' -o -name 'libglapi*' -o \
      -name 'lima_dri.so' -o -name 'rockchip_dri.so' \) -exec cp -av {} "$STAGE_DIR/" \; 2>/dev/null || true
 echo "--- staged: ---"
 ls -la "$STAGE_DIR" | head -30
