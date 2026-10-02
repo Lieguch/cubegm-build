@@ -84,6 +84,18 @@ export LD_LIBRARY_PATH=/mnt/sdcard/cubegm/lib:/mnt/sdcard/cubegm/usr/lib:$LD_LIB
 export HOME=/mnt/sdcard/cubegm
 export XDG_CONFIG_HOME=/mnt/sdcard/cubegm/configs
 
+# v11.7 dri 驱动自愈：SD 卡是 vfat，zip 里的 symlink 拷到 FAT32 会失效（dlopen 得 0 字节）。
+# build.sh v8.10 只打包 lima_dri.so 实体 + rockchip_dri.so symlink（省 66MB 重复实体）；
+# 这里在 RA 启动前补做实体复制：若 rockchip_dri.so 缺失或非普通文件，从 lima_dri.so 复制。
+# Mesa loader 用 drmGetVersion()->name 查 <name>_dri.so：render node name="mali"(lima),
+# card0 rockchip-drm name="rockchip"(kmsro 显示桥)，两者都必须能 dlopen。
+_DRI_DIR=/mnt/sdcard/cubegm/lib/dri
+if [ -f "$_DRI_DIR/lima_dri.so" ]; then
+    if [ ! -f "$_DRI_DIR/rockchip_dri.so" ] || [ ! -s "$_DRI_DIR/rockchip_dri.so" ]; then
+        cp -f "$_DRI_DIR/lima_dri.so" "$_DRI_DIR/rockchip_dri.so"             && echo "zhijack: restored rockchip_dri.so from lima_dri.so ($(wc -c < "$_DRI_DIR/rockchip_dri.so" 2>/dev/null) bytes)" >> "$LOG"
+    fi
+fi
+
 # CPU: force max-performance governor (helps every emulator).
 for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
     [ -w "$g" ] && echo performance > "$g" 2>/dev/null

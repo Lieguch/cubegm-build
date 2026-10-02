@@ -951,14 +951,25 @@ log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib.
 #     旧写法 for ... in "$SYSROOT/usr/lib/dri/"*_dri.so 把 21 个全打包了。
 if [ -d "$SYSROOT/usr/lib/dri" ]; then
     mkdir -p "$DST/lib/dri"
-    for _dri in lima_dri.so rockchip_dri.so; do
-        if [ -e "$SYSROOT/usr/lib/dri/$_dri" ]; then
-            cp -Lf "$SYSROOT/usr/lib/dri/$_dri" "$DST/lib/dri/" \
-                && log "  bundle OK: dri/$_dri"
-        else
-            log "  bundle MISSING: dri/$_dri (sysroot 无此驱动)"
-        fi
-    done
+    # ★ v8.10 体积修复 (run 532): lima_dri.so 与 rockchip_dri.so 是同一
+    #   libgallium_dri.so 的 install_megadriver 硬链接副本 (md5 相同, 66MB/个)。
+    #   原写法 cp -Lf 两份实体 → zip 里占 57.7MB (压缩后)。
+    #   Mesa loader 按 drmGetVersion()->name 查 <name>_dri.so:
+    #     - render node (Mali-400) name="mali" → 实际由 lima_dri.so 提供
+    #     - card0 rockchip-drm name="rockchip" → rockchip_dri.so (kmsro 显示桥)
+    #   两者必需共存，但 dlopen 对 symlink 透明 → 打包成一份实体 + 一份 symlink。
+    if [ -e "$SYSROOT/usr/lib/dri/lima_dri.so" ]; then
+        cp -Lf "$SYSROOT/usr/lib/dri/lima_dri.so" "$DST/lib/dri/" \
+            && log "  bundle OK: dri/lima_dri.so"
+    else
+        log "  bundle MISSING: dri/lima_dri.so (sysroot 无此驱动)"
+    fi
+    if [ -e "$SYSROOT/usr/lib/dri/rockchip_dri.so" ]; then
+        ln -sf lima_dri.so "$DST/lib/dri/rockchip_dri.so" \
+            && log "  bundle OK: dri/rockchip_dri.so -> lima_dri.so (symlink, 省一份 66MB 实体)"
+    else
+        log "  bundle MISSING: dri/rockchip_dri.so (sysroot 无此驱动)"
+    fi
 fi
 _mesa_ok=0
 for _c in libEGL.so.1 libgbm.so.1 libGLESv2.so.2 libdrm.so.2; do
