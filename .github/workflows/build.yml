@@ -120,7 +120,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd deploy
-          zip -r /tmp/cubegm-payload.zip cubegm
+          zip -r -y /tmp/cubegm-payload.zip cubegm
           gh release create "payload-${{ github.run_number }}" /tmp/cubegm-payload.zip \
             --title "CubeGM device payload (run ${{ github.run_number }})" \
             --notes "Flashable open-source firmware payload for RK3036G. Unzip and copy cubegm/ to the SD card root (stock rkgame/icube/driver.so/root.dat stay untouched)."

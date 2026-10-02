@@ -951,13 +951,15 @@ log "Bundled $(ls -1 "$DST/lib" 2>/dev/null | wc -l) runtime libs into $DST/lib.
 #     旧写法 for ... in "$SYSROOT/usr/lib/dri/"*_dri.so 把 21 个全打包了。
 if [ -d "$SYSROOT/usr/lib/dri" ]; then
     mkdir -p "$DST/lib/dri"
-    # ★ v8.10 体积修复 (run 532): lima_dri.so 与 rockchip_dri.so 是同一
-    #   libgallium_dri.so 的 install_megadriver 硬链接副本 (md5 相同, 66MB/个)。
-    #   原写法 cp -Lf 两份实体 → zip 里占 57.7MB (压缩后)。
-    #   Mesa loader 按 drmGetVersion()->name 查 <name>_dri.so:
-    #     - render node (Mali-400) name="mali" → 实际由 lima_dri.so 提供
-    #     - card0 rockchip-drm name="rockchip" → rockchip_dri.so (kmsro 显示桥)
-    #   两者必需共存，但 dlopen 对 symlink 透明 → 打包成一份实体 + 一份 symlink。
+    #   ★ v8.12 体积修复 (run 533→534): lima_dri.so 与 rockchip_dri.so 是同一
+    #     libgallium_dri.so 的 install_megadriver 硬链接副本 (md5 相同, 66MB/个)。
+    #     v8.10 试过本地 symlink + zip -r，但 zip -r 默认跟随 symlink 存实体内容
+    #     （run 533 日志铁证："adding: cubegm/lib/dri/rockchip_dri.so (deflated 57%)"）
+    #     → 一字节没省。
+    #     v8.11 试过完全不打包 rockchip_dri.so，但 zhijack 自愈一旦失败 = 黑屏无兜底。
+    #     最终方案：本地 symlink + build.yml 改 zip -r -y（存 symlink 本身，~50 字节）。
+    #     PC 解压得 symlink，拷到 vfat 会坏 → zhijack.sh v11.7 开机自愈从 lima_dri.so
+    #     真复制一份（vfat 上 cp = 真实体复制）。双保险。
     if [ -e "$SYSROOT/usr/lib/dri/lima_dri.so" ]; then
         cp -Lf "$SYSROOT/usr/lib/dri/lima_dri.so" "$DST/lib/dri/" \
             && log "  bundle OK: dri/lima_dri.so"
@@ -966,7 +968,7 @@ if [ -d "$SYSROOT/usr/lib/dri" ]; then
     fi
     if [ -e "$SYSROOT/usr/lib/dri/rockchip_dri.so" ]; then
         ln -sf lima_dri.so "$DST/lib/dri/rockchip_dri.so" \
-            && log "  bundle OK: dri/rockchip_dri.so -> lima_dri.so (symlink, 省一份 66MB 实体)"
+            && log "  bundle OK: dri/rockchip_dri.so -> lima_dri.so (symlink; zip -y 存链接, zhijack 自愈兜底)"
     else
         log "  bundle MISSING: dri/rockchip_dri.so (sysroot 无此驱动)"
     fi
