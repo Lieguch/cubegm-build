@@ -1085,6 +1085,54 @@ ALIAS_EOF
     log "alias_stock_cores.sh staged (run once on device to link stock cores)."
 fi
 
+# -----------------------------------------------------------------------------
+# STAGE 9z -- global strip pass: 删除所有 ELF 的 DWARF 调试段（体积修复 v8.13）
+#
+#   根因（payload-534 实测，ELF section table 逐段统计）:
+#     未压缩 276 MB / zip 89 MB，其中约 65 MB 是 .debug_* 调试信息:
+#       libstdc++.so.6  13.30 MB  debug 占 87.7% (11672 KB)
+#       lima_dri.so     66.49 MB  debug 占 85.3% (57293 KB)
+#       retro8_libretro  6.46 MB  debug 占 86.4% ( 5577 KB)
+#       libglapi.so.0    1.21 MB  debug 占 83.0%
+#       libatomic.so.1   0.18 MB  debug 占 86.3%
+#       libEGL.so.1      0.82 MB  debug 占 82.7%
+#       libGLESv2.so.2   0.19 MB  debug 占 83.8%
+#       libdrm.so.2      0.24 MB  debug 占 77.6%
+#     meson/ninja install 不 strip，STAGE 9b 从 sysroot 复制时也没有 strip。
+#
+#   方案: 就地用交叉 strip 剥 .debug_* / .comment / .note / .symtab。
+#     --strip-unneeded 只删对运行时重定位不需要的符号，保留 .dynsym 动态符号表
+#     与所有导出符号，dlopen/dlsym/DT_NEEDED 解析完全不受影响，ABI 不变。
+#     本 pass 覆盖 STAGE 9/9b/9c 的全部产物来源（sysroot 复制 / 本地编译 /
+#     stock 树复制），不漏任何一个来源。retroarch 二进制已 strip（debug 0%），
+#     pass 对已 strip 的文件是 no-op。
+# -----------------------------------------------------------------------------
+if command -v "${CROSS_COMPILE}strip" >/dev/null 2>&1; then
+    log "STAGE 9z: stripping debug sections from $DST ..."
+    _stripped=0; _saved=0
+    for _f in $(find "$DST" -type f \( -name '*.so' -o -name '*.so.*' -o -name 'retroarch' -o -name 'picoarch' \) 2>/dev/null); do
+        case "$(basename "$_f")" in
+            *.so|*.so.[0-9]*) ;;
+            retroarch|picoarch) ;;
+            *) continue ;;
+        esac
+        # 只处理 ELF（脚本/配置/资产会被 find 的 -name 漏掉，这里再兜一层）
+        _magic=$(dd if="$_f" bs=4 count=1 2>/dev/null | tr -d '\0')
+        [ "$_magic" = "$(printf '\177ELF')" ] || continue
+        _sz=$(stat -c%s "$_f" 2>/dev/null || echo 0)
+        "${CROSS_COMPILE}strip" --strip-unneeded \
+            --remove-section=.comment --remove-section=.note "$_f" 2>/dev/null \
+            || { log "  strip SKIP $(basename "$_f") (non-fatal)"; continue; }
+        _nsz=$(stat -c%s "$_f" 2>/dev/null || echo 0)
+        _saved=$(( _saved + _sz - _nsz ))
+        _stripped=$(( _stripped + 1 ))
+        [ $(( _sz - _nsz )) -gt 0 ] && log "  $(basename "$_f"): $(numfmt --to=iec "$_sz") -> $(numfmt --to=iec "$_nsz")"
+    done
+    log "STAGE 9z done: $_stripped ELF stripped, saved $(numfmt --to=iec "$_saved")"
+else
+    log "WARN: ${CROSS_COMPILE}strip unavailable -- payload keeps debug sections (~65MB larger)"
+fi
+
 log "Staged into $DST"
 log "DONE. Copy the whole '$DST' directory to the root of your device SD card,"
 log "overwriting the existing cubegm/ (stock rkgame/icube/driver.so/root.dat stay)."
