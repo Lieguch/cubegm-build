@@ -159,8 +159,17 @@ if [ -x "$SYSROOT/usr/bin/sdl-config" ] && [ -f "$SYSROOT/usr/lib/libSDL.so" ]; 
     log "SDL already in sysroot -- skip"
 else
     log "Building SDL 1.2.15 ..."
-    rm -rf SDL-1.2.15 && curl -fL -o sdl.tar.gz "https://www.libsdl.org/release/SDL-1.2.15.tar.gz"
-    tar -xf sdl.tar.gz && cd SDL-1.2.15
+    # ★ 2026-11-01 ROOT CAUSE FIX: www.libsdl.org 在 GitHub runner 上连接超时
+    #   (curl 28, 133s) → SDL 是四个依赖中唯一无备用源的，单点失败导致 bootstrap 整体 die。
+    #   与 zlib/libpng/alsa 一致，增加 GitHub codeload 备用源。
+    #   注意：codeload tarball 顶层目录名是 SDL-1.2-release-1.2.15（非 SDL-1.2.15），
+    #   故用 --strip-components=1 解到固定目录名，两种源兼容。
+    rm -rf SDL-1.2.15 && mkdir -p SDL-1.2.15
+    if ! curl -fL -o sdl.tar.gz "https://www.libsdl.org/release/SDL-1.2.15.tar.gz"; then
+        log "WARN: www.libsdl.org unreachable; falling back to GitHub codeload"
+        curl -fL -o sdl.tar.gz "https://codeload.github.com/libsdl-org/SDL-1.2/tar.gz/refs/tags/release-1.2.15"
+    fi
+    tar -xf sdl.tar.gz -C SDL-1.2.15 --strip-components=1 && cd SDL-1.2.15
     ./configure --host=$TARGET --prefix=$SYSROOT/usr \
         --with-sysroot=$SYSROOT \
         --disable-video-x11 --disable-video-opengl \
