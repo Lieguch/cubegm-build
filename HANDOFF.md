@@ -2,7 +2,7 @@
 
 > 用途：供接手的 Agent / 大模型快速接手，读完即可继续，无需从头探索。
 > 维护：每次达到版本里程碑（v0.x / v1.0）或重大变更后更新本文件与 VERSION。
-> 最近更新：2026-08-22（v0.3.1 = payload-278 实机 10 项问题根治轮：输入/音频/性能/显示根因修复 + 单全量补丁构建，CI run 待验证）
+> 最近更新：2026-11-01（CI run#537/#538 failure 根因修复：SDL 1.2.15 下载无备用源 → 已加 GitHub codeload fallback，commit 139e42e2；A/B 对照 run#540 验证中）
 
 ## 0. 最新版本交接（v0.3.1，2026-08-22，payload-278 实机 10 项问题根治）
 
@@ -24,6 +24,28 @@
 **构建变更（重要）**：picoarch/frogui 补丁改为**单一全量补丁**（patch/picoarch_rk3036g_full.patch 基于 f8ff5ba、patch/frogui_rk3036g_full.patch 基于 2f41ace），build.sh 只应用一个全量补丁（失败 die）——彻底消除旧 5 补丁叠加失配（run 277 根因）。旧补丁保留在 patch/ 作参考，不再被 build.sh 引用。
 
 **验证要求（下一轮实机）**：①四份日志里应出现 `in_evdev: key code=...`（前 40 键码，验证绑定匹配）；②`FROGUI_DBG: plat_sound_finish` 不应再报 "not exported"；③/ mnt/sdcard/crash.log 每次开机有 zhijack 头行（证明 debug 存活）；④zhijack.log 的 bridge 方向日志应出现 up=1/lt=1。
+
+## 0.9 CI 修复交接（2026-11-01 · SDL 下载 fallback）
+
+**症状**：`build.yml` step 5 "Run bootstrap (full build)" failure（run#537 / #538，main）。
+**根因（bootstrap.log 末行实测，非推测）**：
+```
+curl: (28) Failed to connect to www.libsdl.org port 443 after 133957 ms: Connection timed out
+```
+`deploy/build_sdl_libpng.sh` STAGE 2 编译 SDL 1.2.15；**SDL 是 zlib/libpng/alsa 四个依赖中唯一没有备用下载源的**
+（zlib→github / libpng→sourceforge / alsa→codeload 均有 fallback）。libsdl.org 在 runner 上超时 ⇒ STAGE 2 die。
+BUILD_REPORT 显示 STAGE 0/1 全过（apt / sysroot glibc 2.29 / crosstool / payload 均 OK）⇒ **唯一失败点 = SDL 下载**。
+
+**修复**（commit 139e42e24edf，`deploy/build_sdl_libpng.sh` 162-163 行 → 11 行）：
+主源失败时 fallback 到 `https://codeload.github.com/libsdl-org/SDL-1.2/tar.gz/refs/tags/release-1.2.15`
+（联网实测 200 + application/x-gzip；tag `release-1.2.15`），并用 `--strip-components=1` 兼容
+codeload 顶层目录名 `SDL-1.2-release-1.2.15`（≠ 主源的 `SDL-1.2.15`）。文件保留 CRLF。
+
+**已否候选**：`github.com/libsdl-org/SDL-1.2/releases/download/...` → 404；`sourceforge.net/project/libsdl/...` → 404。
+
+**回退**：`deploy/build_sdl_libpng.sh` 恢复到 blob `bfd0356a127b69587cda71dbf81c452aa4f85c1e`。
+
+**验证（A/B）**：run#537/#538（无修复，failure）vs **run#540（sha 139e42e2，含修复）**；run#539（diag-drmprobe，无修复）为跨分支对照。
 
 ## 1. 项目目标
 为 RK3036G 掌机（R36SX / DataFrog SF3000 / SF3500 / GB350 等）做 CubeGM 固件开源替代。
